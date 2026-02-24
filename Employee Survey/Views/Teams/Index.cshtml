@@ -1,0 +1,37 @@
+﻿@model List<Employee_Survey.Domain.Team>
+@{
+    ViewData["Title"] = "Teams";
+    var deptMap = (Dictionary<string, string>)(ViewBag.DeptMap ?? new Dictionary<string, string>());
+}
+<h2 class="mb-3">Teams</h2>
+
+<p>
+    <a class="btn btn-primary" href="/teams/create">Create Team</a>
+</p>
+
+<div class="card shadow-sm">
+    <div class="card-body table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr><th>Name</th><th>Department</th><th style="width:160px"></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var t in Model)
+                {
+                    var dname = (!string.IsNullOrWhiteSpace(t.DepartmentId) && deptMap.TryGetValue(t.DepartmentId, out var nm)) ? nm : "(None)";
+                    <tr>
+                        <td class="fw-semibold">@t.Name</td>
+                        <td>@dname</td>
+                        <td>
+                            <a class="btn btn-sm btn-outline-secondary" href="/teams/edit/@t.Id">Edit</a>
+                            <form method="post" action="/teams/delete/@t.Id" class="d-inline" onsubmit="return confirm('Xóa team này?');">
+                                @Html.AntiForgeryToken()
+                                <button class="btn btn-sm btn-outline-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

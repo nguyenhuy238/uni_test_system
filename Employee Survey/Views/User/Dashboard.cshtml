@@ -1,0 +1,108 @@
+@{
+    ViewData["Title"] = "Dashboard";
+    Layout = "_UserLayout";
+}
+
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <h2>Welcome to Employee Survey</h2>
+            <p class="text-muted">Select an option below to get started</p>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h3 class="card-title">📝 Take Tests</h3>
+                    <p class="card-text">Complete knowledge assessments and skill tests</p>
+                    <a href="/User/Tests" class="btn btn-primary">View Tests</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h3 class="card-title">📊 Take Surveys</h3>
+                    <p class="card-text">Participate in company surveys and feedback</p>
+                    <a href="/User/Surveys" class="btn btn-success">View Surveys</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4>📈 Your Recent Results</h4>
+                </div>
+                <div class="card-body">
+                    <div id="recentResults">
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            loadRecentResults();
+        });
+
+        function loadRecentResults() {
+            const token = localStorage.getItem('jwtToken');
+            
+            $.ajax({
+                url: '/api/user/tests/results',
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                },
+                success: function(results) {
+                    displayResults(results.slice(0, 5)); // Show only 5 most recent
+                },
+                error: function() {
+                    $('#recentResults').html('<p class="text-muted">No results found or unable to load results.</p>');
+                }
+            });
+        }
+
+        function displayResults(results) {
+            if (results.length === 0) {
+                $('#recentResults').html('<p class="text-muted">No results found. Start taking tests or surveys!</p>');
+                return;
+            }
+
+            let html = '<div class="table-responsive"><table class="table table-striped">';
+            html += '<thead><tr><th>Test/Survey</th><th>Type</th><th>Score</th><th>Date</th><th>Action</th></tr></thead><tbody>';
+            
+            results.forEach(result => {
+                const date = new Date(result.submitTime).toLocaleDateString();
+                const score = result.score + '/' + result.maxScore;
+                const typeBadge = result.type === 'Test' ? 
+                    '<span class="badge bg-primary">Test</span>' : 
+                    '<span class="badge bg-success">Survey</span>';
+                
+                html += `<tr>
+                    <td>${result.title}</td>
+                    <td>${typeBadge}</td>
+                    <td>${score}</td>
+                    <td>${date}</td>
+                    <td><a href="/User/ResultDetail/${result.id}" class="btn btn-sm btn-outline-primary">View</a></td>
+                </tr>`;
+            });
+            
+            html += '</tbody></table></div>';
+            $('#recentResults').html(html);
+        }
+    </script>
+}

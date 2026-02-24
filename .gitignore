@@ -1,0 +1,35 @@
+## [Visual Studio]
+.vs/
+
+## [Build folders]
+bin/
+obj/
+[Ee]xec/
+**/*.user
+**/*.suo
+**/*.userosscache
+**/*.sln.docstates
+
+## [User-specific files]
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## [Log files]
+*.log
+
+## [Publish]
+publish/
+*.pubxml
+
+## [Node - if any]
+node_modules/
+
+## [Test Results]
+TestResults/
+*.trx
+
+## [OS files]
+.DS_Store
+Thumbs.db

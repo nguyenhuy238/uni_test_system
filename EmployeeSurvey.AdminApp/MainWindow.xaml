@@ -1,0 +1,151 @@
+﻿<Window x:Class="EmployeeSurvey.AdminApp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:EmployeeSurvey.AdminApp"
+        mc:Ignorable="d"
+        Title="Employee Survey Admin" Height="600" Width="1000"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Menu Bar -->
+        <Menu Grid.Row="0">
+            <MenuItem Header="File">
+                <MenuItem Header="Exit" Click="Exit_Click"/>
+            </MenuItem>
+            <MenuItem Header="Actions">
+                <MenuItem Header="Refresh Data" Command="{Binding LoadDataCommand}"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- Toolbar -->
+        <ToolBar Grid.Row="1">
+            <Button Content="Refresh" Command="{Binding LoadDataCommand}" Width="80" Height="30"/>
+            <Separator/>
+            <Button Content="Save Test" Command="{Binding SaveTestCommand}" Width="80" Height="30"/>
+            <Button Content="Delete Test" Command="{Binding DeleteTestCommand}" Width="80" Height="30"/>
+            <Separator/>
+            <Button Content="Save User" Command="{Binding SaveUserCommand}" Width="80" Height="30"/>
+            <Button Content="Delete User" Command="{Binding DeleteUserCommand}" Width="80" Height="30"/>
+        </ToolBar>
+
+        <!-- Main Content -->
+        <TabControl Grid.Row="2">
+            <!-- Tests Tab -->
+            <TabItem Header="Tests">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Tests List -->
+                    <DataGrid Grid.Column="0" ItemsSource="{Binding Tests}" SelectedItem="{Binding SelectedTest}" AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="*"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="100"/>
+                            <DataGridTextColumn Header="Duration" Binding="{Binding DurationMinutes}" Width="80"/>
+                            <DataGridTextColumn Header="Max Score" Binding="{Binding TotalMaxScore}" Width="80"/>
+                            <DataGridCheckBoxColumn Header="Published" Binding="{Binding IsPublished}" Width="80"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- Test Details -->
+                    <GroupBox Grid.Column="1" Header="Test Details" Margin="10">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Text="Title:"/>
+                            <TextBox Grid.Row="1" Text="{Binding SelectedTest.Title}" Margin="0,0,0,10"/>
+
+                            <TextBlock Grid.Row="2" Text="Type:"/>
+                            <ComboBox Grid.Row="3" SelectedItem="{Binding SelectedTest.Type}" Margin="0,0,0,10">
+                                <ComboBoxItem>Test</ComboBoxItem>
+                                <ComboBoxItem>Survey</ComboBoxItem>
+                            </ComboBox>
+
+                            <TextBlock Grid.Row="4" Text="Duration (minutes):"/>
+                            <TextBox Grid.Row="5" Text="{Binding SelectedTest.DurationMinutes}" Margin="0,0,0,10"/>
+                        </Grid>
+                    </GroupBox>
+                </Grid>
+            </TabItem>
+
+            <!-- Users Tab -->
+            <TabItem Header="Users">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Users List -->
+                    <DataGrid Grid.Column="0" ItemsSource="{Binding Users}" SelectedItem="{Binding SelectedUser}" AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                            <DataGridTextColumn Header="Email" Binding="{Binding Email}" Width="200"/>
+                            <DataGridTextColumn Header="Role" Binding="{Binding Role}" Width="80"/>
+                            <DataGridTextColumn Header="Department" Binding="{Binding Department}" Width="120"/>
+                            <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="80"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- User Details -->
+                    <GroupBox Grid.Column="1" Header="User Details" Margin="10">
+                        <Grid Margin="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Text="Name:"/>
+                            <TextBox Grid.Row="1" Text="{Binding SelectedUser.Name}" Margin="0,0,0,10"/>
+
+                            <TextBlock Grid.Row="2" Text="Email:"/>
+                            <TextBox Grid.Row="3" Text="{Binding SelectedUser.Email}" Margin="0,0,0,10"/>
+
+                            <TextBlock Grid.Row="4" Text="Role:"/>
+                            <ComboBox Grid.Row="5" SelectedItem="{Binding SelectedUser.Role}" Margin="0,0,0,10">
+                                <ComboBoxItem>Admin</ComboBoxItem>
+                                <ComboBoxItem>Staff</ComboBoxItem>
+                                <ComboBoxItem>User</ComboBoxItem>
+                            </ComboBox>
+
+                            <TextBlock Grid.Row="6" Text="Department:"/>
+                            <TextBox Grid.Row="7" Text="{Binding SelectedUser.Department}" Margin="0,0,0,10"/>
+                        </Grid>
+                    </GroupBox>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <!-- Status Bar -->
+        <StatusBar Grid.Row="3">
+            <StatusBarItem>
+                <TextBlock Text="{Binding StatusMessage}"/>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>

@@ -1,0 +1,198 @@
+﻿@model Employee_Survey.Models.HrDashboardViewModel
+@{
+    ViewData["Title"] = "HR Dashboard";
+}
+<h2 class="mb-3">HR Dashboard</h2>
+
+<partial name="~/Views/Shared/_Flash.cshtml" />
+
+@if (TempData["Msg"] is string message)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle"></i>
+        @message
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Quick actions -->
+<div class="card mb-3 shadow-sm">
+    <div class="card-body d-flex flex-wrap gap-2 align-items-center">
+        <!-- Auth -->
+        <a class="btn btn-light border btn-sm" href="/auth/login" title="Đi tới trang đăng nhập">
+            Login
+        </a>
+        <form method="post" action="/auth/logout" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-danger btn-sm" title="Đăng xuất ngay">Logout</button>
+        </form>
+        <!-- Hồ sơ -->
+        <a class="btn btn-outline-primary btn-sm" href="/Profile" title="Xem và chỉnh sửa hồ sơ cá nhân">
+            Hồ sơ của tôi
+        </a>
+
+        <!-- Feedbacks -->
+        <a class="btn btn-outline-dark btn-sm" href="/HR/Feedbacks" title="Xem góp ý từ nhân viên">
+            Feedbacks
+        </a>
+
+        <div class="vr mx-1 d-none d-md-block"></div>
+
+        <!-- Questions -->
+        <a class="btn btn-primary btn-sm" href="/Questions" title="Danh sách câu hỏi">Questions</a>
+
+        <div class="vr mx-1 d-none d-md-block"></div>
+
+        <!-- Tests -->
+        <a class="btn btn-success btn-sm" href="/Tests" title="Danh sách bài test">Tests</a>
+
+        <!-- NEW: Quick filter Draft -->
+        <a class="btn btn-outline-info btn-sm"
+           asp-controller="Tests"
+           asp-action="Index"
+           asp-route-status="Draft"
+           title="Xem các Test ở trạng thái Draft">
+            Draft Tests
+        </a>
+
+        <div class="vr mx-1 d-none d-md-block"></div>
+
+        <!-- Assign quick form -->
+        <form method="post" action="/Tests/AssignToUser" class="row row-cols-lg-auto g-2 align-items-center">
+            @Html.AntiForgeryToken()
+            <div class="col-12">
+                <select name="testId" class="form-select form-select-sm" required>
+                    <option value="">Chọn Test...</option>
+                    @foreach (var test in ViewBag.AvailableTests ?? new List<object>())
+                    {
+                        <option value="@test.Id">@test.Title</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12">
+                <select name="userId" class="form-select form-select-sm" required>
+                    <option value="">Chọn User...</option>
+                    @foreach (var user in ViewBag.AvailableUsers ?? new List<object>())
+                    {
+                        <option value="@user.Id">@user.Name (@user.Email)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-warning btn-sm">
+                    <i class="bi bi-link"></i> Assign
+                </button>
+            </div>
+        </form>
+
+        <div class="vr mx-1 d-none d-md-block"></div>
+
+        <!-- ===== NEW: Auto Generate + Essay Grading ===== -->
+        <a class="btn btn-outline-success btn-sm" href="/autotests/generate" title="Tạo đề tự động theo Department hoặc Users">
+            <i class="bi bi-magic"></i> Auto Generate Test
+        </a>
+        <a class="btn btn-outline-secondary btn-sm" href="/Grading/Pending" title="Chấm điểm các câu Essay chờ xử lý">
+            <i class="bi bi-pencil-square"></i> Essay Grading
+        </a>
+        <!-- ============================================== -->
+
+        <div class="ms-auto">
+            <a class="btn btn-outline-secondary btn-sm" href="/HR/ExportRecent">Export CSV</a>
+            <a class="btn btn-light border btn-sm" href="/HR/Dashboard">Refresh</a>
+        </div>
+    </div>
+</div>
+
+<!-- Cards -->
+<div class="row g-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="h6 text-muted">Employees</div>
+                <div class="h3">@Model.TotalEmployees</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="h6 text-muted">Tests</div>
+                <div class="h3">@Model.TotalTests</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="h6 text-muted">Active Assignments</div>
+                <div class="h3">@Model.ActiveAssignments</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="h6 text-muted">Pass Rate</div>
+                <div class="h3">@Model.PassRatePercent %</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Assignments -->
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <h5>Assignments đang hiệu lực</h5>
+    </div>
+    <table class="table table-sm table-striped align-middle">
+        <thead><tr><th>Test</th><th>Target</th><th>Start</th><th>End</th></tr></thead>
+        <tbody>
+            @foreach (var a in Model.ActiveAssignmentsList)
+            {
+                <tr>
+                    <td>@a.TestTitle (@a.TestId)</td>
+                    <td>@a.Target</td>
+                    <td>@a.StartAt.ToLocalTime()</td>
+                    <td>@a.EndAt.ToLocalTime()</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- Recent Submissions -->
+<div class="mt-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <h5>Nộp bài gần đây</h5>
+        <a class="btn btn-outline-secondary btn-sm" href="/HR/ExportRecent">Export CSV</a>
+    </div>
+    <table class="table table-sm table-hover">
+        <thead><tr><th>When</th><th>User</th><th>Test</th><th>Score</th><th>Pass</th></tr></thead>
+        <tbody>
+            @foreach (var r in Model.RecentSubmissions)
+            {
+                <tr>
+                    <td>@r.EndAt.ToLocalTime()</td>
+                    <td>@r.UserName</td>
+                    <td>@r.TestTitle</td>
+                    <td>@r.Score</td>
+                    <td>@(r.IsPass ? "✓" : "✗")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<!-- Top Skills -->
+<div class="mt-4">
+    <h5>Top Skills (theo số câu đã làm)</h5>
+    <table class="table table-sm w-auto">
+        <thead><tr><th>Skill</th><th>Count</th></tr></thead>
+        <tbody>
+            @foreach (var s in Model.TopSkills)
+            {
+                <tr><td>@s.Skill</td><td>@s.Count</td></tr>
+            }
+        </tbody>
+    </table>
+</div>

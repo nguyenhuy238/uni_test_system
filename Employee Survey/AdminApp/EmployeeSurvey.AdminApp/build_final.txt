@@ -1,0 +1,18 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Employee Survey -> C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\bin\Debug\net8.0\Employee Survey.dll
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\App.xaml(1,14): error MC3074: The tag 'Application' does not exist in XML namespace 'http://schemas.microsoft.com/winfx/2003/xaml/presentation'. Line 1 Position 14. [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp.csproj]
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\MainWindow.xaml(1,9): error MC3074: The tag 'Window' does not exist in XML namespace 'http://schemas.microsoft.com/winfx/2003/xaml/presentation'. Line 1 Position 9. [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp.csproj]
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\Views\AdminMainView.xaml(1,14): error MC3074: The tag 'UserControl' does not exist in XML namespace 'http://schemas.microsoft.com/winfx/2003/xaml/presentation'. Line 1 Position 14. [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp.csproj]
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\Views\LoginView.xaml(1,14): error MC3074: The tag 'UserControl' does not exist in XML namespace 'http://schemas.microsoft.com/winfx/2003/xaml/presentation'. Line 1 Position 14. [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp.csproj]
+
+Build FAILED.
+
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\App.xaml(1,14): error MC3074: The tag 'Application' does not exist in XML namespace 'http://schemas.microsoft.com/winfx/2003/xaml/presentation'. Line 1 Position 14. [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp.csproj]
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\MainWindow.xaml(1,9): error MC3074: The tag 'Window' does not exist in XML namespace 'http://schemas.microsoft.com/winfx/2003/xaml/presentation'. Line 1 Position 9. [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp.csproj]
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\Views\AdminMainView.xaml(1,14): error MC3074: The tag 'UserControl' does not exist in XML namespace 'http://schemas.microsoft.com/winfx/2003/xaml/presentation'. Line 1 Position 14. [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp.csproj]
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\Views\LoginView.xaml(1,14): error MC3074: The tag 'UserControl' does not exist in XML namespace 'http://schemas.microsoft.com/winfx/2003/xaml/presentation'. Line 1 Position 14. [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp.csproj]
+    0 Warning(s)
+    4 Error(s)
+
+Time Elapsed 00:00:01.99

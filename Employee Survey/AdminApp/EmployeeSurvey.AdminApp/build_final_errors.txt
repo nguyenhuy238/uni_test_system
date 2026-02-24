@@ -1,0 +1,15 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\ViewModels\MainViewModel.cs(22,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp_ybzklpxp_wpftmp.csproj]
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\ViewModels\MainViewModel.cs(31,52): error CS0019: Operator '??' cannot be applied to operands of type 'List<List<User>>' and 'List<User>' [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp_ybzklpxp_wpftmp.csproj]
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\Services\ApiService.cs(34,22): warning CS8602: Dereference of a possibly null reference. [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp_ybzklpxp_wpftmp.csproj]
+
+Build FAILED.
+
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\ViewModels\MainViewModel.cs(22,9): warning CS4014: Because this call is not awaited, execution of the current method continues before the call is completed. Consider applying the 'await' operator to the result of the call. [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp_ybzklpxp_wpftmp.csproj]
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\Services\ApiService.cs(34,22): warning CS8602: Dereference of a possibly null reference. [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp_ybzklpxp_wpftmp.csproj]
+C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\ViewModels\MainViewModel.cs(31,52): error CS0019: Operator '??' cannot be applied to operands of type 'List<List<User>>' and 'List<User>' [C:\Users\LEGION\source\repos\Employee Survey\Employee Survey\AdminApp\EmployeeSurvey.AdminApp\EmployeeSurvey.AdminApp_ybzklpxp_wpftmp.csproj]
+    2 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:01.68

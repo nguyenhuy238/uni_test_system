@@ -1,0 +1,42 @@
+[
+  {
+    "Id": "c0064963f98e402c9d77bd37879828f2",
+    "Role": 0,
+    "Permissions": [
+      "Reports.View",
+      "Reports.Export",
+      "Settings.Edit",
+      "Permissions.Manage",
+      "Audit.View"
+    ],
+    "UpdatedAt": "2025-08-29T03:17:10.8921982Z",
+    "UpdatedBy": null
+  },
+  {
+    "Id": "ea8d9409d7ab4fe49ca38c969fecdac4",
+    "Role": 1,
+    "Permissions": [
+      "Reports.View",
+      "Reports.Export",
+      "Audit.View"
+    ],
+    "UpdatedAt": "2025-08-29T03:17:10.8923231Z",
+    "UpdatedBy": null
+  },
+  {
+    "Id": "7abf9889ec34458aaab0a932ea9f1301",
+    "Role": 3,
+    "Permissions": [
+      "Reports.View"
+    ],
+    "UpdatedAt": "2025-08-29T03:17:10.8923239Z",
+    "UpdatedBy": null
+  },
+  {
+    "Id": "4251d4af48e64b939ecbfa78685de77b",
+    "Role": 2,
+    "Permissions": [],
+    "UpdatedAt": "2025-08-29T03:44:44.1117742Z",
+    "UpdatedBy": "2c44dd4fc3d94eb7b78c639220df15d1"
+  }
+]

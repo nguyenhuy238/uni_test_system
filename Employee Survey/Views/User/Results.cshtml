@@ -1,0 +1,92 @@
+@{
+    ViewData["Title"] = "My Results";
+    Layout = "_UserLayout";
+}
+
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <h2>My Test & Survey Results</h2>
+            <p class="text-muted">View your completed tests and surveys</p>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div id="resultsList">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading results...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            loadResults();
+        });
+
+        function loadResults() {
+            const token = localStorage.getItem('jwtToken');
+            
+            $.ajax({
+                url: '/api/user/tests/results',
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                },
+                success: function(results) {
+                    displayResults(results);
+                },
+                error: function() {
+                    $('#resultsList').html('<div class="alert alert-warning">Unable to load results. Please try again later.</div>');
+                }
+            });
+        }
+
+        function displayResults(results) {
+            if (results.length === 0) {
+                $('#resultsList').html('<div class="alert alert-info">No results found. Start taking tests or surveys!</div>');
+                return;
+            }
+
+            let html = '<div class="table-responsive"><table class="table table-striped">';
+            html += '<thead><tr><th>Test/Survey</th><th>Type</th><th>Score</th><th>Date</th><th>Status</th><th>Action</th></tr></thead><tbody>';
+            
+            results.forEach(result => {
+                const date = new Date(result.submitTime).toLocaleDateString();
+                const score = result.score + '/' + result.maxScore;
+                const percentage = Math.round((result.score / result.maxScore) * 100);
+                const typeBadge = result.type === 'Test' ? 
+                    '<span class="badge bg-primary">Test</span>' : 
+                    '<span class="badge bg-success">Survey</span>';
+                
+                const statusBadge = result.status === 'Graded' ? 
+                    '<span class="badge bg-success">Completed</span>' : 
+                    '<span class="badge bg-warning">Submitted</span>';
+                
+                const scoreColor = percentage >= 80 ? 'text-success' : percentage >= 60 ? 'text-warning' : 'text-danger';
+                
+                html += `
+                    <tr>
+                        <td>${result.title}</td>
+                        <td>${typeBadge}</td>
+                        <td><span class="${scoreColor} fw-bold">${score}</span></td>
+                        <td>${date}</td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <a href="/User/ResultDetail/${result.id}" class="btn btn-sm btn-outline-primary">View Details</a>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table></div>';
+            $('#resultsList').html(html);
+        }
+    </script>
+}

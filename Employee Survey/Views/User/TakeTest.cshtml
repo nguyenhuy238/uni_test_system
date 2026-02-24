@@ -1,0 +1,158 @@
+@{
+    ViewData["Title"] = "Take Test";
+    Layout = "_UserLayout";
+    var testId = ViewBag.TestId as string;
+}
+
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2>Test in Progress</h2>
+                <div class="d-flex align-items-center">
+                    <span class="badge bg-primary me-2">Time Remaining:</span>
+                    <span id="timer" class="fw-bold">--:--</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="progress mb-4">
+                <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div id="testContent">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading test...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between">
+                <button id="prevBtn" class="btn btn-secondary" onclick="previousQuestion()" disabled>Previous</button>
+                <button id="nextBtn" class="btn btn-primary" onclick="nextQuestion()">Next</button>
+                <button id="submitBtn" class="btn btn-success d-none" onclick="submitTest()">Submit Test</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let currentQuestionIndex = 0;
+        let questions = [];
+        let answers = {};
+        let testInfo = {};
+        let sessionId = '';
+        let timerInterval;
+
+        $(document).ready(function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const testId = urlParams.get('testId');
+            sessionId = urlParams.get('sessionId');
+            
+            if (!testId || !sessionId) {
+                window.location.href = '/User/Tests';
+                return;
+            }
+
+            loadTest(testId);
+        });
+
+        function loadTest(testId) {
+            const token = localStorage.getItem('jwtToken');
+            
+            $.ajax({
+                url: `/api/user/tests/${testId}`,
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                },
+                success: function(test) {
+                    testInfo = test;
+                    loadQuestions(testId);
+                },
+                error: function() {
+                    $('#testContent').html('<div class="alert alert-danger">Failed to load test. Please try again.</div>');
+                }
+            });
+        }
+
+        function loadQuestions(testId) {
+            // This would need to be implemented to get questions for the test
+            // For now, showing a placeholder
+            $('#testContent').html(`
+                <div class="alert alert-info">
+                    <h4>Test: ${testInfo.title}</h4>
+                    <p>This is a placeholder for the test questions.</p>
+                    <p>In a complete implementation, this would load the actual questions and allow the user to answer them.</p>
+                    <p>Duration: ${testInfo.durationMinutes} minutes</p>
+                    <p>Max Score: ${testInfo.totalMaxScore} points</p>
+                </div>
+            `);
+            
+            // Enable submit button for demo
+            $('#submitBtn').removeClass('d-none');
+        }
+
+        function previousQuestion() {
+            if (currentQuestionIndex > 0) {
+                currentQuestionIndex--;
+                displayQuestion();
+            }
+        }
+
+        function nextQuestion() {
+            if (currentQuestionIndex < questions.length - 1) {
+                currentQuestionIndex++;
+                displayQuestion();
+            } else {
+                $('#submitBtn').removeClass('d-none');
+                $('#nextBtn').addClass('d-none');
+            }
+        }
+
+        function submitTest() {
+            const token = localStorage.getItem('jwtToken');
+            
+            $.ajax({
+                url: `/api/tests/sessions/${sessionId}/submit`,
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                },
+                data: JSON.stringify(answers),
+                contentType: 'application/json',
+                success: function() {
+                    alert('Test submitted successfully!');
+                    window.location.href = '/User/Results';
+                },
+                error: function() {
+                    alert('Failed to submit test. Please try again.');
+                }
+            });
+        }
+
+        function updateTimer() {
+            // Timer implementation would go here
+            // For now, just showing placeholder
+            $('#timer').text('30:00');
+        }
+
+        function updateProgress() {
+            const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
+            $('#progressBar').css('width', progress + '%');
+        }
+    </script>
+}

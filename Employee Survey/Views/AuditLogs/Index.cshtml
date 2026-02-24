@@ -1,0 +1,52 @@
+﻿@model List<Employee_Survey.Application.AuditEntryDto>
+@{
+    ViewData["Title"] = "Audit Logs";
+    var from = (string?)ViewBag.From;
+    var to = (string?)ViewBag.To;
+    var kw = (string?)ViewBag.Keyword;
+    var actor = (string?)ViewBag.Actor;
+}
+<h2>Audit Logs</h2>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-auto">
+        <label class="form-label">From (UTC)</label>
+        <input type="datetime-local" name="from" class="form-control" value="@from" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label">To (UTC)</label>
+        <input type="datetime-local" name="to" class="form-control" value="@to" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label">Keyword</label>
+        <input name="keyword" class="form-control" value="@kw" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label">Actor</label>
+        <input name="actor" class="form-control" value="@actor" />
+    </div>
+    <div class="col-auto align-self-end">
+        <button class="btn btn-primary">Filter</button>
+    </div>
+</form>
+
+<div class="card shadow-sm">
+    <div class="card-body table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr><th>At (UTC)</th><th>Actor</th><th>Action</th><th>EntityId</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var e in Model)
+                {
+                    <tr>
+                        <td>@e.At.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td>@e.Actor</td>
+                        <td>@e.Action</td>
+                        <td>@e.EntityId</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
