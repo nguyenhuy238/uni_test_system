@@ -120,7 +120,10 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Text="Title:"/>
@@ -175,6 +178,7 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Content" Binding="{Binding Content}" Width="*"/>
                             <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="80"/>
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="80"/>
                             <DataGridTextColumn Header="Skill" Binding="{Binding Skill}" Width="100"/>
                             <DataGridTextColumn Header="Difficulty" Binding="{Binding Difficulty}" Width="80"/>
                         </DataGrid.Columns>
@@ -193,7 +197,13 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Text="Content:"/>
@@ -240,6 +250,9 @@
 
                                 <StackPanel Grid.Row="13" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}">
                                     <Button Content="Save" Command="{Binding SaveQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
+                                    <Button Content="Submit" Command="{Binding SubmitQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
+                                    <Button Content="Approve" Command="{Binding ApproveQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
+                                    <Button Content="Reject" Command="{Binding RejectQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#F44336" Foreground="White"/>
                                     <Button Content="Delete" Command="{Binding DeleteQuestionCommand}" Width="70"/>
                                 </StackPanel>
                             </Grid>
@@ -280,6 +293,10 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Text="Name:"/>
@@ -351,29 +368,52 @@
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="300"/>
+                        <ColumnDefinition Width="320"/>
                     </Grid.ColumnDefinitions>
 
-                    <DataGrid ItemsSource="{Binding Faculties}" SelectedItem="{Binding SelectedFaculty}" AutoGenerateColumns="False" IsReadOnly="True" Margin="5">
+                    <DataGrid Grid.Column="0" ItemsSource="{Binding Faculties}" SelectedItem="{Binding SelectedFaculty}" AutoGenerateColumns="False" IsReadOnly="True" Margin="5">
                         <DataGrid.Columns>
+                            <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="100"/>
                             <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
-                            <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="2*"/>
+                            <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="1.5*"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
-                    <StackPanel Grid.Column="1" Margin="5">
-                        <TextBlock Text="Faculty Management" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
-                        <Button Content="+ New Faculty" Command="{Binding AddFacultyCommand}" HorizontalAlignment="Left" Margin="0,0,0,10"/>
-                        <TextBlock Text="Name:"/>
-                        <TextBox Text="{Binding SelectedFaculty.Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,5"/>
-                        <TextBlock Text="Description:"/>
-                        <TextBox Text="{Binding SelectedFaculty.Description, UpdateSourceTrigger=PropertyChanged}" Height="100" TextWrapping="Wrap" AcceptsReturn="True" Margin="0,0,0,10"/>
-                        
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Content="Save" Command="{Binding SaveFacultyCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
-                            <Button Content="Delete" Command="{Binding DeleteFacultyCommand}" Width="70"/>
+                    <ScrollViewer Grid.Column="1" Margin="5">
+                        <StackPanel>
+                            <TextBlock Text="Faculty Management" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
+                            <Button Content="+ New Faculty" Command="{Binding AddFacultyCommand}" HorizontalAlignment="Left" Margin="0,0,0,15"/>
+                            
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Label Content="Name:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SelectedFaculty.Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                                <Label Content="Code:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SelectedFaculty.Code, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                                <Label Content="Description:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Top"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SelectedFaculty.Description, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" AcceptsReturn="True" Height="100" Margin="0,0,0,10"/>
+
+                                <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                                    <Button Content="Save" Command="{Binding SaveFacultyCommand}" Width="80" Margin="0,0,5,0" Background="#4CAF50" Foreground="White" BorderThickness="0"/>
+                                    <Button Content="Delete" Command="{Binding DeleteFacultyCommand}" Width="80"/>
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
-                    </StackPanel>
+                    </ScrollViewer>
                 </Grid>
             </TabItem>
 
@@ -382,34 +422,170 @@
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="300"/>
+                        <ColumnDefinition Width="320"/>
                     </Grid.ColumnDefinitions>
 
-                    <DataGrid ItemsSource="{Binding Classes}" SelectedItem="{Binding SelectedClass}" AutoGenerateColumns="False" IsReadOnly="True" Margin="5">
+                    <DataGrid Grid.Column="0" ItemsSource="{Binding Classes}" SelectedItem="{Binding SelectedClass}" AutoGenerateColumns="False" IsReadOnly="True" Margin="5">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
                             <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="100"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
-                    <StackPanel Grid.Column="1" Margin="5">
-                        <TextBlock Text="Class Management" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
-                        <Button Content="+ New Class" Command="{Binding AddClassCommand}" HorizontalAlignment="Left" Margin="0,0,0,10"/>
-                        <TextBlock Text="Name:"/>
-                        <TextBox Text="{Binding SelectedClass.Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,5"/>
-                        <TextBlock Text="Code:"/>
-                        <TextBox Text="{Binding SelectedClass.Code, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,5"/>
-                        <TextBlock Text="Faculty:"/>
-                        <ComboBox ItemsSource="{Binding Faculties}" SelectedValue="{Binding SelectedClass.FacultyId}" SelectedValuePath="Id" DisplayMemberPath="Name" Margin="0,0,0,10"/>
+                    <ScrollViewer Grid.Column="1" Margin="5">
+                        <StackPanel>
+                            <TextBlock Text="Class Management" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
+                            <Button Content="+ New Class" Command="{Binding AddClassCommand}" HorizontalAlignment="Left" Margin="0,0,0,15"/>
+                            
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
 
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Content="Save" Command="{Binding SaveClassCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
-                            <Button Content="Delete" Command="{Binding DeleteClassCommand}" Width="70"/>
+                                <Label Content="Name:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SelectedClass.Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                                <Label Content="Code:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SelectedClass.Code, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                                <Label Content="Faculty:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Faculties}" SelectedValue="{Binding SelectedClass.FacultyId}" SelectedValuePath="Id" DisplayMemberPath="Name" Margin="0,0,0,10"/>
+
+                                <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                                    <Button Content="Save" Command="{Binding SaveClassCommand}" Width="80" Margin="0,0,5,0" Background="#4CAF50" Foreground="White" BorderThickness="0"/>
+                                    <Button Content="Delete" Command="{Binding DeleteClassCommand}" Width="80"/>
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
-                    </StackPanel>
+                    </ScrollViewer>
                 </Grid>
             </TabItem>
-        </TabControl>
+
+            <!-- Courses Tab -->
+            <TabItem Header="Courses">
+                <Grid Margin="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="320"/>
+                    </Grid.ColumnDefinitions>
+
+                    <DockPanel Grid.Column="0">
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
+                            <Button Content="Add Course" Command="{Binding AddCourseCommand}" Width="100" Margin="0,0,10,0"/>
+                            <Button Content="Import Courses" Command="{Binding ImportCoursesCommand}" Width="120" Margin="0,0,10,0"/>
+                            <Button Content="Refresh" Command="{Binding LoadDataCommand}" Width="80"/>
+                        </StackPanel>
+                        <DataGrid ItemsSource="{Binding Courses}" SelectedItem="{Binding SelectedCourse}" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="100"/>
+                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                                <DataGridTextColumn Header="Credits" Binding="{Binding Credits}" Width="60"/>
+                                <DataGridTextColumn Header="Area" Binding="{Binding SubjectArea}" Width="150"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+
+                    <ScrollViewer Grid.Column="1" Margin="10,0,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Course Details" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <Label Content="Name:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding SelectedCourse.Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                                <Label Content="Code:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding SelectedCourse.Code, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                                <Label Content="Credits:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SelectedCourse.Credits, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                                <Label Content="Area:" Grid.Row="3" Grid.Column="0" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding SelectedCourse.SubjectArea, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                                <Label Content="Lecturer:" Grid.Row="4" Grid.Column="0" VerticalAlignment="Center"/>
+                                <ComboBox Grid.Row="4" Grid.Column="1" ItemsSource="{Binding Lecturers}" SelectedValue="{Binding SelectedCourse.LecturerId}" SelectedValuePath="Id" DisplayMemberPath="Name" Margin="0,0,0,10"/>
+
+                                <StackPanel Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                                    <Button Content="Save" Command="{Binding SaveCourseCommand}" Width="80" Margin="0,0,5,0" Background="#4CAF50" Foreground="White" BorderThickness="0"/>
+                                    <Button Content="Delete" Command="{Binding DeleteCourseCommand}" Width="80"/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- Enrollments Tab -->
+            <TabItem Header="Enrollments">
+                <Grid Margin="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <DockPanel Grid.Column="0" Margin="0,0,10,0">
+                        <TextBlock DockPanel.Dock="Top" Text="Select Course" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <DataGrid ItemsSource="{Binding Courses}" SelectedItem="{Binding SelectedCourse}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="100"/>
+                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+
+                    <DockPanel Grid.Column="1">
+                        <TextBlock DockPanel.Dock="Top" Text="Enrolled Students" FontWeight="Bold" Margin="0,0,0,5"/>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
+                            <Button Content="Import Students" Command="{Binding ImportStudentsCommand}" Width="120" Margin="0,0,10,0"/>
+                            <Button Content="Unenroll" Command="{Binding UnenrollStudentCommand}" Width="100"/>
+                        </StackPanel>
+                        <DataGrid ItemsSource="{Binding Enrollments}" SelectedItem="{Binding SelectedEnrollment}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Student ID" Binding="{Binding StudentId}" Width="*"/>
+                                <DataGridTextColumn Header="Name" Binding="{Binding StudentName}" Width="*"/>
+                                <DataGridTextColumn Header="Semester" Binding="{Binding Semester}" Width="100"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </Grid>
+                </TabItem>
+
+                <!-- Settings Tab -->
+                <TabItem Header="Settings">
+                    <Grid Margin="20">
+                        <StackPanel MaxWidth="400" HorizontalAlignment="Left">
+                            <TextBlock Text="System Settings" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
+                            
+                            <Label Content="Current Semester:"/>
+                            <TextBox Text="Học kỳ 2" Margin="0,0,0,10"/> <!-- Bound to Stats/Settings in real app -->
+                            
+                            <Label Content="Current Academic Year:"/>
+                            <TextBox Text="2025-2026" Margin="0,0,0,20"/>
+                            
+                            <Button Content="Save Settings" Command="{Binding SaveSettingsCommand}" Width="120" HorizontalAlignment="Left" Height="30" Background="#2196F3" Foreground="White" BorderThickness="0"/>
+                        </StackPanel>
+                    </Grid>
+                </TabItem>
+            </TabControl>
 
         <!-- Status Bar -->
         <StatusBar Grid.Row="3">

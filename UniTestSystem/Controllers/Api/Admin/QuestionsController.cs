@@ -1,22 +1,49 @@
-using UniTestSystem.Application.Interfaces;
+using UniTestSystem.Application;
 using UniTestSystem.Domain;
+using UniTestSystem.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace UniTestSystem.Controllers.Api.Admin;
 
 [ApiController]
-[Authorize(Roles = "Admin,Lecturer")]
+[Authorize(Policy = "RequireLecturerOrStaffOrAdmin")]
 [Route("api/admin/questions")]
 public class QuestionsController : ControllerBase
 {
     private readonly IRepository<Question> _questions;
     private readonly IRepository<Option> _options;
+    private readonly IQuestionService _svc;
 
-    public QuestionsController(IRepository<Question> questions, IRepository<Option> options)
+    public QuestionsController(IRepository<Question> questions, IRepository<Option> options, IQuestionService svc)
     {
         _questions = questions;
         _options = options;
+        _svc = svc;
+    }
+
+    [HttpPost("submit/{id}")]
+    public async Task<IActionResult> Submit(string id)
+    {
+        var (success, reason) = await _svc.SubmitAsync(id, User.Identity?.Name ?? "admin");
+        if (!success) return BadRequest(new { message = reason ?? "Submit failed" });
+        return Ok();
+    }
+
+    [HttpPost("approve/{id}")]
+    public async Task<IActionResult> Approve(string id)
+    {
+        var (success, reason) = await _svc.ApproveAsync(id, User.Identity?.Name ?? "admin");
+        if (!success) return BadRequest(new { message = reason ?? "Approve failed" });
+        return Ok();
+    }
+
+    [HttpPost("reject/{id}")]
+    public async Task<IActionResult> Reject(string id, [FromQuery] string? reason)
+    {
+        var (success, r) = await _svc.RejectAsync(id, User.Identity?.Name ?? "admin", reason);
+        if (!success) return BadRequest(new { message = r ?? "Reject failed" });
+        return Ok();
     }
 
     [HttpGet]

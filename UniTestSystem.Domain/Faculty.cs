@@ -10,6 +10,9 @@ namespace UniTestSystem.Domain
         [Required, MinLength(2)]
         public string Name { get; set; } = "";
 
+        [Required, MaxLength(20)]
+        public string Code { get; set; } = "";
+
         public virtual ICollection<StudentClass> StudentClasses { get; set; } = new List<StudentClass>();
         public virtual ICollection<Lecturer> Lecturers { get; set; } = new List<Lecturer>();
 

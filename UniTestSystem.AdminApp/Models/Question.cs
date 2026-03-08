@@ -13,6 +13,9 @@ namespace UniTestSystem.AdminApp.Models
         [JsonPropertyName("type")]
         public string Type { get; set; } = "MCQ";
 
+        [JsonPropertyName("status")]
+        public string Status { get; set; } = "Draft";
+
         [JsonPropertyName("options")]
         public List<string>? Options { get; set; } = new();
 

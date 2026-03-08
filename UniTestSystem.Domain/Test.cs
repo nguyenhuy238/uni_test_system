@@ -6,7 +6,7 @@ namespace UniTestSystem.Domain
     {
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
         
-        public string AssessmentId { get; set; } = "";
+        public string? AssessmentId { get; set; }
         public virtual Assessment? Assessment { get; set; }
 
         public string Title { get; set; } = "";
@@ -25,6 +25,11 @@ namespace UniTestSystem.Domain
 
         public bool ShuffleQuestions { get; set; } = true;
 
+        /// <summary>
+        /// Hoán vị các đáp án trong câu hỏi (nếu loại câu hỏi cho phép).
+        /// </summary>
+        public bool ShuffleOptions { get; set; } = true;
+
         // Cấu hình random cũ (giữ nguyên để tương thích)
         public string SubjectIdFilter { get; set; } = "Programming";
         public int RandomMCQ { get; set; } = 5;
@@ -35,11 +40,17 @@ namespace UniTestSystem.Domain
         public decimal TotalMaxScore { get; set; } = 10m;
 
         public bool IsPublished { get; set; } = false;
+        public bool IsArchived { get; set; } = false;
 
         public virtual ICollection<Session> Sessions { get; set; } = new List<Session>();
 
         // === NEW: Many-to-Many Relational Structure ===
         public virtual ICollection<TestQuestion> TestQuestions { get; set; } = new List<TestQuestion>();
+
+        /// <summary>
+        /// Bản sao cố định của các câu hỏi khi đề thi được xuất bản.
+        /// </summary>
+        public virtual ICollection<TestQuestionSnapshot> QuestionSnapshots { get; set; } = new List<TestQuestionSnapshot>();
 
         public FrozenRandomConfig? FrozenRandom { get; set; }
 

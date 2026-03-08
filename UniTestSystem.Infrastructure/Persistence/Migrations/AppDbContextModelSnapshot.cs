@@ -87,7 +87,7 @@ namespace UniTestSystem.Migrations
 
                     b.Property<string>("Actor")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("After")
                         .HasColumnType("nvarchar(max)");
@@ -102,7 +102,15 @@ namespace UniTestSystem.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("EntityName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("Actor");
+
+                    b.HasIndex("At");
 
                     b.ToTable("AuditEntries");
                 });
@@ -175,7 +183,6 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SessionId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("UserAgent")
@@ -299,6 +306,11 @@ namespace UniTestSystem.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -317,6 +329,9 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
 
                     b.HasIndex("Name")
                         .IsUnique();
@@ -343,7 +358,6 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("SessionId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -385,7 +399,6 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("UserId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.HasKey("Id");
@@ -457,7 +470,6 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("UserId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.HasKey("Id");
@@ -537,6 +549,9 @@ namespace UniTestSystem.Migrations
                     b.Property<string>("SkillId")
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
                     b.Property<string>("SubjectId")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
@@ -578,7 +593,6 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("CourseId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<DateTime>("CreatedAt")
@@ -599,6 +613,47 @@ namespace UniTestSystem.Migrations
                     b.HasIndex("CourseId");
 
                     b.ToTable("QuestionBank", (string)null);
+                });
+
+            modelBuilder.Entity("UniTestSystem.Domain.RefreshToken", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedByIp")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReplacedByToken")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RevokedByIp")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("RefreshToken", (string)null);
                 });
 
             modelBuilder.Entity("UniTestSystem.Domain.Result", b =>
@@ -759,9 +814,12 @@ namespace UniTestSystem.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("EndAt")
+                        .HasFilter("[EndAt] IS NOT NULL");
+
                     b.HasIndex("TestId");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "Status");
 
                     b.ToTable("Session", (string)null);
                 });
@@ -782,7 +840,6 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SessionId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<DateTime>("Timestamp")
@@ -821,7 +878,6 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("decimal(5,2)");
 
                     b.Property<string>("SessionId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<int>("Type")
@@ -866,17 +922,16 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("QuestionId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<decimal>("Score")
+                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("SelectedOptionId")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SessionId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.HasKey("Id");
@@ -951,6 +1006,12 @@ namespace UniTestSystem.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<string>("CurrentAcademicYear")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CurrentSemester")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("LogoUrl")
                         .HasColumnType("nvarchar(max)");
 
@@ -975,7 +1036,6 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("AssessmentId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("CourseId")
@@ -993,6 +1053,9 @@ namespace UniTestSystem.Migrations
 
                     b.Property<string>("FrozenRandom")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
@@ -1015,6 +1078,9 @@ namespace UniTestSystem.Migrations
                     b.Property<int>("RandomTF")
                         .HasColumnType("int");
 
+                    b.Property<bool>("ShuffleOptions")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("ShuffleQuestions")
                         .HasColumnType("bit");
 
@@ -1027,6 +1093,7 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("TotalMaxScore")
+                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("Type")
@@ -1041,7 +1108,8 @@ namespace UniTestSystem.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AssessmentId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[AssessmentId] IS NOT NULL");
 
                     b.HasIndex("CourseId");
 
@@ -1060,6 +1128,7 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("int");
 
                     b.Property<decimal>("Points")
+                        .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
                     b.HasKey("TestId", "QuestionId");
@@ -1067,6 +1136,48 @@ namespace UniTestSystem.Migrations
                     b.HasIndex("QuestionId");
 
                     b.ToTable("TestQuestion", (string)null);
+                });
+
+            modelBuilder.Entity("UniTestSystem.Domain.TestQuestionSnapshot", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CorrectAnswerJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("OptionsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OriginalQuestionId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Points")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("TestId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TestId");
+
+                    b.ToTable("TestQuestionSnapshot", (string)null);
                 });
 
             modelBuilder.Entity("UniTestSystem.Domain.Transcript", b =>
@@ -1093,7 +1204,6 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("rowversion");
 
                     b.Property<string>("StudentId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<int>("TotalCredits")
@@ -1114,7 +1224,16 @@ namespace UniTestSystem.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<int>("AccessFailedCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("AvatarUrl")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("DateOfBirth")
                         .HasColumnType("datetime2");
 
                     b.Property<DateTime?>("DeletedAt")
@@ -1132,6 +1251,12 @@ namespace UniTestSystem.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTimeOffset?>("LockoutEnd")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1167,7 +1292,6 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("UserId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.HasKey("Id");
@@ -1177,6 +1301,43 @@ namespace UniTestSystem.Migrations
                     b.ToTable("UserRole", (string)null);
                 });
 
+            modelBuilder.Entity("UniTestSystem.Domain.UserSession", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("IpAddress")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsRevoked")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("LastActivityAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UserAgent")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserSession", (string)null);
+                });
+
             modelBuilder.Entity("UniTestSystem.Domain.Lecturer", b =>
                 {
                     b.HasBaseType("UniTestSystem.Domain.User");
@@ -1184,16 +1345,11 @@ namespace UniTestSystem.Migrations
                     b.Property<string>("FacultyId")
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<string>("FacultyId1")
-                        .HasColumnType("nvarchar(450)");
-
                     b.Property<string>("LecturerCode")
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.HasIndex("FacultyId");
-
-                    b.HasIndex("FacultyId1");
 
                     b.HasIndex("LecturerCode")
                         .IsUnique()
@@ -1257,8 +1413,7 @@ namespace UniTestSystem.Migrations
                     b.HasOne("UniTestSystem.Domain.Session", "Session")
                         .WithMany("DeviceFingerprints")
                         .HasForeignKey("SessionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Session");
                 });
@@ -1287,8 +1442,7 @@ namespace UniTestSystem.Migrations
                     b.HasOne("UniTestSystem.Domain.Course", "Course")
                         .WithMany()
                         .HasForeignKey("CourseId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("UniTestSystem.Domain.Test", "Test")
                         .WithMany()
@@ -1304,10 +1458,8 @@ namespace UniTestSystem.Migrations
             modelBuilder.Entity("UniTestSystem.Domain.Feedback", b =>
                 {
                     b.HasOne("UniTestSystem.Domain.Session", "Session")
-                        .WithMany()
-                        .HasForeignKey("SessionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .WithMany("Feedbacks")
+                        .HasForeignKey("SessionId");
 
                     b.Navigation("Session");
                 });
@@ -1316,9 +1468,7 @@ namespace UniTestSystem.Migrations
                 {
                     b.HasOne("UniTestSystem.Domain.User", "User")
                         .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("UserId");
 
                     b.Navigation("User");
                 });
@@ -1336,9 +1486,7 @@ namespace UniTestSystem.Migrations
                 {
                     b.HasOne("UniTestSystem.Domain.User", "User")
                         .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("UserId");
 
                     b.Navigation("User");
                 });
@@ -1386,12 +1534,21 @@ namespace UniTestSystem.Migrations
             modelBuilder.Entity("UniTestSystem.Domain.QuestionBank", b =>
                 {
                     b.HasOne("UniTestSystem.Domain.Course", "Course")
-                        .WithMany()
-                        .HasForeignKey("CourseId")
+                        .WithMany("QuestionBanks")
+                        .HasForeignKey("CourseId");
+
+                    b.Navigation("Course");
+                });
+
+            modelBuilder.Entity("UniTestSystem.Domain.RefreshToken", b =>
+                {
+                    b.HasOne("UniTestSystem.Domain.User", "User")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Course");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("UniTestSystem.Domain.Result", b =>
@@ -1456,8 +1613,7 @@ namespace UniTestSystem.Migrations
                     b.HasOne("UniTestSystem.Domain.Session", "Session")
                         .WithMany("Logs")
                         .HasForeignKey("SessionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Session");
                 });
@@ -1466,9 +1622,7 @@ namespace UniTestSystem.Migrations
                 {
                     b.HasOne("UniTestSystem.Domain.Session", "Session")
                         .WithMany()
-                        .HasForeignKey("SessionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("SessionId");
 
                     b.Navigation("Session");
                 });
@@ -1478,14 +1632,12 @@ namespace UniTestSystem.Migrations
                     b.HasOne("UniTestSystem.Domain.Question", "Question")
                         .WithMany()
                         .HasForeignKey("QuestionId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("UniTestSystem.Domain.Session", "Session")
                         .WithMany("StudentAnswers")
                         .HasForeignKey("SessionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Question");
 
@@ -1507,8 +1659,7 @@ namespace UniTestSystem.Migrations
                     b.HasOne("UniTestSystem.Domain.Assessment", "Assessment")
                         .WithOne()
                         .HasForeignKey("UniTestSystem.Domain.Test", "AssessmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("UniTestSystem.Domain.Course", "Course")
                         .WithMany("Tests")
@@ -1525,16 +1676,25 @@ namespace UniTestSystem.Migrations
                     b.HasOne("UniTestSystem.Domain.Question", "Question")
                         .WithMany("TestQuestions")
                         .HasForeignKey("QuestionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("UniTestSystem.Domain.Test", "Test")
                         .WithMany("TestQuestions")
                         .HasForeignKey("TestId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Question");
+
+                    b.Navigation("Test");
+                });
+
+            modelBuilder.Entity("UniTestSystem.Domain.TestQuestionSnapshot", b =>
+                {
+                    b.HasOne("UniTestSystem.Domain.Test", "Test")
+                        .WithMany("QuestionSnapshots")
+                        .HasForeignKey("TestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Test");
                 });
@@ -1544,8 +1704,7 @@ namespace UniTestSystem.Migrations
                     b.HasOne("UniTestSystem.Domain.User", "Student")
                         .WithMany()
                         .HasForeignKey("StudentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Student");
                 });
@@ -1554,6 +1713,15 @@ namespace UniTestSystem.Migrations
                 {
                     b.HasOne("UniTestSystem.Domain.User", "User")
                         .WithMany("UserRoles")
+                        .HasForeignKey("UserId");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("UniTestSystem.Domain.UserSession", b =>
+                {
+                    b.HasOne("UniTestSystem.Domain.User", "User")
+                        .WithMany("UserSessions")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1564,13 +1732,9 @@ namespace UniTestSystem.Migrations
             modelBuilder.Entity("UniTestSystem.Domain.Lecturer", b =>
                 {
                     b.HasOne("UniTestSystem.Domain.Faculty", "Faculty")
-                        .WithMany()
+                        .WithMany("Lecturers")
                         .HasForeignKey("FacultyId")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("UniTestSystem.Domain.Faculty", null)
-                        .WithMany("Lecturers")
-                        .HasForeignKey("FacultyId1");
 
                     b.HasOne("UniTestSystem.Domain.User", null)
                         .WithOne()
@@ -1601,6 +1765,8 @@ namespace UniTestSystem.Migrations
                 {
                     b.Navigation("Enrollments");
 
+                    b.Navigation("QuestionBanks");
+
                     b.Navigation("Tests");
                 });
 
@@ -1627,6 +1793,8 @@ namespace UniTestSystem.Migrations
                 {
                     b.Navigation("DeviceFingerprints");
 
+                    b.Navigation("Feedbacks");
+
                     b.Navigation("Logs");
 
                     b.Navigation("StudentAnswers");
@@ -1639,6 +1807,8 @@ namespace UniTestSystem.Migrations
 
             modelBuilder.Entity("UniTestSystem.Domain.Test", b =>
                 {
+                    b.Navigation("QuestionSnapshots");
+
                     b.Navigation("Sessions");
 
                     b.Navigation("TestQuestions");
@@ -1646,7 +1816,11 @@ namespace UniTestSystem.Migrations
 
             modelBuilder.Entity("UniTestSystem.Domain.User", b =>
                 {
+                    b.Navigation("RefreshTokens");
+
                     b.Navigation("UserRoles");
+
+                    b.Navigation("UserSessions");
                 });
 #pragma warning restore 612, 618
         }

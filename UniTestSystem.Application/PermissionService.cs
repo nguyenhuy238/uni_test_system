@@ -20,25 +20,25 @@ namespace UniTestSystem.Application
 
         public async Task EnsureDefaultAsync()
         {
-            var all = await _repo.GetAllAsync();
-            if (all.Any()) return;
-
             var presets = new List<RolePermissionMapping>
             {
                 new() { Role = Role.Admin, Permissions = PermissionCodes.All.ToList() },
                 new() { Role = Role.Lecturer, Permissions = new() {
                         PermissionCodes.Reports_View, PermissionCodes.Reports_Export,
-                        PermissionCodes.Question_Create, PermissionCodes.Question_Edit, PermissionCodes.Question_Categorize,
-                        PermissionCodes.Tests_Create, PermissionCodes.Grading_Manual,
+                        PermissionCodes.Question_View, PermissionCodes.Question_Create, PermissionCodes.Question_Edit, PermissionCodes.Question_Delete, PermissionCodes.Question_Categorize,
+                        PermissionCodes.Tests_View, PermissionCodes.Tests_Create, PermissionCodes.Tests_Publish,
+                        PermissionCodes.Exam_Schedule, PermissionCodes.Grading_Manual,
                         PermissionCodes.Analytics_Difficulty
                     }
                 },
                 new() { Role = Role.Staff, Permissions = new() {
+                        PermissionCodes.Users_Manage,
                         PermissionCodes.Reports_View, PermissionCodes.Reports_Export,
                         PermissionCodes.Org_View, PermissionCodes.Org_Manage,
                         PermissionCodes.Courses_Manage, PermissionCodes.Enrollment_Manage,
                         PermissionCodes.Transcript_View, PermissionCodes.Transcript_Manage, PermissionCodes.Transcript_Lock,
                         PermissionCodes.Exam_Schedule, PermissionCodes.Exam_Lock, PermissionCodes.Exam_Session_Reset,
+                        PermissionCodes.Question_View, PermissionCodes.Question_Approve,
                         PermissionCodes.Tests_View, PermissionCodes.Tests_Publish,
                         PermissionCodes.Grading_Review,
                         PermissionCodes.Analytics_GPA
@@ -50,7 +50,28 @@ namespace UniTestSystem.Application
                     }
                 },
             };
-            foreach (var m in presets) await _repo.InsertAsync(m);
+
+            foreach (var preset in presets)
+            {
+                var existing = await GetByRoleAsync(preset.Role);
+                if (existing == null)
+                {
+                    await _repo.InsertAsync(preset);
+                }
+                else
+                {
+                    // Nếu preset có permission nào mới mà existing chưa có -> update
+                    var missing = preset.Permissions.Except(existing.Permissions).ToList();
+                    if (missing.Any())
+                    {
+                        existing.Permissions.AddRange(missing);
+                        existing.Permissions = existing.Permissions.Distinct().ToList();
+                        existing.UpdatedAt = DateTime.UtcNow;
+                        existing.UpdatedBy = "System (Auto Fix)";
+                        await _repo.UpsertAsync(x => x.Id == existing.Id, existing);
+                    }
+                }
+            }
         }
 
         public Task<List<RolePermissionMapping>> GetAllAsync() => _repo.GetAllAsync();

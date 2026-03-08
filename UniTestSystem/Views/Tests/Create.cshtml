@@ -32,6 +32,8 @@
     <input type="hidden" id="q_RandomMCQ" name="RandomMCQ" value="@Model.RandomMCQ" />
     <input type="hidden" id="q_RandomTF" name="RandomTF" value="@Model.RandomTF" />
     <input type="hidden" id="q_RandomEssay" name="RandomEssay" value="@Model.RandomEssay" />
+    <input type="hidden" id="q_ShuffleQuestions" name="ShuffleQuestions" value="@Model.ShuffleQuestions.ToString().ToLower()" />
+    <input type="hidden" id="q_ShuffleOptions" name="ShuffleOptions" value="@Model.ShuffleOptions.ToString().ToLower()" />
 
     <button class="btn btn-outline-secondary" type="submit">Apply</button>
 </form>
@@ -56,6 +58,14 @@
             <div class="mb-2">
                 <label class="form-label">PassScore</label>
                 <input name="PassScore" type="number" value="@Model.PassScore" class="form-control" />
+            </div>
+            <div class="mb-2 form-check">
+                <input type="checkbox" name="ShuffleQuestions" value="true" checked="@Model.ShuffleQuestions" class="form-check-input" />
+                <label class="form-check-label">Shuffle Questions (Xáo trộn thứ tự câu hỏi)</label>
+            </div>
+            <div class="mb-2 form-check">
+                <input type="checkbox" name="ShuffleOptions" value="true" checked="@Model.ShuffleOptions" class="form-check-input" />
+                <label class="form-check-label">Shuffle Options (Xáo trộn thứ tự đáp án)</label>
             </div>
             <div class="mb-2">
                 <label class="form-label">Môn học (Subject - áp dụng cho random)</label>
@@ -164,14 +174,18 @@
             SubjectIdFilter: {src:'input[name="SubjectIdFilter"]',  hid:'#q_SubjectIdFilter'},
             RandomMCQ:       {src:'input[name="RandomMCQ"]',        hid:'#q_RandomMCQ'},
             RandomTF:        {src:'input[name="RandomTF"]',         hid:'#q_RandomTF'},
-            RandomEssay:     {src:'input[name="RandomEssay"]',      hid:'#q_RandomEssay'}
+            RandomEssay:     {src:'input[name="RandomEssay"]',      hid:'#q_RandomEssay'},
+            ShuffleQuestions:{src:'input[name="ShuffleQuestions"]', hid:'#q_ShuffleQuestions', isCheckbox:true},
+            ShuffleOptions:  {src:'input[name="ShuffleOptions"]',   hid:'#q_ShuffleOptions', isCheckbox:true}
           };
 
           function syncHidden(){
             Object.values(map).forEach(m=>{
               const src = document.querySelector(m.src);
               const hid = document.querySelector(m.hid);
-              if (src && hid) hid.value = src.value;
+              if (src && hid) {
+                  hid.value = m.isCheckbox ? (src.checked ? 'true' : 'false') : src.value;
+              }
             });
           }
 

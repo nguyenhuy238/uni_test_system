@@ -21,7 +21,9 @@ namespace UniTestSystem.Application
         // Lấy các TestId hợp lệ cho student
         public async Task<List<string>> GetAvailableTestIdsAsync(string userId, DateTime nowUtc)
         {
-            var student = await _sRepo.FirstOrDefaultAsync(x => x.Id == userId) ?? throw new Exception("Student not found");
+            var student = await _sRepo.FirstOrDefaultAsync(x => x.Id == userId);
+            if (student == null) return new List<string>(); // Gracefully return empty for non-students
+            
             var assessments = await _asRepo.GetAllAsync();
 
             // Lấy các course mà student đã enroll

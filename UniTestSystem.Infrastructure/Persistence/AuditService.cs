@@ -15,13 +15,14 @@ namespace UniTestSystem.Infrastructure.Persistence
             _db = db;
         }
 
-        public async Task LogAsync(string actor, string action, string entityId, object? before, object? after)
+        public async Task LogAsync(string actor, string action, string entityName, string entityId, object? before, object? after)
         {
             var entry = new AuditEntry
             {
                 At = DateTime.UtcNow,
                 Actor = actor,
                 Action = action,
+                EntityName = entityName,
                 EntityId = entityId,
                 Before = before != null ? JsonSerializer.Serialize(before, _opt) : null,
                 After = after != null ? JsonSerializer.Serialize(after, _opt) : null

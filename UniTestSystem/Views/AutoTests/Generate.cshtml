@@ -55,10 +55,39 @@
 
     <div class="col-md-3">
         <label class="form-label">Chính sách độ khó</label>
-        <select class="form-select" asp-for="DifficultyPolicy">
+        <select class="form-select" asp-for="DifficultyPolicy" id="diffPolicySelect">
             <option value="ByYear">ByYear (phù hợp năm học sinh viên)</option>
+            <option value="Matrix">Matrix (Cấu hình chi tiết số câu mỗi mức)</option>
             <option value="Any">Bất kỳ</option>
         </select>
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label">Tags (vd: Chương 1, Bài 2 - dấu phẩy)</label>
+        <input class="form-control" id="tagsCsv" placeholder="Chương 1, Bài 2" />
+        <div class="form-text">Lọc câu hỏi theo Tags (OR). Để trống = lấy tất cả.</div>
+    </div>
+
+    <!-- Matrix configuration (hidden by default) -->
+    <div class="col-12" id="matrixBlock" style="display:none;">
+        <div class="card card-body bg-light border-primary p-3">
+            <h6 class="text-primary fw-bold mb-3"><i class="bi bi-grid-3x3"></i> Difficulty Matrix (Ma trận số lượng câu hỏi theo độ khó)</h6>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label small">Easy Count</label>
+                    <input type="number" class="form-control form-control-sm matrix-input" data-diff="Easy" value="0" min="0" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small">Medium Count</label>
+                    <input type="number" class="form-control form-control-sm matrix-input" data-diff="Medium" value="0" min="0" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small">Hard Count</label>
+                    <input type="number" class="form-control form-control-sm matrix-input" data-diff="Hard" value="0" min="0" />
+                </div>
+            </div>
+            <div class="form-text mt-2">Khi chọn Matrix, hệ thống sẽ ưu tiên bốc chính xác số câu theo độ khó này. Các ràng buộc về loại câu hỏi (MCQ, TF) vẫn được áp dụng song song nếu có thể.</div>
+        </div>
     </div>
 
     <div class="col-12"><hr /></div>
@@ -127,11 +156,21 @@
           }
         }
         if(modeSel){ modeSel.addEventListener('change', toggleBlocks); toggleBlocks(); }
+        
+        // Toggle Matrix block
+        const diffPolicySelect = document.getElementById('diffPolicySelect');
+        const matrixBlock = document.getElementById('matrixBlock');
+        function toggleMatrix(){
+            if(diffPolicySelect && matrixBlock){
+                matrixBlock.style.display = (diffPolicySelect.value === 'Matrix') ? '' : 'none';
+            }
+        }
+        if(diffPolicySelect){ diffPolicySelect.addEventListener('change', toggleMatrix); toggleMatrix(); }
 
-        // Chuyển Skills CSV -> nhiều input hidden name="Skills"
+        // Chuyển Skills (Subjects) CSV -> nhiều input hidden name="Subjects"
         const skillsCsv = document.getElementById('skillsCsv');
-        function syncSkills(){
-          document.querySelectorAll('input[name="Skills"]').forEach(el => el.remove());
+        function syncSubjects(){
+          document.querySelectorAll('input[name="Subjects"]').forEach(el => el.remove());
           if(!skillsCsv || !skillsCsv.value) return;
           const arr = skillsCsv.value.split(',')
                        .map(s => s.trim())
@@ -141,6 +180,43 @@
             const i = document.createElement('input');
             i.type = 'hidden'; i.name = 'Subjects'; i.value = v;
             form.appendChild(i);
+          });
+        }
+        
+        // Chuyển Tags CSV -> nhiều input hidden name="Tags"
+        const tagsCsv = document.getElementById('tagsCsv');
+        function syncTags(){
+          document.querySelectorAll('input[name="Tags"]').forEach(el => el.remove());
+          if(!tagsCsv || !tagsCsv.value) return;
+          const arr = tagsCsv.value.split(',')
+                       .map(s => s.trim())
+                       .filter(Boolean);
+          const form = document.getElementById('autoGenForm');
+          arr.forEach(v => {
+            const i = document.createElement('input');
+            i.type = 'hidden'; i.name = 'Tags'; i.value = v;
+            form.appendChild(i);
+          });
+        }
+
+        // Chuyển Difficulty Matrix inputs -> hiddden inputs
+        function syncMatrix(){
+          document.querySelectorAll('input[name^="DifficultyMatrix"]').forEach(el => el.remove());
+          if(!diffPolicySelect || diffPolicySelect.value !== 'Matrix') return;
+          const inputs = document.querySelectorAll('.matrix-input');
+          const form = document.getElementById('autoGenForm');
+          let idx = 0;
+          inputs.forEach(inp => {
+            const count = parseInt(inp.value);
+            if(count > 0){
+                const idInput = document.createElement('input');
+                idInput.type = 'hidden'; idInput.name = `DifficultyMatrix[${idx}].DifficultyLevelId`; idInput.value = inp.dataset.diff;
+                const countInput = document.createElement('input');
+                countInput.type = 'hidden'; countInput.name = `DifficultyMatrix[${idx}].Count`; countInput.value = count;
+                form.appendChild(idInput);
+                form.appendChild(countInput);
+                idx++;
+            }
           });
         }
 
@@ -160,19 +236,21 @@
           });
         }
 
-        // Trước khi submit: sync cả Skills & UserIds
+        // Trước khi submit: sync hết các hidden inputs
         const formEl = document.getElementById('autoGenForm');
         if(formEl){
           formEl.addEventListener('submit', function(){
-            syncSkills();
+            syncSubjects();
             syncUserIds();
+            syncTags();
+            syncMatrix();
           });
         }
 
         // Đồng bộ theo thao tác người dùng (không bắt buộc)
         if(skillsCsv){
-          skillsCsv.addEventListener('change', syncSkills);
-          skillsCsv.addEventListener('keyup', syncSkills);
+          skillsCsv.addEventListener('change', syncSubjects);
+          skillsCsv.addEventListener('keyup', syncSubjects);
         }
     </script>
 }

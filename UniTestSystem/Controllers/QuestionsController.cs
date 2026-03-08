@@ -1,6 +1,6 @@
-using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Application;
 using UniTestSystem.Domain;
+using UniTestSystem.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,14 +9,14 @@ namespace UniTestSystem.Controllers;
 [Authorize(Policy = PermissionCodes.Question_View)]
 public class QuestionsController : Controller
 {
-    private readonly Application.IQuestionService _svc;
+    private readonly IQuestionService _svc;
     private readonly IQuestionExcelService _xlsx;
     private readonly IRepository<Question> _qRepo;
     private readonly IWebHostEnvironment _env;
     private readonly IConfiguration _cfg;
 
     public QuestionsController(
-        Application.IQuestionService svc,
+        IQuestionService svc,
         IQuestionExcelService xlsx,
         IRepository<Question> qRepo,
         IWebHostEnvironment env,
@@ -199,6 +199,37 @@ public class QuestionsController : Controller
             return RedirectToAction(nameof(Edit), new { id });
         }
         TempData["Msg"] = "Đã xóa câu hỏi";
+        return RedirectToAction(nameof(Index));
+    }
+
+    // WORKFLOW ACTIONS
+    [HttpPost]
+    [Authorize(Policy = PermissionCodes.Question_Edit)]
+    public async Task<IActionResult> Submit(string id)
+    {
+        var (success, reason) = await _svc.SubmitAsync(id, User.Identity?.Name ?? "hr");
+        if (!success) TempData["Err"] = reason ?? "Gửi duyệt thất bại";
+        else TempData["Msg"] = "Đã gửi duyệt câu hỏi";
+        return RedirectToAction(nameof(Edit), new { id });
+    }
+
+    [HttpPost]
+    [Authorize(Policy = PermissionCodes.Question_Approve)]
+    public async Task<IActionResult> Approve(string id)
+    {
+        var (success, reason) = await _svc.ApproveAsync(id, User.Identity?.Name ?? "hr");
+        if (!success) TempData["Err"] = reason ?? "Phê duyệt thất bại";
+        else TempData["Msg"] = "Đã phê duyệt câu hỏi";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Policy = PermissionCodes.Question_Approve)]
+    public async Task<IActionResult> Reject(string id, string? reason)
+    {
+        var (success, r) = await _svc.RejectAsync(id, User.Identity?.Name ?? "hr", reason);
+        if (!success) TempData["Err"] = r ?? "Từ chối thất bại";
+        else TempData["Msg"] = "Đã từ chối câu hỏi";
         return RedirectToAction(nameof(Index));
     }
 

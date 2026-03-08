@@ -43,7 +43,9 @@ namespace UniTestSystem.Application
 
             var allQs = await _qRepo.GetAllAsync();
             var pool = FilterBySubjects(allQs, subjects);
-            if (!string.Equals(opt.DifficultyPolicy, "Any", StringComparison.OrdinalIgnoreCase))
+            pool = FilterByTags(pool, opt.Tags);
+
+            if (string.Equals(opt.DifficultyPolicy, "ByYear", StringComparison.OrdinalIgnoreCase))
                 pool = FilterByDifficulty(pool, majorityLevel);
 
             var (picked, missing) = PickWithFallback(pool, allQs, subjects, opt);
@@ -96,7 +98,9 @@ namespace UniTestSystem.Application
                     : new HashSet<string>(new[] { u.Major ?? "" }, StringComparer.OrdinalIgnoreCase);
 
                 var basePool = FilterBySubjects(allQuestions, subjectSet.Where(s => !string.IsNullOrWhiteSpace(s)).ToList());
-                if (!string.Equals(opt.DifficultyPolicy, "Any", StringComparison.OrdinalIgnoreCase))
+                basePool = FilterByTags(basePool, opt.Tags);
+
+                if (string.Equals(opt.DifficultyPolicy, "ByYear", StringComparison.OrdinalIgnoreCase))
                     basePool = FilterByDifficulty(basePool, u.AcademicYear ?? "2024");
 
                 var (picked, missing) = PickWithFallback(basePool, allQuestions, subjectSet.ToList(), opt);
@@ -197,6 +201,13 @@ namespace UniTestSystem.Application
             return pool.Where(q => Allowed(q.DifficultyLevelId ?? "Easy", yr)).ToList();
         }
 
+        private static List<Question> FilterByTags(List<Question> pool, List<string>? tags)
+        {
+            if (tags == null || tags.Count == 0) return pool;
+            var set = new HashSet<string>(tags, StringComparer.OrdinalIgnoreCase);
+            return pool.Where(q => q.Tags != null && q.Tags.Any(t => set.Contains(t))).ToList();
+        }
+
         /// <summary>
         /// Pick đủ số câu theo từng loại; nếu thiếu → nới lỏng:
         /// (1) đúng Subject, bỏ phân loại; (2) bỏ luôn Subject. Trả về (picked, missing).
@@ -208,9 +219,7 @@ namespace UniTestSystem.Application
             AutoTestOptions opt)
         {
             var rnd = new Random();
-
-            List<Question> P(IEnumerable<Question> pool, Func<Question, bool> pred, int n)
-                => pool.Where(pred).OrderBy(_ => rnd.Next()).Take(Math.Max(0, n)).ToList();
+            var result = new List<Question>();
 
             int needMCQ = Math.Max(0, opt.McqCount);
             int needTF = Math.Max(0, opt.TfCount);
@@ -219,18 +228,37 @@ namespace UniTestSystem.Application
             int needES = Math.Max(0, opt.EssayCount);
             int needTotal = needMCQ + needTF + needMT + needDD + needES;
 
-            var result = new List<Question>();
-            result.AddRange(P(initialPool, q => q.Type == QType.MCQ, needMCQ));
-            result.AddRange(P(initialPool, q => q.Type == QType.TrueFalse, needTF));
-            result.AddRange(P(initialPool, q => q.Type == QType.Matching, needMT));
-            result.AddRange(P(initialPool, q => q.Type == QType.DragDrop, needDD));
-            result.AddRange(P(initialPool, q => q.Type == QType.Essay, needES));
+            if (string.Equals(opt.DifficultyPolicy, "Matrix", StringComparison.OrdinalIgnoreCase) && opt.DifficultyMatrix?.Any() == true)
+            {
+                // Matrix mode: Pick exactly by difficulty distribution
+                foreach (var dm in opt.DifficultyMatrix)
+                {
+                    var diffPool = initialPool.Where(q => string.Equals(q.DifficultyLevelId, dm.DifficultyLevelId, StringComparison.OrdinalIgnoreCase)).ToList();
+                    var pickedForDiff = diffPool.OrderBy(_ => rnd.Next()).Take(dm.Count).ToList();
+                    result.AddRange(pickedForDiff);
+                }
+                // If total picked is still less than needTotal, we might need to fill up or just accept it.
+                // But usually Matrix mode defines the TOTAL count.
+            }
+            else
+            {
+                // Standard mode: Pick by type
+                List<Question> P(IEnumerable<Question> pool, Func<Question, bool> pred, int n)
+                    => pool.Where(pred).OrderBy(_ => rnd.Next()).Take(Math.Max(0, n)).ToList();
+
+                result.AddRange(P(initialPool, q => q.Type == QType.MCQ, needMCQ));
+                result.AddRange(P(initialPool, q => q.Type == QType.TrueFalse, needTF));
+                result.AddRange(P(initialPool, q => q.Type == QType.Matching, needMT));
+                result.AddRange(P(initialPool, q => q.Type == QType.DragDrop, needDD));
+                result.AddRange(P(initialPool, q => q.Type == QType.Essay, needES));
+            }
+
             result = result.GroupBy(q => q.Id).Select(g => g.First()).ToList();
 
             int missing = needTotal - result.Count;
             if (missing <= 0) return (result, 0);
 
-            // Nới lỏng 1 — giữ Subject, bỏ phân loại
+            // Nới lỏng 1 — giữ Subject, bỏ phân loại/độ khó
             var subjectSet = new HashSet<string>(subjects ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
             var poolBySubjectOnly = allQuestions
                 .Where(q => subjectSet.Contains(q.SubjectId))

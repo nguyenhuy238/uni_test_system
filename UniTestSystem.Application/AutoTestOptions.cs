@@ -16,7 +16,16 @@ namespace UniTestSystem.Application
 
         // Filters
         public List<string>? Subjects { get; set; }
-        public string DifficultyPolicy { get; set; } = "ByYear"; // "ByYear" | "Any"
+        /// <summary>
+        /// Chapter / Lesson / Lesson tags filtering.
+        /// </summary>
+        public List<string>? Tags { get; set; }
+        public string DifficultyPolicy { get; set; } = "ByYear"; // "ByYear" | "Any" | "Matrix"
+
+        /// <summary>
+        /// Ma trận độ khó (chỉ dùng khi DifficultyPolicy = "Matrix").
+        /// </summary>
+        public List<DifficultyCount>? DifficultyMatrix { get; set; }
 
         // Per-type counts
         public int McqCount { get; set; } = 8;
@@ -36,5 +45,11 @@ namespace UniTestSystem.Application
         // Assign window (dùng cho Assign All)
         public DateTime? StartAtUtc { get; set; }
         public DateTime? EndAtUtc { get; set; }
+    }
+
+    public class DifficultyCount
+    {
+        public string DifficultyLevelId { get; set; } = "";
+        public int Count { get; set; }
     }
 }

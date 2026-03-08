@@ -29,8 +29,17 @@
     </div>
     <div class="col"><input name="SubjectId" value="@f.SubjectId" class="form-control" placeholder="Môn học (ID)" /></div>
     <div class="col"><input name="DifficultyLevelId" value="@f.DifficultyLevelId" class="form-control" placeholder="Độ khó (ID)" /></div>
+    <div class="col">
+        <select name="Status" class="form-select">
+            <option value="">--Status--</option>
+            @foreach (var statusName in Enum.GetNames(typeof(QuestionStatus)))
+            {
+                <option value="@statusName" selected="@(Context.Request.Query["Status"] == statusName)">@statusName</option>
+            }
+        </select>
+    </div>
     <div class="col"><input name="TagsCsv" value="@f.TagsCsv" class="form-control" placeholder="Tags" /></div>
-    <div class="col-2"><button class="btn btn-primary w-100">Filter</button></div>
+    <div class="col-1"><button class="btn btn-primary w-100">Filter</button></div>
 </form>
 
 <div class="d-flex gap-2 mb-2">
@@ -45,13 +54,24 @@
 </div>
 
 <table class="table table-striped">
-    <thead><tr><th>Nội dung</th><th>Loại</th><th>Môn học</th><th>Độ khó</th><th>Tags</th><th></th></tr></thead>
+    <thead><tr><th>Nội dung</th><th>Loại</th><th>Trạng thái</th><th>Môn học</th><th>Độ khó</th><th>Tags</th><th></th></tr></thead>
     <tbody>
         @foreach (var q in Model.Items)
         {
             <tr>
                 <td>@q.Content</td>
                 <td>@q.Type</td>
+                <td>
+                    @{
+                        var color = q.Status switch {
+                            QuestionStatus.Approved => "success",
+                            QuestionStatus.Pending => "warning",
+                            QuestionStatus.Rejected => "danger",
+                            _ => "secondary"
+                        };
+                    }
+                    <span class="badge bg-@color">@q.Status</span>
+                </td>
                 <td>@q.SubjectId</td>
                 <td>@q.DifficultyLevelId</td>
                 <td>@string.Join(", ", q.Tags)</td>

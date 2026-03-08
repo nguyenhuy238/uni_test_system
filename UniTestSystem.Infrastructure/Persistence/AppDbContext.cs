@@ -9,9 +9,11 @@ namespace UniTestSystem.Infrastructure.Persistence;
 public class AppDbContext : DbContext
 {
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+    public AppDbContext(DbContextOptions<AppDbContext> options, IHttpContextAccessor httpContextAccessor) : base(options)
     {
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public DbSet<User> Users { get; set; }
@@ -35,6 +37,9 @@ public class AppDbContext : DbContext
     public DbSet<AuditEntry> AuditEntries { get; set; }
     public DbSet<Option> Options { get; set; }
     public DbSet<TestQuestion> TestQuestions { get; set; }
+    public DbSet<UserSession> UserSessions { get; set; }
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
+    public DbSet<TestQuestionSnapshot> TestQuestionSnapshots { get; set; }
 
     // NEW academic entities
     public DbSet<Course> Courses { get; set; }
@@ -196,7 +201,8 @@ public class AppDbContext : DbContext
             entity.HasOne(d => d.Assessment)
                 .WithOne()
                 .HasForeignKey<Test>(d => d.AssessmentId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Cascade)
+                .IsRequired(false);
 
             // Test -> Course
             entity.HasOne(d => d.Course)
@@ -207,6 +213,11 @@ public class AppDbContext : DbContext
             entity.HasQueryFilter(e => !e.IsDeleted);
 
             entity.Property(e => e.TotalMaxScore).HasPrecision(18, 2); // Fix warning 30000
+
+            entity.HasMany(e => e.QuestionSnapshots)
+                .WithOne(s => s.Test)
+                .HasForeignKey(s => s.TestId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Configure TestQuestion many-to-many
@@ -294,6 +305,7 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("Faculty");
             entity.HasIndex(e => e.Name).IsUnique();
+            entity.HasIndex(e => e.Code).IsUnique();
             entity.HasQueryFilter(e => !e.IsDeleted);
         });
         
@@ -492,6 +504,17 @@ public class AppDbContext : DbContext
                 .IsRequired(false); // Fix warning 10622
         });
 
+        // TestQuestionSnapshot
+        modelBuilder.Entity<TestQuestionSnapshot>(entity =>
+        {
+            entity.ToTable("TestQuestionSnapshot");
+            entity.Property(e => e.Points).HasColumnType("decimal(5,2)");
+            entity.HasOne(e => e.Test)
+                .WithMany(t => t.QuestionSnapshots)
+                .HasForeignKey(e => e.TestId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // RBAC
         modelBuilder.Entity<UserRole>(entity =>
         {
@@ -507,6 +530,23 @@ public class AppDbContext : DbContext
             entity.ToTable("RolePermission");
             entity.HasOne(e => e.Permission).WithMany().HasForeignKey(e => e.PermissionId);
         });
+
+        modelBuilder.Entity<UserSession>(entity =>
+        {
+            entity.ToTable("UserSession");
+            entity.HasOne(e => e.User)
+                .WithMany(u => u.UserSessions)
+                .HasForeignKey(e => e.UserId);
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("RefreshToken");
+            entity.HasIndex(e => e.Token).IsUnique();
+            entity.HasOne(e => e.User)
+                .WithMany(u => u.RefreshTokens)
+                .HasForeignKey(e => e.UserId);
+        });
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -516,8 +556,7 @@ public class AppDbContext : DbContext
             .ToList();
 
         // [SECURE AUDIT] Attempt to resolve actor from HttpContext
-        var httpContextAccessor = this.GetService<IHttpContextAccessor>();
-        var actor = httpContextAccessor?.HttpContext?.User?.Identity?.Name ?? "System";
+        var actor = _httpContextAccessor?.HttpContext?.User?.Identity?.Name ?? "System";
 
         foreach (var entry in entries)
         {
@@ -527,7 +566,7 @@ public class AppDbContext : DbContext
                 Actor = actor,
                 Action = entry.State.ToString(),
                 EntityName = entry.Entity.GetType().Name,
-                EntityId = entry.Property("Id").CurrentValue?.ToString() ?? "Unknown",
+                EntityId = entry.Property("Id").CurrentValue?.ToString() ?? "0",
                 Before = entry.State == EntityState.Modified || entry.State == EntityState.Deleted 
                     ? JsonSerializer.Serialize(entry.OriginalValues.ToObject(), JsonOptions) 
                     : null,

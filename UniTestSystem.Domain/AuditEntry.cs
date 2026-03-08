@@ -4,7 +4,7 @@ namespace UniTestSystem.Domain
 {
     public class AuditEntry
     {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public int Id { get; set; }
         public DateTime At { get; set; }
         public string Actor { get; set; } = "";
         public string Action { get; set; } = "";

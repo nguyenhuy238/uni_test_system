@@ -38,6 +38,7 @@ public class AdminFacultiesController : ControllerBase
     {
         faculty.Id = id;
         faculty.UpdatedAt = DateTime.UtcNow;
+        // Ensure name and code uniqueness are handled by DB or repo
         await _repo.UpsertAsync(x => x.Id == id, faculty);
         return NoContent();
     }
@@ -45,7 +46,13 @@ public class AdminFacultiesController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id)
     {
-        await _repo.DeleteAsync(x => x.Id == id);
+        var faculty = await _repo.FirstOrDefaultAsync(x => x.Id == id);
+        if (faculty != null)
+        {
+            faculty.IsDeleted = true;
+            faculty.UpdatedAt = DateTime.UtcNow;
+            await _repo.UpdateAsync(faculty);
+        }
         return NoContent();
     }
 }

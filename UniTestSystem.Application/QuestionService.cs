@@ -52,7 +52,7 @@ public class QuestionService : IQuestionService
         ValidateQuestion(q, isNew: true);
         q.CreatedBy = actor; q.CreatedAt = DateTime.UtcNow;
         await _qRepo.InsertAsync(q);
-        await _audit.LogAsync(actor, "Question.Create", q.Id, before: null, after: q);
+        await _audit.LogAsync(actor, "Question.Create", "Question", q.Id, before: null, after: q);
         return q.Id;
     }
 
@@ -61,15 +61,61 @@ public class QuestionService : IQuestionService
         var tests = await _tRepo.GetAllAsync();
         var usedByPublished = tests.Any(t => t.IsPublished && t.TestQuestions.Any(tq => tq.QuestionId == q.Id));
         if (usedByPublished)
-            return (false, "Question is used in a Published Test. Only cloning or minor edits allowed.");
+        {
+            // NEW: Instead of blocking, we could create a NEW VERSION.
+            // But for now, let's keep it simple: if the user wants to save as new version, we clone.
+            // If they just click save and it's published, we might want to warn or auto-create a draft.
+            return (false, "Question is used in a Published Test. Please use 'Clone' to create a new version.");
+        }
 
         var before = await GetAsync(q.Id);
         if (before == null) return (false, "Not found");
 
         ValidateQuestion(q, isNew: false);
         q.UpdatedBy = actor; q.UpdatedAt = DateTime.UtcNow;
+        
+        // Reset status to Draft if it was Rejected or Approved (needs re-approval after major edit)
+        if (q.Status == QuestionStatus.Approved || q.Status == QuestionStatus.Rejected)
+            q.Status = QuestionStatus.Draft;
+
         await _qRepo.UpsertAsync(x => x.Id == q.Id, q);
-        await _audit.LogAsync(actor, "Question.Update", q.Id, before, q);
+        await _audit.LogAsync(actor, "Question.Update", "Question", q.Id, before, q);
+        return (true, null);
+    }
+
+    public async Task<(bool Success, string? Reason)> SubmitAsync(string id, string actor)
+    {
+        var q = await GetAsync(id);
+        if (q == null) return (false, "Not found");
+        if (q.Status != QuestionStatus.Draft) return (false, "Only Draft can be submitted");
+        
+        q.Status = QuestionStatus.Pending;
+        await _qRepo.UpsertAsync(x => x.Id == id, q);
+        await _audit.LogAsync(actor, "Question.Submit", "Question", id, before: null, after: q);
+        return (true, null);
+    }
+
+    public async Task<(bool Success, string? Reason)> ApproveAsync(string id, string actor)
+    {
+        var q = await GetAsync(id);
+        if (q == null) return (false, "Not found");
+        if (q.Status != QuestionStatus.Pending) return (false, "Only Pending can be approved");
+
+        q.Status = QuestionStatus.Approved;
+        await _qRepo.UpsertAsync(x => x.Id == id, q);
+        await _audit.LogAsync(actor, "Question.Approve", "Question", id, before: null, after: q);
+        return (true, null);
+    }
+
+    public async Task<(bool Success, string? Reason)> RejectAsync(string id, string actor, string? reason)
+    {
+        var q = await GetAsync(id);
+        if (q == null) return (false, "Not found");
+        if (q.Status != QuestionStatus.Pending) return (false, "Only Pending can be rejected");
+
+        q.Status = QuestionStatus.Rejected;
+        await _qRepo.UpsertAsync(x => x.Id == id, q);
+        await _audit.LogAsync(actor, "Question.Reject", "Question", id, before: null, after: q);
         return (true, null);
     }
 
@@ -83,7 +129,7 @@ public class QuestionService : IQuestionService
         if (before == null) return (false, "Not found");
 
         await _qRepo.DeleteAsync(x => x.Id == id);
-        await _audit.LogAsync(actor, "Question.Delete", id, before, after: null);
+        await _audit.LogAsync(actor, "Question.Delete", "Question", id, before, after: null);
         return (true, null);
     }
 
@@ -119,7 +165,7 @@ public class QuestionService : IQuestionService
         };
 
         await _qRepo.InsertAsync(copy);
-        await _audit.LogAsync(actor, "Question.Clone", copy.Id, before: null, after: copy);
+        await _audit.LogAsync(actor, "Question.Clone", "Question", copy.Id, before: null, after: copy);
         return copy.Id;
     }
 

@@ -14,6 +14,7 @@ public class Question
     public virtual Question? ParentQuestion { get; set; }
 
     public QType Type { get; set; } = QType.MCQ;
+    public QuestionStatus Status { get; set; } = QuestionStatus.Draft;
 
     public virtual ICollection<Option> Options { get; set; } = new List<Option>();
 

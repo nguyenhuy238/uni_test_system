@@ -8,22 +8,22 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 namespace UniTestSystem.Controllers
 {
     [Authorize(Policy = PermissionCodes.Org_Manage)]
-    public class StudentsController : Controller
+    public class UsersController : Controller
     {
         private readonly IRepository<User> _userRepo;
         private readonly IRepository<Student> _studentRepo;
         private readonly IRepository<Lecturer> _lecturerRepo;
         private readonly IRepository<StudentClass> _classRepo;
         private readonly IRepository<Faculty> _facultyRepo;
-        private readonly ILogger<StudentsController> _logger;
+        private readonly ILogger<UsersController> _logger;
 
-        public StudentsController(
+        public UsersController(
             IRepository<User> userRepo,
             IRepository<Student> studentRepo,
             IRepository<Lecturer> lecturerRepo,
             IRepository<StudentClass> classRepo,
             IRepository<Faculty> facultyRepo,
-            ILogger<StudentsController> logger)
+            ILogger<UsersController> logger)
         {
             _userRepo = userRepo;
             _studentRepo = studentRepo;

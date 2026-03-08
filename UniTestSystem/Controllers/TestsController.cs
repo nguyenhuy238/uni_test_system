@@ -40,8 +40,18 @@ namespace UniTestSystem.Controllers
         public async Task<IActionResult> Index(string? status = null)
         {
             var list = await _repo.GetAllAsync();
+            
+            // Only show non-archived by default
+            if (status != "Archived")
+            {
+                list = list.Where(t => !t.IsArchived).ToList();
+            }
+            else
+            {
+                list = list.Where(t => t.IsArchived).ToList();
+            }
 
-            if (!string.IsNullOrWhiteSpace(status))
+            if (!string.IsNullOrWhiteSpace(status) && status != "Archived")
             {
                 if (string.Equals(status, "Draft", StringComparison.OrdinalIgnoreCase))
                     list = list.Where(t => !t.IsPublished).ToList();
@@ -92,6 +102,7 @@ namespace UniTestSystem.Controllers
 
             return View(model);
         }
+
 
         // ---------- Create (POST) ----------
         [HttpPost]
@@ -147,6 +158,8 @@ namespace UniTestSystem.Controllers
             t.IsPublished = true;
             t.CreatedAt = DateTime.UtcNow;
             t.PublishedAt = DateTime.UtcNow;
+            t.ShuffleQuestions = true; // Default
+            t.ShuffleOptions = true;   // Default
             t.FrozenRandom = new FrozenRandomConfig
             {
                 SubjectIdFilter = t.SubjectIdFilter,
@@ -156,6 +169,14 @@ namespace UniTestSystem.Controllers
             };
 
             await _repo.InsertAsync(t);
+            
+            // Create snapshots for non-random questions
+            if (t.TestQuestions.Any())
+            {
+                await CreateSnapshotsAsync(t);
+                await _repo.UpsertAsync(x => x.Id == t.Id, t);
+            }
+
             TempData["Msg"] = "Đã tạo và publish bài test.";
             return RedirectToAction(nameof(Index));
         }
@@ -251,6 +272,7 @@ namespace UniTestSystem.Controllers
             t.DurationMinutes = vm.DurationMinutes;
             t.PassScore = vm.PassScore;
             t.ShuffleQuestions = vm.ShuffleQuestions;
+            t.ShuffleOptions = vm.ShuffleOptions;
             t.SubjectIdFilter = vm.SubjectIdFilter;
             t.RandomMCQ = vm.RandomMCQ;
             t.RandomTF = vm.RandomTF;
@@ -308,7 +330,14 @@ namespace UniTestSystem.Controllers
                     RandomTF = t.RandomTF,
                     RandomEssay = t.RandomEssay
                 };
-                TempData["Msg"] = "Đã chuyển sang Published.";
+
+                // Create snapshots on publish
+                if (t.TestQuestions.Any())
+                {
+                    await CreateSnapshotsAsync(t);
+                }
+
+                TempData["Msg"] = "Đã chuyển sang Published và tạo Snapshot câu hỏi.";
             }
             else
             {
@@ -318,6 +347,79 @@ namespace UniTestSystem.Controllers
 
             await _repo.UpsertAsync(x => x.Id == t.Id, t);
             return RedirectToAction(nameof(Index));
+        }
+
+        // ---------- Clone ----------
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Policy = PermissionCodes.Tests_Create)]
+        public async Task<IActionResult> Clone(string id)
+        {
+            var t = await _repo.FirstOrDefaultAsync(x => x.Id == id);
+            if (t == null) return NotFound();
+
+            var clone = new Test
+            {
+                Title = t.Title + " (Clone)",
+                DurationMinutes = t.DurationMinutes,
+                PassScore = t.PassScore,
+                ShuffleQuestions = t.ShuffleQuestions,
+                ShuffleOptions = t.ShuffleOptions,
+                SubjectIdFilter = t.SubjectIdFilter,
+                RandomMCQ = t.RandomMCQ,
+                RandomTF = t.RandomTF,
+                RandomEssay = t.RandomEssay,
+                TotalMaxScore = t.TotalMaxScore,
+                CourseId = t.CourseId,
+                IsPublished = false,
+                CreatedBy = User.Identity?.Name ?? "system",
+                CreatedAt = DateTime.UtcNow,
+                TestQuestions = t.TestQuestions.Select(q => new TestQuestion { QuestionId = q.QuestionId, Points = q.Points }).ToList()
+            };
+
+            await _repo.InsertAsync(clone);
+            TempData["Msg"] = "Đã nhân bản đề thi (Draft).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // ---------- Archive ----------
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Policy = PermissionCodes.Tests_Create)]
+        public async Task<IActionResult> Archive(string id)
+        {
+            var t = await _repo.FirstOrDefaultAsync(x => x.Id == id);
+            if (t == null) return NotFound();
+
+            t.IsArchived = true;
+            await _repo.UpsertAsync(x => x.Id == t.Id, t);
+            TempData["Msg"] = "Đã chuyển đề thi vào mục Lưu trữ (Archive).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        private async Task CreateSnapshotsAsync(Test test)
+        {
+            // Nếu đã có snapshot thì không cần tạo lại (tránh tốn tài nguyên)
+            if (test.QuestionSnapshots != null && test.QuestionSnapshots.Any()) return;
+
+            foreach (var tq in test.TestQuestions)
+            {
+                var q = await _questionService.GetAsync(tq.QuestionId);
+                if (q == null) continue;
+
+                var snapshot = new TestQuestionSnapshot
+                {
+                    TestId = test.Id,
+                    OriginalQuestionId = q.Id,
+                    Content = q.Content,
+                    Type = q.Type,
+                    Points = tq.Points,
+                    Order = tq.Order,
+                    OptionsJson = System.Text.Json.JsonSerializer.Serialize(q.Options.Select(o => new { o.Content, o.IsCorrect })),
+                    CreatedAt = DateTime.UtcNow
+                };
+                test.QuestionSnapshots.Add(snapshot);
+            }
         }
 
         // ---------- Assign nhanh (1 user) ----------

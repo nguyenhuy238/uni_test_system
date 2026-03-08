@@ -14,10 +14,14 @@
         <label class="form-label">Mật khẩu</label>
         <input name="password" type="password" class="form-control" />
     </div>
+    <div class="mb-3 form-check">
+        <input name="rememberMe" type="checkbox" class="form-check-input" id="rememberMe" value="true" />
+        <label class="form-check-label" for="rememberMe">Ghi nhớ đăng nhập</label>
+    </div>
     <button class="btn btn-primary">Login</button>
     <div class="text-danger mt-2">@ViewBag.Error</div>
 </form>
 
 <div class="mt-3">
-    <a href="/auth/forgot">Quên mật khẩu?</a>
+    <a href="/auth/forgot">Quên mật khẩu?</a> | <a href="/auth/register">Đăng ký tài khoản</a>
 </div>

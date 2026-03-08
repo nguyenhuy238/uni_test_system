@@ -185,20 +185,21 @@ Hệ thống được thiết kế theo nguyên lý **Defense in Depth**:
    ```
 3. **Cấu hình**: Chỉnh sửa `appsettings.json` cho Connection String và JWT Secret Key.
 
-### Tài khoản mặc định
-- **Admin**: `admin@local` / `admin123`
-- **Staff**: `staff@local` / `staff123`
-- **Lecturer**: `lecturer@local` / `lecturer123`
-- **Student**: `student@local` / `student123`
+### Tài khoản mặc định (Default Passwords: [email_prefix]123)
+- **Admin (System)**: `admin@local`
+- **Lecturer (Giảng viên)**: `hr@local`
+- **Student (Sinh viên)**: `alice@local`
+- **Staff (Phụ trách học vụ)**: `manager@local`
 
 ---
 
 ## 🗺️ 12. Lộ trình phát triển (Future Roadmap)
 
+- [ ] **Lập lịch thi (Exam Scheduling)**: Hoàn thiện quy trình xếp phòng và ca thi.
+- [ ] **Quy trình Phê duyệt**: Triển khai workflow kiểm duyệt câu hỏi bài bản (Draft -> Approve).
 - [ ] **AI Proctoring**: Sử dụng Webcam và AI để phát hiện gian lận qua hành vi người dùng.
 - [ ] **Mobile App**: Ứng dụng React Native dành cho Sinh viên làm bài và nhận thông báo.
-- [ ] **Multi-Campus Support**: Hỗ trợ phân quyền theo cơ sở (Branch/Campus-level permissions).
-- [ ] **Microservices Evolution**: Tách module "Test Engine" thành một dịch vụ riêng biệt để chịu tải tốt hơn trong thời điểm thi cao điểm.
+- [ ] **WPF AdminApp Integration**: Hoàn thiện các tính năng quản trị nâng cao trên Desktop.
 
 ---
 © 2026 UniTestSystem Team. Kiến tạo tương lai số cho giáo dục.

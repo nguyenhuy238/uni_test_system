@@ -61,11 +61,11 @@
                         <li class="nav-item"><a class="nav-link" asp-controller="Home" asp-action="Index">Home</a></li>
                         <li class="nav-item"><a class="nav-link" asp-controller="Home" asp-action="Privacy">Privacy</a></li>
 
-                        @if (isAuth)
+                        @if (isAuth && role == Role.Student.ToString())
                         {
                             <li class="nav-item"><a class="nav-link" asp-controller="MyTests" asp-action="Index">My Tests</a></li>
-                            
-                            @if (canViewOrg || canViewReports || canEditSettings || canManagePerms)
+                        }
+                            @if (role == "Admin" || role == "Lecturer" || canViewOrg || canViewReports || canEditSettings || canManagePerms)
                             {
                                 <li class="nav-item dropdown">
                                     <a class="nav-link dropdown-toggle" href="#" id="manageMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -76,6 +76,12 @@
                                         {
                                             <li><a class="dropdown-item" asp-controller="Admin" asp-action="Dashboard">Admin Dashboard</a></li>
                                             <li><a class="dropdown-item" asp-controller="Users" asp-action="Index">User Management</a></li>
+                                        }
+                                        @if (role == "Lecturer")
+                                        {
+                                            <li><a class="dropdown-item" asp-controller="Lecturer" asp-action="Dashboard">Lecturer Dashboard</a></li>
+                                            <li><a class="dropdown-item" asp-controller="Questions" asp-action="Index">Question Bank</a></li>
+                                            <li><a class="dropdown-item" asp-controller="Tests" asp-action="Index">Test Management</a></li>
                                         }
                                         @if (canViewOrg)
                                         {

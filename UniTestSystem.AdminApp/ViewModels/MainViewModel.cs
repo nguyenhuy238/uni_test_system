@@ -21,6 +21,8 @@ namespace UniTestSystem.AdminApp.ViewModels
         private string _statusMessage = "Ready";
         private Faculty? _selectedFaculty;
         private StudentClass? _selectedClass;
+        private Course? _selectedCourse;
+        private Enrollment? _selectedEnrollment;
 
         // UI Helpers for nested collections
         private ObservableCollection<OptionWrapper> _selectedQuestionOptions = new();
@@ -41,6 +43,9 @@ namespace UniTestSystem.AdminApp.ViewModels
             Sessions = new ObservableCollection<Session>();
             Faculties = new ObservableCollection<Faculty>();
             Classes = new ObservableCollection<StudentClass>();
+            Courses = new ObservableCollection<Course>();
+            Enrollments = new ObservableCollection<Enrollment>();
+            Lecturers = new ObservableCollection<User>(); // Filtered from Users
 
             LoadDataCommand = new RelayCommand(async () => await LoadDataAsync());
             
@@ -61,6 +66,10 @@ namespace UniTestSystem.AdminApp.ViewModels
             ExportXlsxCommand = new RelayCommand(async () => await ExportAsync("xlsx"));
             ExportPdfCommand = new RelayCommand(async () => await ExportAsync("pdf"));
 
+            SubmitQuestionCommand = new RelayCommand(async () => await SubmitQuestionAsync(), () => SelectedQuestion != null && SelectedQuestion.Status == "Draft");
+            ApproveQuestionCommand = new RelayCommand(async () => await ApproveQuestionAsync(), () => SelectedQuestion != null && SelectedQuestion.Status == "Pending");
+            RejectQuestionCommand = new RelayCommand(async () => await RejectQuestionAsync(), () => SelectedQuestion != null && SelectedQuestion.Status == "Pending");
+
             // Question Option Commands
             AddOptionCommand = new RelayCommand(AddOption);
             RemoveOptionCommand = new RelayCommand(RemoveOption, () => SelectedOption != null);
@@ -78,6 +87,18 @@ namespace UniTestSystem.AdminApp.ViewModels
             SaveClassCommand = new RelayCommand(async () => await SaveClassAsync());
             DeleteClassCommand = new RelayCommand(async () => await DeleteClassAsync());
 
+            AddCourseCommand = new RelayCommand(() => { SelectedCourse = new Course { Name = "New Course" }; });
+            SaveCourseCommand = new RelayCommand(async () => await SaveCourseAsync());
+            DeleteCourseCommand = new RelayCommand(async () => await DeleteCourseAsync());
+
+            EnrollStudentCommand = new RelayCommand(async () => await EnrollStudentAsync());
+            UnenrollStudentCommand = new RelayCommand(async () => await UnenrollStudentAsync());
+
+            ImportStudentsCommand = new RelayCommand(async () => await ImportAsync("students"));
+            ImportCoursesCommand = new RelayCommand(async () => await ImportAsync("courses"));
+
+            SaveSettingsCommand = new RelayCommand(async () => await SaveSettingsAsync());
+
             // Load data automatically on startup
             _ = LoadDataAsync();
         }
@@ -88,6 +109,9 @@ namespace UniTestSystem.AdminApp.ViewModels
         public ObservableCollection<Session> Sessions { get; }
         public ObservableCollection<Faculty> Faculties { get; }
         public ObservableCollection<StudentClass> Classes { get; }
+        public ObservableCollection<Course> Courses { get; }
+        public ObservableCollection<Enrollment> Enrollments { get; }
+        public ObservableCollection<User> Lecturers { get; }
 
         public ObservableCollection<OptionWrapper> SelectedQuestionOptions => _selectedQuestionOptions;
         public ObservableCollection<string> SelectedQuestionCorrectKeys => _selectedQuestionCorrectKeys;
@@ -141,6 +165,23 @@ namespace UniTestSystem.AdminApp.ViewModels
             set { _selectedSession = value; OnPropertyChanged(); }
         }
 
+        public Course? SelectedCourse
+        {
+            get => _selectedCourse;
+            set 
+            { 
+                _selectedCourse = value; 
+                OnPropertyChanged(); 
+                _ = LoadEnrollmentsAsync();
+            }
+        }
+
+        public Enrollment? SelectedEnrollment
+        {
+            get => _selectedEnrollment;
+            set { _selectedEnrollment = value; OnPropertyChanged(); }
+        }
+
         public DashboardStats? Stats
         {
             get => _stats;
@@ -178,6 +219,20 @@ namespace UniTestSystem.AdminApp.ViewModels
         public RelayCommand DeleteSessionCommand { get; }
         public RelayCommand ExportXlsxCommand { get; }
         public RelayCommand ExportPdfCommand { get; }
+        public RelayCommand SubmitQuestionCommand { get; }
+        public RelayCommand ApproveQuestionCommand { get; }
+        public RelayCommand RejectQuestionCommand { get; }
+
+        public RelayCommand AddCourseCommand { get; }
+        public RelayCommand SaveCourseCommand { get; }
+        public RelayCommand DeleteCourseCommand { get; }
+        
+        public RelayCommand EnrollStudentCommand { get; }
+        public RelayCommand UnenrollStudentCommand { get; }
+        public RelayCommand SaveSettingsCommand { get; }
+
+        public RelayCommand ImportStudentsCommand { get; }
+        public RelayCommand ImportCoursesCommand { get; }
 
         public RelayCommand AddOptionCommand { get; }
         public RelayCommand RemoveOptionCommand { get; }
@@ -205,22 +260,40 @@ namespace UniTestSystem.AdminApp.ViewModels
                 var statsTask = _apiService.GetDashboardStatsAsync();
                 var facultiesTask = _apiService.GetFacultiesAsync();
                 var classesTask = _apiService.GetClassesAsync();
+                var coursesTask = _apiService.GetCoursesAsync();
 
-                await Task.WhenAll(testsTask, usersTask, questionsTask, sessionsTask, statsTask, facultiesTask, classesTask);
+                await Task.WhenAll(testsTask, usersTask, questionsTask, sessionsTask, statsTask, facultiesTask, classesTask, coursesTask);
 
-                if (testsTask.Result != null) { Tests.Clear(); foreach (var t in testsTask.Result) Tests.Add(t); }
-                if (usersTask.Result != null) { Users.Clear(); foreach (var u in usersTask.Result) Users.Add(u); }
-                if (questionsTask.Result != null) { Questions.Clear(); foreach (var q in questionsTask.Result) Questions.Add(q); }
-                if (sessionsTask.Result != null) { Sessions.Clear(); foreach (var s in sessionsTask.Result) Sessions.Add(s); }
-                if (facultiesTask.Result != null) { Faculties.Clear(); foreach (var f in facultiesTask.Result) Faculties.Add(f); }
-                if (classesTask.Result != null) { Classes.Clear(); foreach (var c in classesTask.Result) Classes.Add(c); }
-                Stats = statsTask.Result;
+                List<string> failures = new();
+                if (testsTask.Result != null) { Tests.Clear(); foreach (var t in testsTask.Result) Tests.Add(t); } else failures.Add("Tests");
+                if (usersTask.Result != null) { Users.Clear(); foreach (var u in usersTask.Result) Users.Add(u); } else failures.Add("Students");
+                if (questionsTask.Result != null) { Questions.Clear(); foreach (var q in questionsTask.Result) Questions.Add(q); } else failures.Add("Questions");
+                if (sessionsTask.Result != null) { Sessions.Clear(); foreach (var s in sessionsTask.Result) Sessions.Add(s); } else failures.Add("Sessions");
+                if (facultiesTask.Result != null) { Faculties.Clear(); foreach (var f in facultiesTask.Result) Faculties.Add(f); } else failures.Add("Faculties");
+                if (classesTask.Result != null) { Classes.Clear(); foreach (var c in classesTask.Result) Classes.Add(c); } else failures.Add("Classes");
+                if (coursesTask.Result != null) { Courses.Clear(); foreach (var crs in coursesTask.Result) Courses.Add(crs); } else failures.Add("Courses");
+                
+                if (Users.Any())
+                {
+                    Lecturers.Clear();
+                    foreach (var u in Users.Where(u => u.Role == "Lecturer")) Lecturers.Add(u);
+                }
+                
+                if (statsTask.Result != null) Stats = statsTask.Result;
+                else failures.Add("Stats");
 
-                StatusMessage = $"Loaded {Tests.Count} tests, {Users.Count} students, {Questions.Count} questions, {Sessions.Count} sessions, {Faculties.Count} faculties, {Classes.Count} classes.";
+                if (failures.Count > 0)
+                {
+                    StatusMessage = $"Warning: Failed to load {string.Join(", ", failures)}. Other data loaded.";
+                }
+                else
+                {
+                    StatusMessage = $"Loaded {Tests.Count} tests, {Users.Count} students, {Questions.Count} questions, {Sessions.Count} sessions.";
+                }
             }
             catch (Exception ex)
             {
-                StatusMessage = $"Error: {ex.Message}";
+                StatusMessage = $"Critical Error: {ex.Message}";
             }
         }
 
@@ -298,6 +371,45 @@ namespace UniTestSystem.AdminApp.ViewModels
 
                 if (success) { StatusMessage = "Question saved successfully"; await LoadDataAsync(); }
                 else StatusMessage = "Failed to save question";
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task SubmitQuestionAsync()
+        {
+            if (SelectedQuestion == null) return;
+            try
+            {
+                StatusMessage = "Submitting question...";
+                if (await _apiService.SubmitQuestionAsync(SelectedQuestion.Id)) { StatusMessage = "Question submitted"; await LoadDataAsync(); }
+                else StatusMessage = "Failed to submit question";
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task ApproveQuestionAsync()
+        {
+            if (SelectedQuestion == null) return;
+            try
+            {
+                StatusMessage = "Approving question...";
+                if (await _apiService.ApproveQuestionAsync(SelectedQuestion.Id)) { StatusMessage = "Question approved"; await LoadDataAsync(); }
+                else StatusMessage = "Failed to approve question";
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task RejectQuestionAsync()
+        {
+            if (SelectedQuestion == null) return;
+            // Note: In a real WPF app, you'd use a dialog. For simplicity, we'll use a placeholder or try to get input.
+            // Using a simple InputBox if available or just a default string.
+            string reason = "Rejected by Admin"; 
+            try
+            {
+                StatusMessage = "Rejecting question...";
+                if (await _apiService.RejectQuestionAsync(SelectedQuestion.Id, reason)) { StatusMessage = "Question rejected"; await LoadDataAsync(); }
+                else StatusMessage = "Failed to reject question";
             }
             catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
         }
@@ -482,6 +594,106 @@ namespace UniTestSystem.AdminApp.ViewModels
                 else StatusMessage = "Failed to delete class.";
             }
             catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task SaveCourseAsync()
+        {
+            if (SelectedCourse == null) return;
+            try
+            {
+                StatusMessage = "Saving course...";
+                bool success = string.IsNullOrEmpty(SelectedCourse.Id)
+                    ? await _apiService.CreateCourseAsync(SelectedCourse)
+                    : await _apiService.UpdateCourseAsync(SelectedCourse.Id, SelectedCourse);
+                
+                if (success) { StatusMessage = "Course saved."; await LoadDataAsync(); }
+                else StatusMessage = "Failed to save course.";
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task DeleteCourseAsync()
+        {
+            if (SelectedCourse == null || string.IsNullOrEmpty(SelectedCourse.Id)) return;
+            var result = System.Windows.MessageBox.Show($"Are you sure you want to delete course '{SelectedCourse.Name}'?", "Confirm Delete", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning);
+            if (result != System.Windows.MessageBoxResult.Yes) return;
+
+            try
+            {
+                StatusMessage = "Deleting course...";
+                if (await _apiService.DeleteCourseAsync(SelectedCourse.Id)) { StatusMessage = "Course deleted."; await LoadDataAsync(); }
+                else StatusMessage = "Failed to delete course.";
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task LoadEnrollmentsAsync()
+        {
+            if (SelectedCourse == null || string.IsNullOrEmpty(SelectedCourse.Id))
+            {
+                Enrollments.Clear();
+                return;
+            }
+            try
+            {
+                var list = await _apiService.GetEnrollmentsAsync(SelectedCourse.Id);
+                Enrollments.Clear();
+                if (list != null) foreach (var e in list) Enrollments.Add(e);
+            }
+            catch { }
+        }
+
+        private async Task EnrollStudentAsync()
+        {
+            if (SelectedCourse == null) return;
+            StatusMessage = "Use 'Import Students' to enroll many students at once.";
+            await Task.Yield();
+        }
+
+        private async Task UnenrollStudentAsync()
+        {
+            if (SelectedEnrollment == null || SelectedCourse == null) return;
+            try
+            {
+                StatusMessage = "Unenrolling student...";
+                if (await _apiService.UnenrollStudentAsync(SelectedEnrollment.StudentId, SelectedCourse.Id))
+                {
+                    StatusMessage = "Student unenrolled.";
+                    await LoadEnrollmentsAsync();
+                }
+                else StatusMessage = "Failed to unenroll.";
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task ImportAsync(string type)
+        {
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "Excel Files (*.xlsx)|*.xlsx",
+                Title = $"Import {type}"
+            };
+
+            if (openFileDialog.ShowDialog() == true)
+            {
+                try
+                {
+                    StatusMessage = $"Importing {type}...";
+                    bool success = type == "students" 
+                        ? await _apiService.ImportStudentsAsync(openFileDialog.FileName)
+                        : await _apiService.ImportCoursesAsync(openFileDialog.FileName);
+                    
+                    if (success) { StatusMessage = $"Import {type} successful."; await LoadDataAsync(); }
+                    else StatusMessage = $"Import {type} failed.";
+                }
+                catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+            }
+        }
+
+        private async Task SaveSettingsAsync()
+        {
+            StatusMessage = "Settings updated (Mock). Core backend settings updated via AcademicService.";
+            await Task.Yield();
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

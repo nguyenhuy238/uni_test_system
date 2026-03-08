@@ -1,0 +1,141 @@
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Register";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title mb-0">Đăng ký tài khoản</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/auth/register">
+                    <div class="mb-3">
+                        <label class="form-label">Họ và tên</label>
+                        <input id="regName" name="name" class="form-control" required placeholder="Nguyễn Văn A" />
+                        <div id="nameFeedback" class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email trường (@@edu.vn)</label>
+                        <input id="regEmail" name="email" type="email" class="form-control" required placeholder="sv@hcmut.edu.vn" />
+                        <div id="emailFeedback" class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Vai trò</label>
+                        <select id="regRole" name="role" class="form-select">
+                            <option value="Student">Sinh viên</option>
+                            <option value="Lecturer">Giảng viên</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Mật khẩu</label>
+                        <input id="regPassword" name="password" type="password" class="form-control" required placeholder="Tối thiểu 8 ký tự, có chữ hoa/thường/số/đặc biệt" />
+                        <div id="passwordFeedback" class="invalid-feedback"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Xác nhận mật khẩu</label>
+                        <input id="regConfirmPassword" name="confirmPassword" type="password" class="form-control" required />
+                        <div id="confirmFeedback" class="invalid-feedback"></div>
+                    </div>
+                    
+                    @if (ViewBag.Error != null)
+                    {
+                        <div class="alert alert-danger">@ViewBag.Error</div>
+                    }
+
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-lg">Đăng ký</button>
+                        <a href="/auth/login" class="btn btn-link">Đã có tài khoản? Đăng nhập</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.querySelector('form');
+            const btn = form.querySelector('button');
+            const inputs = {
+                name: { el: document.getElementById('regName'), feedback: document.getElementById('nameFeedback'), touched: false },
+                email: { el: document.getElementById('regEmail'), feedback: document.getElementById('emailFeedback'), touched: false },
+                password: { el: document.getElementById('regPassword'), feedback: document.getElementById('passwordFeedback'), touched: false },
+                confirm: { el: document.getElementById('regConfirmPassword'), feedback: document.getElementById('confirmFeedback'), touched: false }
+            };
+
+            function validate() {
+                let isValid = true;
+
+                // Name validation
+                if (inputs.name.el.value.trim().length < 2) {
+                    showError(inputs.name, 'Vui lòng nhập họ tên đầy đủ.');
+                    isValid = false;
+                } else {
+                    showSuccess(inputs.name);
+                }
+
+                // Email validation
+                const emailRegex = /^[^@@\s]+@@[^@@\s]+\.edu\.vn$/i;
+                if (!emailRegex.test(inputs.email.el.value)) {
+                    showError(inputs.email, 'Vui lòng sử dụng email đại học (@@edu.vn).');
+                    isValid = false;
+                } else {
+                    showSuccess(inputs.email);
+                }
+
+                // Password validation
+                const pass = inputs.password.el.value;
+                const passRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{8,}$/;
+                if (!passRegex.test(pass)) {
+                    showError(inputs.password, 'Mật khẩu yếu: Cần 8+ ký tự, chữ hoa, chữ thường, số và ký tự đặc biệt.');
+                    isValid = false;
+                } else {
+                    showSuccess(inputs.password);
+                }
+
+                // Confirm password
+                if (inputs.confirm.el.value !== pass || pass === '') {
+                    showError(inputs.confirm, 'Mật khẩu xác nhận không khớp.');
+                    isValid = false;
+                } else {
+                    showSuccess(inputs.confirm);
+                }
+
+                btn.disabled = !isValid;
+                return isValid;
+            }
+
+            function showError(input, msg) {
+                if (!input.touched) return;
+                input.el.classList.add('is-invalid');
+                input.el.classList.remove('is-valid');
+                input.feedback.textContent = msg;
+            }
+
+            function showSuccess(input) {
+                if (!input.touched) return;
+                input.el.classList.remove('is-invalid');
+                input.el.classList.add('is-valid');
+                input.feedback.textContent = '';
+            }
+
+            // Bind events
+            Object.values(inputs).forEach(obj => {
+                obj.el.addEventListener('input', () => {
+                    obj.touched = true;
+                    validate();
+                });
+                obj.el.addEventListener('blur', () => {
+                    obj.touched = true;
+                    validate();
+                });
+            });
+
+            // Initial state check (button state only)
+            validate();
+        });
+    </script>
+}

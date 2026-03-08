@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace UniTestSystem.Controllers.Api;
 
 [ApiController]
-[Authorize(Policy = "RequireAdmin")]
+[Authorize(Policy = "RequireStaffOrAdmin")]
 [Route("api/admin/users")]
 public class AdminUsersController : ControllerBase
 {

@@ -16,13 +16,20 @@ namespace UniTestSystem.Controllers
         private readonly IRepository<Student> _studentRepo;
         private readonly IRepository<Lecturer> _lecturerRepo;
         private readonly AuthService _authService;
+        private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _env;
 
-        public ProfileController(IRepository<User> userRepo, IRepository<Student> studentRepo, IRepository<Lecturer> lecturerRepo, AuthService authService)
+        public ProfileController(
+            IRepository<User> userRepo, 
+            IRepository<Student> studentRepo, 
+            IRepository<Lecturer> lecturerRepo, 
+            AuthService authService,
+            Microsoft.AspNetCore.Hosting.IWebHostEnvironment env)
         {
             _userRepo = userRepo;
             _studentRepo = studentRepo;
             _lecturerRepo = lecturerRepo;
             _authService = authService;
+            _env = env;
         }
 
         private string? CurrentUserId =>
@@ -42,7 +49,8 @@ namespace UniTestSystem.Controllers
                 Id = u.Id,
                 Name = u.Name,
                 Email = u.Email,
-                RoleName = u.Role.ToString()
+                RoleName = u.Role.ToString(),
+                AvatarUrl = u.AvatarUrl
             };
 
             if (u.Role == Role.Student)
@@ -85,6 +93,19 @@ namespace UniTestSystem.Controllers
             {
                 ModelState.AddModelError(nameof(vm.Email), "Email đã được sử dụng bởi tài khoản khác.");
                 return View(vm);
+            }
+
+            if (vm.AvatarFile != null)
+            {
+                var folder = Path.Combine(_env.WebRootPath, "uploads", "avatars");
+                Directory.CreateDirectory(folder);
+                var fileName = u.Id + Path.GetExtension(vm.AvatarFile.FileName);
+                var path = Path.Combine(folder, fileName);
+                using (var stream = new FileStream(path, FileMode.Create))
+                {
+                    await vm.AvatarFile.CopyToAsync(stream);
+                }
+                u.AvatarUrl = "/uploads/avatars/" + fileName;
             }
 
             if (u.Role == Role.Student)

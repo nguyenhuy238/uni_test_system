@@ -26,6 +26,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // DB
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -80,18 +81,28 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("RequireAdmin", policy => policy.RequireRole(Role.Admin.ToString()));
-    options.AddPolicy("RequireStaff", policy => policy.RequireRole(Role.Staff.ToString()));
-    options.AddPolicy("RequireLecturer", policy => policy.RequireRole(Role.Lecturer.ToString()));
-    options.AddPolicy("RequireStudent", policy => policy.RequireRole(Role.Student.ToString()));
-    options.AddPolicy("RequireStaffOrAdmin", policy => policy.RequireRole(Role.Admin.ToString(), Role.Staff.ToString()));
-    options.AddPolicy("RequireLecturerOrAdmin", policy => policy.RequireRole(Role.Admin.ToString(), Role.Lecturer.ToString()));
-    options.AddPolicy("RequireLecturerOrStaffOrAdmin", policy => policy.RequireRole(Role.Admin.ToString(), Role.Staff.ToString(), Role.Lecturer.ToString()));
+    var bothSchemes = new[] { "cookie", "jwt" };
+    
+    options.DefaultPolicy = new AuthorizationPolicyBuilder(bothSchemes)
+        .RequireAuthenticatedUser()
+        .Build();
+
+    options.AddPolicy("RequireAdmin", policy => policy.AddAuthenticationSchemes(bothSchemes).RequireRole(Role.Admin.ToString()));
+    options.AddPolicy("RequireStaff", policy => policy.AddAuthenticationSchemes(bothSchemes).RequireRole(Role.Staff.ToString()));
+    options.AddPolicy("RequireLecturer", policy => policy.AddAuthenticationSchemes(bothSchemes).RequireRole(Role.Lecturer.ToString()));
+    options.AddPolicy("RequireStudent", policy => policy.AddAuthenticationSchemes(bothSchemes).RequireRole(Role.Student.ToString()));
+    options.AddPolicy("RequireStaffOrAdmin", policy => policy.AddAuthenticationSchemes(bothSchemes).RequireRole(Role.Admin.ToString(), Role.Staff.ToString()));
+    options.AddPolicy("RequireLecturerOrAdmin", policy => policy.AddAuthenticationSchemes(bothSchemes).RequireRole(Role.Admin.ToString(), Role.Lecturer.ToString()));
+    options.AddPolicy("RequireLecturerOrStaffOrAdmin", policy => policy.AddAuthenticationSchemes(bothSchemes).RequireRole(Role.Admin.ToString(), Role.Staff.ToString(), Role.Lecturer.ToString()));
 
     // Dynamic Permission Policies
     foreach (var permission in PermissionCodes.All)
     {
-        options.AddPolicy(permission, policy => policy.Requirements.Add(new PermissionRequirement(permission)));
+        options.AddPolicy(permission, policy => 
+        {
+            policy.AddAuthenticationSchemes(bothSchemes);
+            policy.Requirements.Add(new PermissionRequirement(permission));
+        });
     }
 });
 
@@ -138,6 +149,8 @@ builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IExportService, ExportService>();
 builder.Services.AddScoped<IAuditReaderService, AuditReaderService>();
 builder.Services.AddScoped<ITestGenerationService, TestGenerationService>();
+builder.Services.AddScoped<IAcademicService, AcademicService>();
+builder.Services.AddScoped<IBulkImportService, BulkImportService>();
 
 // Options
 builder.Services.Configure<AppOptions>(builder.Configuration.GetSection("App"));
@@ -178,7 +191,7 @@ app.Use(async (ctx, next) =>
         {
             var entity = ctx.Request.Path.ToString();
             var action = $"{ctx.Request.Method} {entity}";
-            await audit.LogAsync(uid, action, entityId: entity, before: null, after: null);
+            await audit.LogAsync(uid, action, entityName: "(request)", entityId: entity, before: null, after: null);
         }
     }
     catch { /* nuốt lỗi audit */ }

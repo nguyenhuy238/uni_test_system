@@ -12,12 +12,12 @@ namespace UniTestSystem.Controllers.Api.User;
 
 [ApiController]
 [Route("api/user/auth")]
-public class AuthController : ControllerBase
+public class UserAuthController : ControllerBase
 {
     private readonly AuthService _authService;
     private readonly IConfiguration _config;
 
-    public AuthController(AuthService authService, IConfiguration config)
+    public UserAuthController(AuthService authService, IConfiguration config)
     {
         _authService = authService;
         _config = config;

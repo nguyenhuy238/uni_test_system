@@ -10,6 +10,9 @@ namespace UniTestSystem.AdminApp.Models
         [JsonPropertyName("name")]
         public string Name { get; set; } = "";
 
+        [JsonPropertyName("code")]
+        public string Code { get; set; } = "";
+
         [JsonPropertyName("description")]
         public string? Description { get; set; }
     }

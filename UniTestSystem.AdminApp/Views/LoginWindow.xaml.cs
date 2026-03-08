@@ -33,6 +33,11 @@ namespace UniTestSystem.AdminApp.Views
                 
                 if (response != null)
                 {
+                    if (response.message == "Forbidden")
+                    {
+                        MessageBox.Show("Your account does not have permission to access the Admin application.", "Access Denied", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
                     DialogResult = true;
                     Close();
                 }

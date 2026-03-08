@@ -12,12 +12,12 @@ namespace UniTestSystem.Controllers.Api.Admin;
 
 [ApiController]
 [Route("api/admin/auth")]
-public class AuthController : ControllerBase
+public class AdminAuthController : ControllerBase
 {
     private readonly AuthService _authService;
     private readonly IConfiguration _config;
 
-    public AuthController(AuthService authService, IConfiguration config)
+    public AdminAuthController(AuthService authService, IConfiguration config)
     {
         _authService = authService;
         _config = config;
@@ -30,8 +30,8 @@ public class AuthController : ControllerBase
         if (user == null)
             return Unauthorized(new { message = "Invalid email or password" });
 
-        if (user.Role != Role.Admin && user.Role != Role.Lecturer)
-            return Forbid(); // Only Admin and Lecturer can login via this endpoint
+        if (user.Role != Role.Admin && user.Role != Role.Lecturer && user.Role != Role.Staff)
+            return Forbid(); // Only Admin, Lecturer and Staff can login via this endpoint
 
         var token = GenerateJwtToken(user);
         return Ok(new { 

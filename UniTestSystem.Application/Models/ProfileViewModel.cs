@@ -33,6 +33,11 @@ namespace UniTestSystem.Application.Models
 
         // Chỉ hiển thị đọc-only
         public string RoleName { get; set; } = "";
+
+        public string? AvatarUrl { get; set; }
+
+        [Display(Name = "Ảnh đại diện")]
+        public Microsoft.AspNetCore.Http.IFormFile? AvatarFile { get; set; }
     }
 
     public class ChangePasswordViewModel

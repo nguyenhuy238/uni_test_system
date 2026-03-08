@@ -12,6 +12,8 @@ namespace UniTestSystem.Application.Models
         public string Title { get; set; } = "";
         public int DurationMinutes { get; set; } = 10;
         public int PassScore { get; set; } = 3;
+        public bool ShuffleQuestions { get; set; } = true;
+        public bool ShuffleOptions { get; set; } = true;
         public string SubjectIdFilter { get; set; } = "Programming";
         public int RandomMCQ { get; set; } = 2;
         public int RandomTF { get; set; } = 1;

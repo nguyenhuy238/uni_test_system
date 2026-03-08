@@ -25,7 +25,7 @@ namespace UniTestSystem.Infrastructure.Services
 
             var headers = new[]
             {
-                "Content", "Type", "Subject", "DifficultyLevel", "Tags (comma)", "Options (|)", 
+                "Content", "Type", "Status", "Subject", "DifficultyLevel", "Tags (comma)", "Options (|)", 
                 "CorrectKeys (|)", "EssayMinWords", "MatchingPairs (L=R || L=R)", "DragTokens (|)", 
                 "DragSlots (Name=Answer || Name=Answer)", "Media (FileName#Url#Caption || ...)"
             };
@@ -37,8 +37,9 @@ namespace UniTestSystem.Infrastructure.Services
             {
                 ws.Cell(r, 1).Value = q.Content;
                 ws.Cell(r, 2).Value = q.Type.ToString();
-                ws.Cell(r, 3).Value = q.SubjectId;
-                ws.Cell(r, 4).Value = q.DifficultyLevelId;
+                ws.Cell(r, 3).Value = q.Status.ToString();
+                ws.Cell(r, 4).Value = q.SubjectId;
+                ws.Cell(r, 5).Value = q.DifficultyLevelId;
                 ws.Cell(r, 5).Value = string.Join(',', q.Tags ?? new());
                 ws.Cell(r, 6).Value = string.Join('|', q.Options.Select(o => o.Content));
                 ws.Cell(r, 7).Value = string.Join('|', q.Options.Where(o => o.IsCorrect).Select(o => o.Content));
@@ -100,7 +101,7 @@ namespace UniTestSystem.Infrastructure.Services
                 return -1;
             }
 
-            int cContent = GetCol("Content", true), cType = GetCol("Type", true), cSubject = GetCol("Subject", true);
+            int cContent = GetCol("Content", true), cType = GetCol("Type", true), cStatus = GetCol("Status"), cSubject = GetCol("Subject", true);
             int cDifficultyLevel = GetCol("DifficultyLevel"), cTags = GetCol("Tags (comma)"), cOptions = GetCol("Options (|)"), cCorrect = GetCol("CorrectKeys (|)"), cEssayMin = GetCol("EssayMinWords"), cPairs = GetCol("MatchingPairs (L=R || L=R)"), cDragTokens = GetCol("DragTokens (|)"), cDragSlots = GetCol("DragSlots (Name=Answer || Name=Answer)"), cMedia = GetCol("Media (FileName#Url#Caption || ...)");
 
             foreach (var row in range.RowsUsed().Skip(1))
@@ -126,6 +127,7 @@ namespace UniTestSystem.Infrastructure.Services
                     {
                         Content = content,
                         Type = type,
+                        Status = cStatus > 0 && Enum.TryParse<QuestionStatus>(row.Cell(cStatus).GetString(), true, out var st) ? st : QuestionStatus.Draft,
                         SubjectId = subject,
                         DifficultyLevelId = cDifficultyLevel > 0 ? row.Cell(cDifficultyLevel).GetString().Trim() : "Easy",
                         Tags = SplitCsv(cTags > 0 ? row.Cell(cTags).GetString() : "", ','),

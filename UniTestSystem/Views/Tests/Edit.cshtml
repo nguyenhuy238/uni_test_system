@@ -33,6 +33,7 @@
     <input type="hidden" id="q_RandomMCQ" name="RandomMCQ" value="@Model.RandomMCQ" />
     <input type="hidden" id="q_RandomTF" name="RandomTF" value="@Model.RandomTF" />
     <input type="hidden" id="q_RandomEssay" name="RandomEssay" value="@Model.RandomEssay" />
+    <input type="hidden" id="q_ShuffleOptions" name="ShuffleOptions" value="@Model.ShuffleOptions.ToString().ToLower()" />
 
     <button class="btn btn-outline-secondary" type="submit">Apply</button>
 </form>
@@ -63,6 +64,11 @@
             <div class="mb-3">
                 <label class="form-label">Shuffle Questions</label>
                 <input class="form-check-input ms-2" asp-for="ShuffleQuestions" type="checkbox" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Shuffle Options</label>
+                <input class="form-check-input ms-2" asp-for="ShuffleOptions" type="checkbox" />
             </div>
 
             <div class="mb-3">
@@ -243,7 +249,8 @@
             SubjectIdFilter: {src:'input[name="SubjectIdFilter"]',  hid:'#q_SubjectIdFilter'},
             RandomMCQ:       {src:'input[name="RandomMCQ"]',        hid:'#q_RandomMCQ'},
             RandomTF:        {src:'input[name="RandomTF"]',         hid:'#q_RandomTF'},
-            RandomEssay:     {src:'input[name="RandomEssay"]',      hid:'#q_RandomEssay'}
+            RandomEssay:     {src:'input[name="RandomEssay"]',      hid:'#q_RandomEssay'},
+            ShuffleOptions:  {src:'input[name="ShuffleOptions"]',   hid:'#q_ShuffleOptions', isCheckbox:true}
           };
           function syncHidden(){
             Object.values(map).forEach(m=>{

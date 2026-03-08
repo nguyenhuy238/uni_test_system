@@ -10,6 +10,13 @@
 
 <div class="d-flex align-items-center gap-2 mb-3">
     <a class="btn btn-success btn-sm" href="/Tests/Create">Create</a>
+    
+    <div class="btn-group btn-group-sm ms-2">
+        <a href="/Tests" class="btn btn-outline-secondary @(Context.Request.Query["status"].ToString() == "" ? "active" : "")">All</a>
+        <a href="/Tests?status=Draft" class="btn btn-outline-secondary @(Context.Request.Query["status"].ToString() == "Draft" ? "active" : "")">Draft</a>
+        <a href="/Tests?status=Published" class="btn btn-outline-secondary @(Context.Request.Query["status"].ToString() == "Published" ? "active" : "")">Published</a>
+        <a href="/Tests?status=Archived" class="btn btn-outline-secondary @(Context.Request.Query["status"].ToString() == "Archived" ? "active" : "")">Archived</a>
+    </div>
 
     <!-- ===== Bulk toolbar (2 chế độ) =================================== -->
     <!-- 1) Assign tất cả đã chọn CHO MỘT USER (nhập userId) -->
@@ -108,6 +115,12 @@
                     <a class="btn btn-outline-primary btn-sm" href="/Tests/Assign/@t.Id">Assign Users</a>
                     <a class="btn btn-outline-secondary btn-sm" href="/Tests/Edit/@t.Id">Edit</a>
 
+                    <form class="d-inline" method="post" action="/Tests/Clone">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@t.Id" />
+                        <button class="btn btn-outline-info btn-sm">Clone</button>
+                    </form>
+
                     <form class="d-inline" method="post" action="/Tests/ToggleStatus">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="id" value="@t.Id" />
@@ -120,6 +133,15 @@
                             <button class="btn btn-outline-warning btn-sm">Unpublish</button>
                         }
                     </form>
+
+                    @if (!t.IsArchived)
+                    {
+                        <form class="d-inline" method="post" action="/Tests/Archive">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@t.Id" />
+                            <button class="btn btn-outline-dark btn-sm">Archive</button>
+                        </form>
+                    }
 
                     <form class="d-inline" method="post" action="/Tests/Delete" onsubmit="return confirm('Delete this test?');">
                         @Html.AntiForgeryToken()

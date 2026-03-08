@@ -2,6 +2,12 @@
 
 <!-- Hidden ID để POST giữ đúng bản ghi -->
 <input type="hidden" name="Id" value="@Model.Id" />
+<input type="hidden" name="Status" value="@Model.Status" />
+
+<div class="mb-2">
+    <label>Current Status:</label>
+    <strong>@Model.Status</strong>
+</div>
 
 <div class="mb-2">
     <label>Content</label>

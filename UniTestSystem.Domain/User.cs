@@ -9,6 +9,15 @@ namespace UniTestSystem.Domain
         
         public string PasswordHash { get; set; } = "";
         public bool IsActive { get; set; } = true;
+
+        // Security & Lockout
+        public int AccessFailedCount { get; set; }
+        public DateTimeOffset? LockoutEnd { get; set; }
+        public DateTime? LastLoginAt { get; set; }
+
+        // Profile
+        public string? AvatarUrl { get; set; }
+        public DateTime? DateOfBirth { get; set; }
         
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
@@ -17,5 +26,7 @@ namespace UniTestSystem.Domain
         public string? DeletedBy { get; set; }
 
         public virtual ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+        public virtual ICollection<UserSession> UserSessions { get; set; } = new List<UserSession>();
+        public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     }
 }

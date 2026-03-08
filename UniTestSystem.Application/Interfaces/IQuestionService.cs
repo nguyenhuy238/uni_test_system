@@ -32,6 +32,10 @@ namespace UniTestSystem.Application
         Task<(bool Success, string? Reason)> UpdateAsync(Question q, string actor);
         Task<(bool Success, string? Reason)> DeleteAsync(string id, string actor);
         Task<string> CloneAsync(string id, string actor);
+
+        Task<(bool Success, string? Reason)> SubmitAsync(string id, string actor);
+        Task<(bool Success, string? Reason)> ApproveAsync(string id, string actor);
+        Task<(bool Success, string? Reason)> RejectAsync(string id, string actor, string? reason);
     }
 
     

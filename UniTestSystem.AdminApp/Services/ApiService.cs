@@ -1,4 +1,5 @@
 using UniTestSystem.AdminApp.Models;
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -35,16 +36,29 @@ namespace UniTestSystem.AdminApp.Services
 
             var response = await _httpClient.PostAsync($"{_baseUrl}/api/admin/auth/login", content);
             
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                // Access denied for this role
+                return new LoginResponse { message = "Forbidden" };
+            }
+
             if (response.IsSuccessStatusCode)
             {
                 var responseContent = await response.Content.ReadAsStringAsync();
-                var loginResponse = JsonSerializer.Deserialize<LoginResponse>(responseContent);
-                if (loginResponse != null)
+                if (string.IsNullOrWhiteSpace(responseContent) || !responseContent.TrimStart().StartsWith("{"))
+                    return null;
+
+                try
                 {
-                    CurrentUser = loginResponse.user;
-                    SetAuthToken(loginResponse.token);
+                    var loginResponse = JsonSerializer.Deserialize<LoginResponse>(responseContent);
+                    if (loginResponse != null)
+                    {
+                        CurrentUser = loginResponse.user;
+                        SetAuthToken(loginResponse.token);
+                    }
+                    return loginResponse;
                 }
-                return loginResponse;
+                catch { }
             }
             
             return null;
@@ -52,27 +66,37 @@ namespace UniTestSystem.AdminApp.Services
 
         public async Task<List<Test>?> GetTestsAsync()
         {
-            var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/tests");
-            
-            if (response.IsSuccessStatusCode)
+            try
             {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<List<Test>>(responseContent);
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/tests");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    if (string.IsNullOrWhiteSpace(responseContent) || !responseContent.TrimStart().StartsWith("["))
+                        return null;
+                    return JsonSerializer.Deserialize<List<Test>>(responseContent);
+                }
             }
-            
+            catch { }
             return null;
         }
 
         public async Task<Test?> GetTestAsync(string id)
         {
-            var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/tests/{id}");
-            
-            if (response.IsSuccessStatusCode)
+            try
             {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<Test>(responseContent);
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/tests/{id}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    if (string.IsNullOrWhiteSpace(responseContent) || !responseContent.TrimStart().StartsWith("{"))
+                        return null;
+                    return JsonSerializer.Deserialize<Test>(responseContent);
+                }
             }
-            
+            catch { }
             return null;
         }
 
@@ -102,14 +126,18 @@ namespace UniTestSystem.AdminApp.Services
 
         public async Task<List<User>?> GetUsersAsync()
         {
-            var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/users");
-            
-            if (response.IsSuccessStatusCode)
+            try
             {
-                var responseContent = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<List<User>>(responseContent);
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/users");
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    if (string.IsNullOrWhiteSpace(responseContent) || !responseContent.TrimStart().StartsWith("["))
+                        return null;
+                    return JsonSerializer.Deserialize<List<User>>(responseContent);
+                }
             }
-            
+            catch { }
             return null;
         }
 
@@ -165,30 +193,51 @@ namespace UniTestSystem.AdminApp.Services
 
         public async Task<List<Faculty>?> GetFacultiesAsync()
         {
-            var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/faculties");
-            if (response.IsSuccessStatusCode)
+            try
             {
-                var content = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<List<Faculty>>(content);
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/faculties");
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    if (string.IsNullOrWhiteSpace(content) || !content.TrimStart().StartsWith("["))
+                        return null;
+                    return JsonSerializer.Deserialize<List<Faculty>>(content);
+                }
             }
+            catch { }
             return null;
         }
 
         public async Task<List<StudentClass>?> GetClassesAsync()
         {
-            var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/classes");
-            if (response.IsSuccessStatusCode)
+            try
             {
-                var content = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<List<StudentClass>>(content);
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/classes");
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    if (string.IsNullOrWhiteSpace(content) || !content.TrimStart().StartsWith("["))
+                        return null;
+                    return JsonSerializer.Deserialize<List<StudentClass>>(content);
+                }
             }
+            catch { }
             return null;
         }
 
         public async Task<Faculty?> CreateFacultyAsync(Faculty faculty)
         {
-            var response = await _httpClient.PostAsync($"{_baseUrl}/api/admin/faculties", new StringContent(JsonSerializer.Serialize(faculty), Encoding.UTF8, "application/json"));
-            if (response.IsSuccessStatusCode) return JsonSerializer.Deserialize<Faculty>(await response.Content.ReadAsStringAsync());
+            try
+            {
+                var response = await _httpClient.PostAsync($"{_baseUrl}/api/admin/faculties", new StringContent(JsonSerializer.Serialize(faculty), Encoding.UTF8, "application/json"));
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    if (!string.IsNullOrWhiteSpace(content) && content.TrimStart().StartsWith("{"))
+                        return JsonSerializer.Deserialize<Faculty>(content);
+                }
+            }
+            catch { }
             return null;
         }
 
@@ -206,8 +255,17 @@ namespace UniTestSystem.AdminApp.Services
 
         public async Task<StudentClass?> CreateClassAsync(StudentClass model)
         {
-            var response = await _httpClient.PostAsync($"{_baseUrl}/api/admin/classes", new StringContent(JsonSerializer.Serialize(model), Encoding.UTF8, "application/json"));
-            if (response.IsSuccessStatusCode) return JsonSerializer.Deserialize<StudentClass>(await response.Content.ReadAsStringAsync());
+            try
+            {
+                var response = await _httpClient.PostAsync($"{_baseUrl}/api/admin/classes", new StringContent(JsonSerializer.Serialize(model), Encoding.UTF8, "application/json"));
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    if (!string.IsNullOrWhiteSpace(content) && content.TrimStart().StartsWith("{"))
+                        return JsonSerializer.Deserialize<StudentClass>(content);
+                }
+            }
+            catch { }
             return null;
         }
 
@@ -223,16 +281,124 @@ namespace UniTestSystem.AdminApp.Services
             return response.IsSuccessStatusCode;
         }
 
+        // --- Courses ---
+
+        public async Task<List<Course>?> GetCoursesAsync()
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/courses");
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    if (string.IsNullOrWhiteSpace(content) || !content.TrimStart().StartsWith("["))
+                        return null;
+                    return JsonSerializer.Deserialize<List<Course>>(content);
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        public async Task<bool> CreateCourseAsync(Course course)
+        {
+            var json = JsonSerializer.Serialize(course);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/admin/courses", content);
+            return response.IsSuccessStatusCode;
+        }
+
+        public async Task<bool> UpdateCourseAsync(string id, Course course)
+        {
+            var json = JsonSerializer.Serialize(course);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PutAsync($"{_baseUrl}/api/admin/courses/{id}", content);
+            return response.IsSuccessStatusCode;
+        }
+
+        public async Task<bool> DeleteCourseAsync(string id)
+        {
+            var response = await _httpClient.DeleteAsync($"{_baseUrl}/api/admin/courses/{id}");
+            return response.IsSuccessStatusCode;
+        }
+
+        // --- Enrollments ---
+
+        public async Task<List<Enrollment>?> GetEnrollmentsAsync(string courseId)
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/enrollments/{courseId}");
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    if (string.IsNullOrWhiteSpace(content) || !content.TrimStart().StartsWith("["))
+                        return null;
+                    return JsonSerializer.Deserialize<List<Enrollment>>(content);
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        public async Task<bool> EnrollStudentAsync(string studentId, string courseId, string semester)
+        {
+            var request = new { studentId, courseId, semester };
+            var json = JsonSerializer.Serialize(request);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/admin/enrollments", content);
+            return response.IsSuccessStatusCode;
+        }
+
+        public async Task<bool> UnenrollStudentAsync(string studentId, string courseId)
+        {
+            var response = await _httpClient.DeleteAsync($"{_baseUrl}/api/admin/enrollments/{studentId}/{courseId}");
+            return response.IsSuccessStatusCode;
+        }
+
+        // --- Import ---
+
+        public async Task<bool> ImportStudentsAsync(string filePath, string? classId = null)
+        {
+            using var form = new MultipartFormDataContent();
+            using var fileContent = new ByteArrayContent(await File.ReadAllBytesAsync(filePath));
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            form.Add(fileContent, "file", Path.GetFileName(filePath));
+
+            var url = $"{_baseUrl}/api/admin/import/students";
+            if (!string.IsNullOrEmpty(classId)) url += $"?classId={classId}";
+
+            var response = await _httpClient.PostAsync(url, form);
+            return response.IsSuccessStatusCode;
+        }
+
+        public async Task<bool> ImportCoursesAsync(string filePath)
+        {
+            using var form = new MultipartFormDataContent();
+            using var fileContent = new ByteArrayContent(await File.ReadAllBytesAsync(filePath));
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            form.Add(fileContent, "file", Path.GetFileName(filePath));
+
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/admin/import/courses", form);
+            return response.IsSuccessStatusCode;
+        }
+
         // --- Question Bank ---
 
         public async Task<List<Question>?> GetQuestionsAsync()
         {
-            var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/questions");
-            if (response.IsSuccessStatusCode)
+            try
             {
-                var content = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<List<Question>>(content);
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/questions");
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    if (string.IsNullOrWhiteSpace(content) || !content.TrimStart().StartsWith("["))
+                        return null;
+                    return JsonSerializer.Deserialize<List<Question>>(content);
+                }
             }
+            catch { }
             return null;
         }
 
@@ -258,16 +424,41 @@ namespace UniTestSystem.AdminApp.Services
             return response.IsSuccessStatusCode;
         }
 
+        public async Task<bool> SubmitQuestionAsync(string id)
+        {
+            // Note: Controller action is [HttpPost] Questions/Submit/{id}
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/admin/questions/submit/{id}", null);
+            return response.IsSuccessStatusCode;
+        }
+
+        public async Task<bool> ApproveQuestionAsync(string id)
+        {
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/admin/questions/approve/{id}", null);
+            return response.IsSuccessStatusCode;
+        }
+
+        public async Task<bool> RejectQuestionAsync(string id, string reason)
+        {
+            var response = await _httpClient.PostAsync($"{_baseUrl}/api/admin/questions/reject/{id}?reason={Uri.EscapeDataString(reason)}", null);
+            return response.IsSuccessStatusCode;
+        }
+
         // --- Sessions ---
 
         public async Task<List<Session>?> GetSessionsAsync()
         {
-            var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/sessions");
-            if (response.IsSuccessStatusCode)
+            try
             {
-                var content = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<List<Session>>(content);
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/sessions");
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    if (string.IsNullOrWhiteSpace(content) || !content.TrimStart().StartsWith("["))
+                        return null;
+                    return JsonSerializer.Deserialize<List<Session>>(content);
+                }
             }
+            catch { }
             return null;
         }
 
@@ -281,12 +472,18 @@ namespace UniTestSystem.AdminApp.Services
 
         public async Task<DashboardStats?> GetDashboardStatsAsync()
         {
-            var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/dashboard/summary");
-            if (response.IsSuccessStatusCode)
+            try
             {
-                var content = await response.Content.ReadAsStringAsync();
-                return JsonSerializer.Deserialize<DashboardStats>(content);
+                var response = await _httpClient.GetAsync($"{_baseUrl}/api/admin/dashboard/summary");
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    if (string.IsNullOrWhiteSpace(content) || !content.TrimStart().StartsWith("{"))
+                        return null;
+                    return JsonSerializer.Deserialize<DashboardStats>(content);
+                }
             }
+            catch { }
             return null;
         }
 
@@ -319,5 +516,6 @@ namespace UniTestSystem.AdminApp.Services
     {
         public string token { get; set; } = "";
         public User user { get; set; } = new User();
+        public string? message { get; set; }
     }
 }
