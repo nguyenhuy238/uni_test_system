@@ -1,0 +1,86 @@
+@model UniTestSystem.Application.Models.Users.UserFormViewModel
+@using UniTestSystem.Domain
+@{
+    ViewData["Title"] = "Create User";
+}
+
+<h2>Create User</h2>
+
+<form asp-action="Create" method="post" class="card card-body shadow-sm">
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label asp-for="Name" class="form-label"></label>
+            <input asp-for="Name" class="form-control" />
+            <span asp-validation-for="Name" class="text-danger"></span>
+        </div>
+        <div class="col-md-6 mb-3">
+            <label asp-for="Email" class="form-label"></label>
+            <input asp-for="Email" class="form-control" />
+            <span asp-validation-for="Email" class="text-danger"></span>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4 mb-3">
+            <label asp-for="Role" class="form-label"></label>
+            <select asp-for="Role" asp-items="Html.GetEnumSelectList<Role>()" class="form-select"></select>
+            <span asp-validation-for="Role" class="text-danger"></span>
+        </div>
+        <div class="col-md-4 mb-3">
+            <label asp-for="AcademicYear" class="form-label"></label>
+            <select asp-for="AcademicYear" asp-items="ViewBag.YearItems" class="form-select"></select>
+            <span asp-validation-for="AcademicYear" class="text-danger"></span>
+        </div>
+        <div class="col-md-4 mb-3">
+            <label asp-for="Major" class="form-label"></label>
+            <input asp-for="Major" class="form-control" placeholder="Computer Science, etc." />
+            <span asp-validation-for="Major" class="text-danger"></span>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4 mb-3">
+            <label asp-for="StudentClassId" class="form-label">Class</label>
+            <select asp-for="StudentClassId" asp-items="ViewBag.ClassItems" class="form-select">
+                <option value="">-- None --</option>
+            </select>
+            <span asp-validation-for="StudentClassId" class="text-danger"></span>
+        </div>
+        <div class="col-md-4 mb-3">
+            <label asp-for="FacultyName" class="form-label">Faculty</label>
+            <input asp-for="FacultyName" class="form-control" list="facultyList" />
+            <datalist id="facultyList">
+                @if (ViewBag.FacultyItems != null)
+                {
+                    @foreach (var item in (SelectList)ViewBag.FacultyItems)
+                    {
+                        <option value="@item.Text">@item.Text</option>
+                    }
+                }
+            </datalist>
+            <span asp-validation-for="FacultyName" class="text-danger"></span>
+        </div>
+        <div class="col-md-4 mb-3">
+            <label asp-for="StudentCode" class="form-label"></label>
+            <input asp-for="StudentCode" class="form-control" />
+            <span asp-validation-for="StudentCode" class="text-danger"></span>
+        </div>
+    </div>
+
+    <div class="mb-3">
+        <label asp-for="Password" class="form-label"></label>
+        <input asp-for="Password" class="form-control" />
+        <span asp-validation-for="Password" class="text-danger"></span>
+    </div>
+
+    @Html.AntiForgeryToken()
+
+    <div class="d-flex gap-2">
+        <button class="btn btn-primary">Create User</button>
+        <a asp-action="Index" class="btn btn-secondary">Back</a>
+    </div>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

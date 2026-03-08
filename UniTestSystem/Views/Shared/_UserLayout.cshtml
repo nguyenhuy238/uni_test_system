@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - UniTestSystem</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <style>
+        .navbar-brand { font-weight: bold; }
+        .user-info { display: flex; align-items: center; gap: 10px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="/User/Dashboard">
+                <i class="bi bi-mortarboard-fill"></i> UniTestSystem
+            </a>
+            
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/User/Dashboard">
+                            <i class="bi bi-house"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/User/Tests">
+                            <i class="bi bi-pencil-square"></i> My Tests
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/User/Results">
+                            <i class="bi bi-journal-check"></i> Results
+                        </a>
+                    </li>
+                </ul>
+                
+                <div class="user-info">
+                    <span id="userName" class="text-white small me-2">Loading...</span>
+                    <a href="/profile" class="btn btn-outline-light btn-sm rounded-pill"><i class="bi bi-person-circle"></i> Profile</a>
+                    <button class="btn btn-light btn-sm rounded-pill text-primary fw-bold" onclick="logout()">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4 mb-5">
+        @RenderBody()
+    </div>
+
+    <footer class="bg-light text-center py-4 mt-auto border-top">
+        <div class="container">
+            <p class="mb-0 text-muted">&copy; @DateTime.Now.Year UniTestSystem - Hệ thống thi & khảo sát sinh viên.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <script>
+        $(document).ready(function() {
+            const userJson = localStorage.getItem('user');
+            if (userJson) {
+                try {
+                    const user = JSON.parse(userJson);
+                    if (user.name) $('#userName').text(user.name);
+                } catch(e) {}
+            }
+            
+            const token = localStorage.getItem('jwtToken');
+            if (!token && !window.location.pathname.includes('/User/Login') && !window.location.pathname.includes('/User/Register')) {
+                // window.location.href = '/User/Login'; 
+            }
+        });
+
+        function logout() {
+            localStorage.removeItem('jwtToken');
+            localStorage.removeItem('user');
+            // If using cookie auth for some pages, we might need a post to /auth/logout
+            const f = document.createElement('form');
+            f.method = 'POST';
+            f.action = '/auth/logout';
+            document.body.appendChild(f);
+            f.submit();
+        }
+
+        $(document).ajaxError(function(event, xAdmin, settings, error) {
+            if (xAdmin.status === 401) {
+                localStorage.removeItem('jwtToken');
+                localStorage.removeItem('user');
+                window.location.href = '/User/Login';
+            }
+        });
+    </script>
+    
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

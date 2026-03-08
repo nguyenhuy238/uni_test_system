@@ -1,0 +1,82 @@
+@using UniTestSystem.Application.Models
+@model (FacultyReportVm facultyVm, AcademicYearReportVm yearVm)
+@{
+    ViewData["Title"] = "Academic Reports";
+    var from = (string)ViewBag.From;
+    var to = (string)ViewBag.To;
+    bool canExport = (bool)(ViewBag.CanExport ?? false);
+}
+<h2 class="mb-3">Academic Reports</h2>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-auto">
+        <label class="form-label">From</label>
+        <input type="date" name="from" class="form-control" value="@from" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label">To</label>
+        <input type="date" name="to" class="form-control" value="@to" />
+    </div>
+    <div class="col-auto align-self-end">
+        <button class="btn btn-primary">Apply</button>
+        @if (canExport)
+        {
+            <a class="btn btn-outline-success" href="/reports/export/xlsx?from=@from&to=@to">Export Excel</a>
+            <a class="btn btn-outline-danger" href="/reports/export/pdf?from=@from&to=@to">Export PDF</a>
+        }
+    </div>
+</form>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header fw-bold">Overview by Faculty</div>
+            <div class="card-body table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr><th>Faculty</th><th>#Students</th><th>#Submits</th><th>Avg</th><th>Pass%</th><th>Last</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in Model.facultyVm.Rows)
+                        {
+                            <tr>
+                                <td>@r.FacultyName</td>
+                                <td>@r.StudentCount</td>
+                                <td>@r.SubmissionCount</td>
+                                <td>@r.AvgScore</td>
+                                <td>@r.PassRatePercent</td>
+                                <td>@(r.LastSubmissionAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header fw-bold">Overview by Academic Year</div>
+            <div class="card-body table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr><th>Year</th><th>#Students</th><th>#Submits</th><th>Avg</th><th>Pass%</th><th>Last</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in Model.yearVm.Rows)
+                        {
+                            <tr>
+                                <td>@r.AcademicYear</td>
+                                <td>@r.StudentCount</td>
+                                <td>@r.SubmissionCount</td>
+                                <td>@r.AvgScore</td>
+                                <td>@r.PassRatePercent</td>
+                                <td>@(r.LastSubmissionAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

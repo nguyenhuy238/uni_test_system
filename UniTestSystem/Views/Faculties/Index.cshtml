@@ -1,0 +1,38 @@
+@model List<UniTestSystem.Domain.Faculty>
+@{
+    ViewData["Title"] = "Faculties";
+    var counts = (Dictionary<string, int>)(ViewBag.ClassCounts ?? new Dictionary<string, int>());
+}
+<h2 class="mb-3">Faculties</h2>
+
+<p>
+    <a class="btn btn-primary" href="/faculties/create">Create Faculty</a>
+</p>
+
+<div class="card shadow-sm">
+    <div class="card-body table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr><th>Name</th><th>Description</th><th class="text-center">#Classes</th><th style="width:160px"></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var d in Model)
+                {
+                    var count = counts.TryGetValue(d.Id, out var c) ? c : 0;
+                    <tr>
+                        <td class="fw-semibold">@d.Name</td>
+                        <td>@d.Description</td>
+                        <td class="text-center">@count</td>
+                        <td>
+                            <a class="btn btn-sm btn-outline-secondary" href="/faculties/edit/@d.Id">Edit</a>
+                            <form method="post" action="/faculties/delete/@d.Id" class="d-inline" onsubmit="return confirm('Xóa khoa này?');">
+                                @Html.AntiForgeryToken()
+                                <button class="btn btn-sm btn-outline-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

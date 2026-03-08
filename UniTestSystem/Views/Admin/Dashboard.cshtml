@@ -1,0 +1,161 @@
+@using System.Security.Claims
+@using UniTestSystem.Domain
+@using UniTestSystem.Application
+@inject UniTestSystem.Application.IPermissionService PermissionService
+
+@{
+    ViewData["Title"] = "Admin Dashboard";
+    var name = User?.Identity?.Name ?? "Admin";
+    var role = User?.FindFirst(ClaimTypes.Role)?.Value ?? "Admin";
+
+    // Cho phép Admin nhìn thấy luôn; các role khác thì theo permission
+    var isAdmin = string.Equals(role, "Admin", System.StringComparison.OrdinalIgnoreCase);
+    bool hasOrgPerm = isAdmin || (
+        PermissionService.HasAsync(User!, PermissionCodes.Org_View).GetAwaiter().GetResult() ||
+        PermissionService.HasAsync(User!, PermissionCodes.Org_Manage).GetAwaiter().GetResult()
+    );
+    bool canViewReports = isAdmin || PermissionService.HasAsync(User!, PermissionCodes.Reports_View).GetAwaiter().GetResult();
+    bool canManagePerms = isAdmin || PermissionService.HasAsync(User!, PermissionCodes.Roles_Assign).GetAwaiter().GetResult();
+    bool canEditSettings = isAdmin || PermissionService.HasAsync(User!, PermissionCodes.Settings_Edit).GetAwaiter().GetResult();
+    bool canViewAudit = isAdmin || PermissionService.HasAsync(User!, PermissionCodes.Audit_View).GetAwaiter().GetResult();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1">Welcome @name!</h2>
+        <p class="text-muted">UniTestSystem Administration Dashboard</p>
+    </div>
+    <div class="text-end">
+        <span class="badge bg-primary">@role</span>
+    </div>
+</div>
+
+<div class="row g-4">
+    @if (hasOrgPerm)
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="bg-primary bg-opacity-10 p-2 rounded me-3">
+                            <i class="bi bi-diagram-3 text-primary fs-4"></i>
+                        </div>
+                        <h5 class="card-title mb-0">Academic Structure</h5>
+                    </div>
+                    <p class="card-text text-muted small mb-4">Quản lý cơ cấu tổ chức: danh mục khoa và các lớp sinh viên.</p>
+                    <div class="d-flex gap-2">
+                        <a class="btn btn-sm btn-primary" href="/faculties">Faculties</a>
+                        <a class="btn btn-sm btn-outline-primary" href="/classes">Classes</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="col-md-6 col-lg-4">
+        <div class="card h-100 shadow-sm border-0">
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="bg-success bg-opacity-10 p-2 rounded me-3">
+                        <i class="bi bi-people text-success fs-4"></i>
+                    </div>
+                    <h5 class="card-title mb-0">Users</h5>
+                </div>
+                <p class="card-text text-muted small mb-4">Quản lý hồ sơ sinh viên, giảng viên và quản trị viên hệ thống.</p>
+                <a class="btn btn-sm btn-success" href="/users">Manage Users</a>
+            </div>
+        </div>
+    </div>
+
+    @if (canViewReports)
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="bg-info bg-opacity-10 p-2 rounded me-3">
+                            <i class="bi bi-graph-up-arrow text-info fs-4"></i>
+                        </div>
+                        <h5 class="card-title mb-0">Reports</h5>
+                    </div>
+                    <p class="card-text text-muted small mb-4">Thống kê theo khoa/năm học, năng lực theo môn học, xuất Excel/PDF.</p>
+                    <a class="btn btn-sm btn-info text-white" href="/reports">Academic Reports</a>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (canManagePerms)
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="bg-warning bg-opacity-10 p-2 rounded me-3">
+                            <i class="bi bi-shield-lock text-warning fs-4"></i>
+                        </div>
+                        <h5 class="card-title mb-0">Permissions</h5>
+                    </div>
+                    <p class="card-text text-muted small mb-4">Phân quyền chi tiết cho từng vai trò (Lecturer, Student, Admin).</p>
+                    <a class="btn btn-sm btn-warning text-white" href="/roles">Manage Roles</a>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (canEditSettings)
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="bg-dark bg-opacity-10 p-2 rounded me-3">
+                            <i class="bi bi-gear text-dark fs-4"></i>
+                        </div>
+                        <h5 class="card-title mb-0">System Settings</h5>
+                    </div>
+                    <p class="card-text text-muted small mb-4">Cấu hình logo, tên hệ thống, thông tin liên hệ và các tùy chọn khác.</p>
+                    <a class="btn btn-sm btn-dark" href="/settings">Configure System</a>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (canViewAudit)
+    {
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="bg-secondary bg-opacity-10 p-2 rounded me-3">
+                            <i class="bi bi-journal-text text-secondary fs-4"></i>
+                        </div>
+                        <h5 class="card-title mb-0">Audit Logs</h5>
+                    </div>
+                    <p class="card-text text-muted small mb-4">Xem lịch sử hoạt động và truy vết các thay đổi trong hệ thống.</p>
+                    <a class="btn btn-sm btn-secondary" href="/audit">View Logs</a>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="col-12 mt-4">
+        <div class="card border-danger border-opacity-25 shadow-sm bg-danger bg-opacity-10">
+            <div class="card-body">
+                <h5 class="card-title text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>System Maintenance</h5>
+                <p class="card-text text-dark">
+                    Thao tác này sẽ <strong>XÓA TOÀN BỘ dữ liệu hiện tại</strong> trong thư mục <code>App_Data</code>
+                    và <strong>tạo mới dữ liệu mẫu</strong> (Khoa CNTT, Lớp K65-CNTT, Giảng viên & Sinh viên mẫu).
+                </p>
+
+                <form asp-action="ResetData" asp-controller="Admin" method="post" class="d-inline"
+                      onsubmit="return confirm('Bạn có chắc chắn muốn RESET TOÀN BỘ dữ liệu về mặc định?');">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-danger">
+                        Reset System Data
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

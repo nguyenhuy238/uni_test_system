@@ -1,0 +1,17 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  UniTestSystem.Domain -> C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem.Domain\bin\Debug\net8.0\UniTestSystem.Domain.dll
+  UniTestSystem.AdminApp -> c:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem.AdminApp\bin\Debug\net8.0-windows\UniTestSystem.AdminApp.dll
+  UniTestSystem.Application -> C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem.Application\bin\Debug\net8.0\UniTestSystem.Application.dll
+  UniTestSystem.Infrastructure -> c:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem.Infrastructure\bin\Debug\net8.0\UniTestSystem.Infrastructure.dll
+c:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Controllers\RolesController.cs(13,26): error CS0246: The type or namespace name 'IPermissionService' could not be found (are you missing a using directive or an assembly reference?) [c:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+c:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Controllers\RolesController.cs(16,32): error CS0246: The type or namespace name 'IPermissionService' could not be found (are you missing a using directive or an assembly reference?) [c:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+
+Build FAILED.
+
+c:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Controllers\RolesController.cs(13,26): error CS0246: The type or namespace name 'IPermissionService' could not be found (are you missing a using directive or an assembly reference?) [c:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+c:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Controllers\RolesController.cs(16,32): error CS0246: The type or namespace name 'IPermissionService' could not be found (are you missing a using directive or an assembly reference?) [c:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+    0 Warning(s)
+    2 Error(s)
+
+Time Elapsed 00:00:02.41

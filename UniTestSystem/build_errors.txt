@@ -1,0 +1,25 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Application\AuditReaderService.cs(44,26): error CS0029: Cannot implicitly convert type 'string' to 'int' [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Controllers\TestsController.cs(411,35): warning CS8619: Nullability of reference types in value of type 'HashSet<string?>' doesn't match target type 'HashSet<string>'. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Controllers\TestsController.cs(455,37): warning CS8625: Cannot convert null literal to non-nullable reference type. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Views\Sessions\Result.cshtml(40,135): warning CS8619: Nullability of reference types in value of type 'List<Question>' doesn't match target type 'List<Question?>'. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Views\Sessions\Result.cshtml(45,36): warning CS8602: Dereference of a possibly null reference. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Views\Sessions\Runner.cshtml(13,127): warning CS8619: Nullability of reference types in value of type 'List<Question>' doesn't match target type 'List<Question?>'. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Views\Sessions\Runner.cshtml(346,75): warning CS8602: Dereference of a possibly null reference. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Views\Sessions\Runner.cshtml(356,36): warning CS8602: Dereference of a possibly null reference. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+
+Build FAILED.
+
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Controllers\TestsController.cs(411,35): warning CS8619: Nullability of reference types in value of type 'HashSet<string?>' doesn't match target type 'HashSet<string>'. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Controllers\TestsController.cs(455,37): warning CS8625: Cannot convert null literal to non-nullable reference type. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Views\Sessions\Result.cshtml(40,135): warning CS8619: Nullability of reference types in value of type 'List<Question>' doesn't match target type 'List<Question?>'. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Views\Sessions\Result.cshtml(45,36): warning CS8602: Dereference of a possibly null reference. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Views\Sessions\Runner.cshtml(13,127): warning CS8619: Nullability of reference types in value of type 'List<Question>' doesn't match target type 'List<Question?>'. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Views\Sessions\Runner.cshtml(346,75): warning CS8602: Dereference of a possibly null reference. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Views\Sessions\Runner.cshtml(356,36): warning CS8602: Dereference of a possibly null reference. [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Application\AuditReaderService.cs(44,26): error CS0029: Cannot implicitly convert type 'string' to 'int' [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+    7 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:02.75

@@ -1,0 +1,61 @@
+@{
+    ViewData["Title"] = "Login";
+    Layout = "_UserLayout";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-center">UniTestSystem Login</h3>
+            </div>
+            <div class="card-body">
+                <form id="loginForm">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Login</button>
+                    </div>
+                </form>
+                <div class="text-center mt-3">
+                    <p>Don't have an account? <a href="/User/Register">Register here</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            $('#loginForm').on('submit', function(e) {
+                e.preventDefault();
+                
+                const email = $('#email').val();
+                const password = $('#password').val();
+                
+                $.ajax({
+                    url: '/api/user/auth/login',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ email, password }),
+                    success: function(response) {
+                        localStorage.setItem('jwtToken', response.token);
+                        localStorage.setItem('user', JSON.stringify(response.user));
+                        window.location.href = '/User/Dashboard';
+                    },
+                    error: function(xAdmin) {
+                        const error = xAdmin.responseJSON?.message || 'Login failed';
+                        alert(error);
+                    }
+                });
+            });
+        });
+    </script>
+}

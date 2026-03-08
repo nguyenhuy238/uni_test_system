@@ -1,0 +1,37 @@
+@model List<UniTestSystem.Domain.StudentClass>
+@{
+    ViewData["Title"] = "Classes";
+    var facultyMap = (Dictionary<string, string>)(ViewBag.FacultyMap ?? new Dictionary<string, string>());
+}
+<h2 class="mb-3">Classes</h2>
+
+<p>
+    <a class="btn btn-primary" href="/classes/create">Create Class</a>
+</p>
+
+<div class="card shadow-sm">
+    <div class="card-body table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr><th>Name</th><th>Faculty</th><th style="width:160px"></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var t in Model)
+                {
+                    var fname = (!string.IsNullOrWhiteSpace(t.FacultyId) && facultyMap.TryGetValue(t.FacultyId, out var nm)) ? nm : "(None)";
+                    <tr>
+                        <td class="fw-semibold">@t.Name</td>
+                        <td>@fname</td>
+                        <td>
+                            <a class="btn btn-sm btn-outline-secondary" href="/classes/edit/@t.Id">Edit</a>
+                            <form method="post" action="/classes/delete/@t.Id" class="d-inline" onsubmit="return confirm('Xóa lớp này?');">
+                                @Html.AntiForgeryToken()
+                                <button class="btn btn-sm btn-outline-danger">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

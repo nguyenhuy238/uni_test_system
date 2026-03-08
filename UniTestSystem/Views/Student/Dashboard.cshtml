@@ -1,0 +1,117 @@
+@{
+    ViewData["Title"] = "Student Dashboard";
+    Layout = "_UserLayout";
+}
+
+<div class="container">
+    <div class="row">
+        <div class="col-12 text-center mb-4">
+            <h1 class="display-5 fw-bold text-primary">UniTestSystem</h1>
+            <p class="lead text-muted">Chào mừng bạn đến với hệ thống quản lý thi và khảo sát sinh viên</p>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center p-4">
+                    <div class="bg-primary bg-opacity-10 p-3 rounded-circle d-inline-block mb-3">
+                        <i class="bi bi-pencil-square text-primary fs-2"></i>
+                    </div>
+                    <h3 class="card-title h5 fw-bold">My Tests</h3>
+                    <p class="card-text text-muted">Làm bài kiểm tra và đánh giá kiến thức theo môn học đã được phân công.</p>
+                    <a href="/User/Tests" class="btn btn-primary px-4 mt-2">Go to Tests</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-body text-center p-4">
+                    <div class="bg-success bg-opacity-10 p-3 rounded-circle d-inline-block mb-3">
+                        <i class="bi bi-bar-chart-line text-success fs-2"></i>
+                    </div>
+                    <h3 class="card-title h5 fw-bold">Test Results</h3>
+                    <p class="card-text text-muted">Xem kết quả chi tiết, điểm số và nhận xét từ giảng viên cho các bài thi đã làm.</p>
+                    <a href="/User/Results" class="btn btn-success px-4 mt-2">View Results</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white py-3">
+                    <h4 class="h5 mb-0 fw-bold"><i class="bi bi-clock-history me-2 text-primary"></i>Kết quả thi gần đây</h4>
+                </div>
+                <div class="card-body">
+                    <div id="recentResults">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            loadRecentResults();
+        });
+
+        function loadRecentResults() {
+            const token = localStorage.getItem('jwtToken');
+            
+            $.ajax({
+                url: '/api/user/tests/results',
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                },
+                success: function(results) {
+                    displayResults(results.slice(0, 5));
+                },
+                error: function() {
+                    $('#recentResults').html('<div class="text-center py-4"><p class="text-muted mb-0">Chưa có kết quả thi hoặc không thể tải dữ liệu.</p></div>');
+                }
+            });
+        }
+
+        function displayResults(results) {
+            if (results.length === 0) {
+                $('#recentResults').html('<div class="text-center py-4"><p class="text-muted mb-0">Bạn chưa có bài thi nào hoàn thành. Hãy bắt đầu ngay!</p></div>');
+                return;
+            }
+
+            let html = '<div class="table-responsive"><table class="table table-hover align-middle">';
+            html += '<thead class="table-light"><tr><th>Bài thi</th><th class="text-center">Số điểm</th><th class="text-center">Ngày làm</th><th class="text-end">Hành động</th></tr></thead><tbody>';
+            
+            results.forEach(result => {
+                const date = new Date(result.submitTime).toLocaleDateString('vi-VN');
+                const score = `<strong>${result.score}</strong> / ${result.maxScore}`;
+                const passBadge = result.isPass ? 
+                    '<span class="badge bg-success-soft text-success border border-success border-opacity-25 ms-2">Đạt</span>' : 
+                    '<span class="badge bg-danger-soft text-danger border border-danger border-opacity-25 ms-2">Chưa đạt</span>';
+                
+                html += `<tr>
+                    <td><div class="fw-semibold">${result.title}</div><div class="small text-muted">${result.subject || ''}</div></td>
+                    <td class="text-center">${score}</td>
+                    <td class="text-center text-muted">${date}</td>
+                    <td class="text-end"><a href="/User/ResultDetail/${result.id}" class="btn btn-sm btn-outline-primary rounded-pill px-3">Chi tiết</a></td>
+                </tr>`;
+            });
+            
+            html += '</tbody></table></div>';
+            $('#recentResults').html(html);
+        }
+    </script>
+    <style>
+        .bg-success-soft { background-color: #e6fcf5; }
+        .bg-danger-soft { background-color: #fff5f5; }
+    </style>
+}

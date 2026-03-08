@@ -1,0 +1,243 @@
+system_name: UniTestSystem
+version: 1.0.0
+architecture_type: Clean Architecture (.NET 8)
+enforcement_level: Enterprise
+last_updated: 2026-03-01
+
+rules:
+  # 1. FUNCTIONALITY RULES
+  - group: FUNCTIONALITY
+    rules:
+      - rule_id: FUNC_001
+        description: "System must support full Question Bank lifecycle (MCQ, Essay, T/F, Matching, Drag & Drop)."
+        severity: Critical
+        validation_method: Manual review / Automated CI
+        measurable_criteria: "100% feature coverage in Application Layer."
+      - rule_id: FUNC_002
+        description: "Exam Session must enforce Snapshot-based integrity."
+        severity: Critical
+        validation_method: Runtime validation
+        measurable_criteria: "Questions in an active exam session must not change if the original Question Bank is updated."
+      - rule_id: FUNC_003
+        description: "Every business action must have validation, error handling, and logging."
+        severity: High
+        validation_method: Code review
+        measurable_criteria: "FluentValidation or DataAnnotations present on all DTOs/Commands."
+
+  # 2. PERFORMANCE RULES
+  - group: PERFORMANCE
+    rules:
+      - rule_id: PERF_001
+        description: "API response time for normal queries must be < 200ms."
+        severity: High
+        validation_method: Automated CI (Load Test)
+        measurable_criteria: "95th percentile latency < 200ms."
+      - rule_id: PERF_002
+        description: "Exam submission latency must be < 2s."
+        severity: Critical
+        validation_method: Runtime monitoring
+        measurable_criteria: "Max response time for Submission endpoint < 2000ms."
+      - rule_id: PERF_003
+        description: "Support minimum 10,000 concurrent users."
+        severity: High
+        validation_method: Load testing
+        measurable_criteria: "System stability during 10k CCU simulation."
+      - rule_id: PERF_004
+        description: "Mandatory DB indexing; no full table scans on large tables."
+        severity: High
+        validation_method: Automated CI / DB Profiler
+        measurable_criteria: "Execution plan check for 'Scan' operators on tables > 100k rows."
+
+  # 3. SECURITY RULES
+  - group: SECURITY
+    rules:
+      - rule_id: SEC_001
+        description: "Passwords must be hashed using BCrypt."
+        severity: Critical
+        validation_method: Automated CI / Code review
+        measurable_criteria: "No plain-text passwords in DB or code."
+      - rule_id: SEC_002
+        description: "JWT tokens must use secure configuration with rotation and HttpOnly/Secure cookies."
+        severity: Critical
+        validation_method: Runtime validation
+        measurable_criteria: "Cookies must have HttpOnly and Secure flags set."
+      - rule_id: SEC_003
+        description: "Resource-based Authorization (IDOR prevention) is mandatory."
+        severity: Critical
+        validation_method: Code review
+        measurable_criteria: "Check user ownership/permission for every ID-based request."
+      - rule_id: SEC_004
+        description: "Audit logs must be immutable and stored securely."
+        severity: High
+        validation_method: Manual review
+        measurable_criteria: "Logs cannot be edited or deleted by non-owners."
+
+  # 4. RELIABILITY RULES
+  - group: RELIABILITY
+    rules:
+      - rule_id: REL_001
+        description: "No data loss during exams; frequent auto-save enforced."
+        severity: Critical
+        validation_method: Runtime validation
+        measurable_criteria: "Snapshot of student answers updated every 30-60 seconds."
+      - rule_id: REL_002
+        description: "Published snapshots are immutable."
+        severity: Critical
+        validation_method: Middleware enforcement
+        measurable_criteria: "System rejects any POST/PUT request to a published snapshot."
+      - rule_id: REL_003
+        description: "Transactional integrity (Unit of Work) required for all critical writes."
+        severity: High
+        validation_method: Code review
+        measurable_criteria: "Usage of C# `IDbContextTransaction` or EF Core implicit transactions."
+
+  # 5. USABILITY RULES
+  - group: USABILITY
+    rules:
+      - rule_id: USA_001
+        description: "UI must show clear validation messages and prevent ambiguous states."
+        severity: Medium
+        validation_method: Manual review
+        measurable_criteria: "All error responses from API must be mapped to user-friendly UI alerts."
+      - rule_id: USA_002
+        description: "Destructive actions (Delete, Publish) must require confirmation dialogs."
+        severity: High
+        validation_method: Manual review
+        measurable_criteria: "No single-click deletions."
+      - rule_id: USA_003
+        description: "System must be accessible (keyboard navigation, tooltips for critical icons)."
+        severity: Medium
+        validation_method: Accessibility Scan
+        measurable_criteria: "WCAG 2.1 Level AA compliance."
+
+  # 6. MAINTAINABILITY RULES
+  - group: MAINTAINABILITY
+    rules:
+      - rule_id: MAIN_001
+        description: "Clean Architecture: Business logic strictly in Application/Domain layers."
+        severity: High
+        validation_method: Static analysis
+        measurable_criteria: "No EF Core references in Controllers; no Domain logic in Infrastructure."
+      - rule_id: MAIN_002
+        description: "Unit test coverage >= 80% for the Application layer."
+        severity: High
+        validation_method: Automated CI (Coverage tool)
+        measurable_criteria: "Block PR if coverage falls below 80%."
+      - rule_id: MAIN_003
+        description: "No magic strings or hardcoded secrets."
+        severity: Critical
+        validation_method: Static analysis / Code review
+        measurable_criteria: "Detection of credentials or connection strings in source code."
+
+  # 7. FLEXIBILITY RULES
+  - group: FLEX_001
+    rules:
+      - rule_id: FLEX_001
+        description: "Mandatory DTO separation between Domain entities and API responses."
+        severity: Medium
+        validation_method: Code review
+        measurable_criteria: "Domain entities must never be returned directly by the API."
+      - rule_id: FLEX_002
+        description: "External services (Email, Storage) must be abstracted via Interfaces."
+        severity: High
+        validation_method: Code review
+        measurable_criteria: "Infrastructure layer implements IEmailService, IFileStorageService, etc."
+
+  # 8. CORRECTNESS SCALE DEFINITION
+  - group: CORRECTNESS_SCALE
+    description: "Criteria for evaluating system state correctness."
+    scales:
+      - level: Absolutely Correct
+        criteria: "Zero defects, passes all functional and load tests, full compliance with security rules."
+      - level: Correct
+        criteria: "Full business logic compliance, minor UI/UX suggestions allowed."
+      - level: Minor Defect
+        criteria: "Non-critical issues (e.g., misspelled labels, non-blocking UI glitches)."
+      - level: Defective
+        criteria: "Incorrect business logic (e.g., wrong GPA calculation), high security risk."
+      - level: Critically Defective
+        criteria: "System crash, DB empty on startup, zero concurrent user support, data loss."
+    examples:
+      - fail_case: "Database empty on deployment: Critically Defective"
+      - fail_case: "Wrong GPA calculation: Defective"
+      - fail_case: "Latency > 2s during exam: Defective"
+
+  # 9. TESTABILITY RULES
+  - group: TESTABILITY
+    rules:
+      - rule_id: TEST_001
+        description: "Infrastructure must be mockable for Unit Testing."
+        severity: High
+        validation_method: Code review
+        measurable_criteria: "Interfaces used for all DB and External API calls."
+      - rule_id: TEST_002
+        description: "Mandatory Integration tests for DB/EF Core logic."
+        severity: Medium
+        validation_method: Automated CI
+        measurable_criteria: "Testing against an actual SQL Server or In-Memory DB."
+
+  # 10. SAFETY RULES
+  - group: SAFETY
+    rules:
+      - rule_id: SAFE_001
+        description: "Access control enforced at the API level (RBAC + Policy)."
+        severity: Critical
+        validation_method: Automated CI (Security Tests)
+        measurable_criteria: "`[Authorize(Policy = ...)]` present on all non-public endpoints."
+      - rule_id: SAFE_002
+        description: "Backups must be encrypted and verified periodically."
+        severity: High
+        validation_method: Manual review
+        measurable_criteria: "Successful data restoration test every quarter."
+
+  # 11. INTEGRITY RULES
+  - group: INTEGRITY
+    rules:
+      - rule_id: INT_001
+        description: "Foreign Key constraints are mandatory for all relational entities."
+        severity: High
+        validation_method: DB Schema automation
+        measurable_criteria: "EF Core Fluent API `.HasOne(...).WithMany(...).HasForeignKey(...)` usage."
+      - rule_id: INT_002
+        description: "Soft delete strategy defined for essential entities (Students, Courses)."
+        severity: Medium
+        validation_method: Code review
+        measurable_criteria: "`IsDeleted` flag and Global Query Filter applied."
+
+  # 12. STANDARDIZATION RULES
+  - group: STANDARDIZATION
+    rules:
+      - rule_id: STD_001
+        description: "REST standard compliance with OpenAPI documentation."
+        severity: Medium
+        validation_method: Automated CI (Swagger)
+        measurable_criteria: "All endpoints have appropriate HTTP verbs and status codes (2xx, 4xx, 5xx)."
+      - rule_id: STD_002
+        description: "Naming conventions (PascalCase for C#, camelCase for JSON)."
+        severity: Low
+        validation_method: Static analysis (StyleCop)
+        measurable_criteria: "Zero style warnings in the build log."
+
+  # 13. INDEPENDENCE RULES
+  - group: INDEPENDENCE
+    rules:
+      - rule_id: IND_001
+        description: "Device-independent Web UI (Responsive Web Design)."
+        severity: High
+        validation_method: Manual review / Browser testing
+        measurable_criteria: "UI usable on Desktop, Tablet, and Mobile viewport."
+      - rule_id: IND_002
+        description: "Deployment-independent configuration."
+        severity: High
+        validation_method: Code review
+        measurable_criteria: "Using `appsettings.json` and Environment Variables instead of hardcoded paths."
+
+  # 14. PROFESSIONALISM CRITERIA
+  - group: PROFESSIONALISM
+    criteria:
+      - "Serilog structured logging configured and reporting correctly."
+      - "Endpoint Health Monitoring (Health Checks) active."
+      - "CI/CD pipeline automated with build/test validation."
+      - "Comprehensive system documentation (README, API Docs)."
+      - "No Critical/High vulnerabilities in dependency scan."
+      - "Full audit traceability for all sensitive operations."

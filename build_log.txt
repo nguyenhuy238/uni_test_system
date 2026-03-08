@@ -1,0 +1,13 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Application\Interfaces\QuestionExcelService.cs(272,2): warning CS0164: This label has not been referenced [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Views\Sessions\Runner.cshtml(371,36): error CS0019: Operator '??' cannot be applied to operands of type 'ICollection<Option>' and 'List<string>' [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+
+Build FAILED.
+
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Application\Interfaces\QuestionExcelService.cs(272,2): warning CS0164: This label has not been referenced [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\Views\Sessions\Runner.cshtml(371,36): error CS0019: Operator '??' cannot be applied to operands of type 'ICollection<Option>' and 'List<string>' [C:\Users\LEGION\source\repos\UniTestSystem\UniTestSystem\UniTestSystem.csproj]
+    1 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:03.34

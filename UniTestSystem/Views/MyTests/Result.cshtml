@@ -1,0 +1,18 @@
+@model UniTestSystem.Domain.Session
+<h2>Result</h2>
+<p>Total Score: <b>@Model.TotalScore</b></p>
+<table class="table">
+    <thead><tr><th>Question</th><th>Your Answer</th><th>Score</th></tr></thead>
+    <tbody>
+        @foreach (var a in Model.StudentAnswers ?? new List<UniTestSystem.Domain.StudentAnswer>())
+        {
+            var qq = a.Question;
+            if (qq == null) continue;
+            <tr>
+                <td>@qq.Content</td>
+                <td>@(a.SelectedOptionId ?? a.EssayAnswer)</td>
+                <td>@a.Score</td>
+            </tr>
+        }
+    </tbody>
+</table>
