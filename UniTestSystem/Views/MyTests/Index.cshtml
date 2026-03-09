@@ -1,0 +1,136 @@
+@model List<UniTestSystem.Domain.Test>
+@using UniTestSystem.Domain
+<h2>My Tests</h2>
+
+@{
+    var inProgress = (List<Session>)ViewBag.InProgress ?? new();
+    var submitted = (List<Session>)ViewBag.Submitted ?? new();
+    var titles = ViewBag.TestTitles as Dictionary<string, string> ?? new();
+}
+
+@if (!Model.Any() && !inProgress.Any() && !submitted.Any())
+{
+    <div class="alert alert-info">
+        <strong>Không có test nào:</strong> Bạn chưa được assign test nào hoặc tất cả test đã hết hạn.
+    </div>
+}
+
+<h4>Available Tests</h4>
+@if (Model.Any())
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Duration</th>
+                <th>Pass Score</th>
+                <th>Skill</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var t in Model)
+            {
+                <tr>
+                    <td><strong>@t.Title</strong></td>
+                    <td>@t.DurationMinutes min</td>
+                    <td>@t.PassScore</td>
+                    <td><span class="badge bg-secondary">@t.SubjectIdFilter</span></td>
+                    <td>
+                        <form id="f-@t.Id" onsubmit="startTest('@t.Id');return false;">
+                            <button class="btn btn-sm btn-primary">
+                                <i class="bi bi-play-circle"></i> Start Test
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else
+{
+    <div class="text-muted">No available tests</div>
+}
+
+<h4>In Progress</h4>
+@if (inProgress.Any())
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Session ID</th>
+                <th>Test</th>
+                <th>Started</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var s in inProgress)
+            {
+                var title = titles.TryGetValue(s.TestId, out var ttitle) ? ttitle : s.TestId;
+                <tr>
+                    <td><code>@s.Id.Substring(0, 8)...</code></td>
+                    <td>@title</td>
+                    <td>@s.StartAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>
+                        <a class="btn btn-sm btn-warning" href="/mytests/session/@s.Id">
+                            <i class="bi bi-arrow-clockwise"></i> Resume
+                        </a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else
+{
+    <div class="text-muted">No tests in progress</div>
+}
+
+<h4>Submitted</h4>
+@if (submitted.Any())
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Session ID</th>
+                <th>Test</th>
+                <th>Score</th>
+                <th>Submitted</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var s in submitted)
+            {
+                var title = titles.TryGetValue(s.TestId, out var ttitle) ? ttitle : s.TestId;
+                <tr>
+                    <td><code>@s.Id.Substring(0, 8)...</code></td>
+                    <td>@title</td>
+                    <td>
+                        <span class="badge @(s.IsPassed ? "bg-success" : "bg-danger")">@s.TotalScore</span>
+                    </td>
+                    <td>@s.EndAt?.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>
+                        <a class="btn btn-sm btn-success" href="/mytests/result/@s.Id">
+                            <i class="bi bi-eye"></i> View Result
+                        </a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else
+{
+    <div class="text-muted">No submitted tests</div>
+}
+
+<script>
+    async function startTest(tid){
+      const r = await fetch(`/api/tests/${tid}/start`, {method:'POST'});
+      const data = await r.json();
+      window.location = `/mytests/session/${data.sessionId}`;
+    }
+</script>

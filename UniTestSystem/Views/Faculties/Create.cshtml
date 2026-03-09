@@ -1,0 +1,20 @@
+@model UniTestSystem.Domain.Faculty
+@{
+    ViewData["Title"] = "Create Faculty";
+}
+<h2>Create Faculty</h2>
+
+<form method="post">
+    @Html.AntiForgeryToken()
+    <div class="mb-3">
+        <label class="form-label">Name</label>
+        <input class="form-control" name="Name" value="@Model.Name" required minlength="2" />
+        @Html.ValidationMessage("Name", null, new { @class = "text-danger" })
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Description (optional)</label>
+        <textarea class="form-control" name="Description" rows="3">@Model.Description</textarea>
+    </div>
+    <button class="btn btn-primary">Save</button>
+    <a class="btn btn-link" href="/faculties">Cancel</a>
+</form>

@@ -1,0 +1,286 @@
+@model UniTestSystem.Application.Models.EditTestViewModel
+@using UniTestSystem.Domain
+
+<h2>Edit Test</h2>
+
+@if (TempData["Msg"] != null)
+{
+    <div class="alert alert-success">@TempData["Msg"]</div>
+}
+
+<!-- FORM GET: lọc/paging -->
+<form method="get" asp-action="Edit" asp-controller="Tests" class="d-flex align-items-center mb-2" style="gap:.5rem;">
+    <input type="hidden" name="id" value="@Model.Id" />
+    <input name="Keyword" value="@Model.Filter.Keyword" type="text" class="form-control" placeholder="Search keyword..." style="max-width: 220px;" />
+    <select name="PageSize" class="form-select" style="max-width: 130px;">
+        @{
+            var sizes = new[] { 10, 20, 50, 100 };
+            var current = Model.Filter.PageSize > 0 ? Model.Filter.PageSize : 20;
+        }
+        @foreach (var s in sizes)
+        {
+            <option value="@s" selected="@(current == s)">@s / page</option>
+        }
+        <option value="all" selected="@(Model.Filter.PageSize == int.MaxValue)">All</option>
+    </select>
+
+    <!-- NEW: carry left-form values across paging -->
+    <input type="hidden" id="q_Title" name="Title" value="@Model.Title" />
+    <input type="hidden" id="q_DurationMinutes" name="DurationMinutes" value="@Model.DurationMinutes" />
+    <input type="hidden" id="q_PassScore" name="PassScore" value="@Model.PassScore" />
+    <input type="hidden" id="q_ShuffleQuestions" name="ShuffleQuestions" value="@Model.ShuffleQuestions" />
+    <input type="hidden" id="q_SubjectIdFilter" name="SubjectIdFilter" value="@Model.SubjectIdFilter" />
+    <input type="hidden" id="q_RandomMCQ" name="RandomMCQ" value="@Model.RandomMCQ" />
+    <input type="hidden" id="q_RandomTF" name="RandomTF" value="@Model.RandomTF" />
+    <input type="hidden" id="q_RandomEssay" name="RandomEssay" value="@Model.RandomEssay" />
+    <input type="hidden" id="q_ShuffleOptions" name="ShuffleOptions" value="@Model.ShuffleOptions.ToString().ToLower()" />
+
+    <button class="btn btn-outline-secondary" type="submit">Apply</button>
+</form>
+
+<!-- FORM POST: lưu thay đổi -->
+<form asp-action="Edit" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Id" />
+
+    <div class="row">
+        <div class="col-md-5">
+            <div class="mb-3">
+                <label class="form-label">Title</label>
+                <input class="form-control" asp-for="Title" />
+                <span class="text-danger" asp-validation-for="Title"></span>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Duration (minutes)</label>
+                <input class="form-control" asp-for="DurationMinutes" type="number" min="1" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Pass Score</label>
+                <input class="form-control" asp-for="PassScore" type="number" min="0" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Shuffle Questions</label>
+                <input class="form-check-input ms-2" asp-for="ShuffleQuestions" type="checkbox" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Shuffle Options</label>
+                <input class="form-check-input ms-2" asp-for="ShuffleOptions" type="checkbox" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Môn học (Subject)</label>
+                <input class="form-control" asp-for="SubjectIdFilter" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Random Counts (used nếu không chọn thủ công)</label>
+                <div class="input-group">
+                    <span class="input-group-text">MCQ</span>
+                    <input class="form-control" asp-for="RandomMCQ" type="number" min="0" />
+                    <span class="input-group-text">TF</span>
+                    <input class="form-control" asp-for="RandomTF" type="number" min="0" />
+                    <span class="input-group-text">Essay</span>
+                    <input class="form-control" asp-for="RandomEssay" type="number" min="0" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Status</label>
+                @if (Model.IsPublished)
+                {
+                    <span class="badge bg-success ms-2">Published</span>
+                }
+                else
+                {
+                    <span class="badge bg-warning text-dark ms-2">Draft</span>
+                }
+            </div>
+
+            <div class="mt-4 d-flex align-items-center gap-2">
+                <button class="btn btn-primary">Save</button>
+                <a class="btn btn-secondary" href="/Tests">Back</a>
+
+                <a asp-controller="Tests" asp-action="Assign" asp-route-id="@Model.Id" class="btn btn-warning">
+                    <i class="bi bi-people"></i> Assign Users
+                </a>
+            </div>
+
+            <div class="text-danger mt-3">
+                @Html.ValidationSummary()
+            </div>
+        </div>
+
+        <div class="col-md-7">
+            <ul class="nav nav-tabs" id="qTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-mcq" type="button" role="tab">MCQ (@Model.MCQQuestions.Count)</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-tf" type="button" role="tab">True/False (@Model.TFQuestions.Count)</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-essay" type="button" role="tab">Essay (@Model.EssayQuestions.Count)</button>
+                </li>
+                <!-- NEW tabs -->
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-matching" type="button" role="tab">Matching (@Model.MatchingQuestions.Count)</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-drag" type="button" role="tab">Drag & Drop (@Model.DragDropQuestions.Count)</button>
+                </li>
+            </ul>
+
+            <div class="tab-content border p-3" id="qTabsContent" style="max-height: 520px; overflow:auto;">
+                <div class="tab-pane fade show active" id="tab-mcq" role="tabpanel">
+                    @if (Model.MCQQuestions?.Any() == true)
+                    {
+                        foreach (var q in Model.MCQQuestions)
+                        {
+                            var isChecked = Model.SelectedQuestionIds.Contains(q.Id);
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="SelectedQuestionIds" value="@q.Id" @(isChecked ? "checked" : "") />
+                                <label class="form-check-label"><b>@q.SubjectId</b> — @q.Content</label>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+
+                        <div class="text-muted">No MCQ questions.</div>
+                    }
+                </div>
+
+                <div class="tab-pane fade" id="tab-tf" role="tabpanel">
+                    @if (Model.TFQuestions?.Any() == true)
+                    {
+                        foreach (var q in Model.TFQuestions)
+                        {
+                            var isChecked = Model.SelectedQuestionIds.Contains(q.Id);
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="SelectedQuestionIds" value="@q.Id" @(isChecked ? "checked" : "") />
+                                <label class="form-check-label"><b>@q.SubjectId</b> — @q.Content</label>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+
+                        <div class="text-muted">No True/False questions.</div>
+                    }
+                </div>
+
+                <div class="tab-pane fade" id="tab-essay" role="tabpanel">
+                    @if (Model.EssayQuestions?.Any() == true)
+                    {
+                        foreach (var q in Model.EssayQuestions)
+                        {
+                            var isChecked = Model.SelectedQuestionIds.Contains(q.Id);
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="SelectedQuestionIds" value="@q.Id" @(isChecked ? "checked" : "") />
+                                <label class="form-check-label"><b>@q.SubjectId</b> — @q.Content</label>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+
+                        <div class="text-muted">No Essay questions.</div>
+                    }
+                </div>
+
+                <div class="tab-pane fade" id="tab-matching" role="tabpanel">
+                    @if (Model.MatchingQuestions?.Any() == true)
+                    {
+                        foreach (var q in Model.MatchingQuestions)
+                        {
+                            var isChecked = Model.SelectedQuestionIds.Contains(q.Id);
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="SelectedQuestionIds" value="@q.Id" @(isChecked ? "checked" : "") />
+                                <label class="form-check-label"><b>@q.SubjectId</b> — @q.Content</label>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+
+                        <div class="text-muted">No Matching questions.</div>
+                    }
+                </div>
+
+                <div class="tab-pane fade" id="tab-drag" role="tabpanel">
+                    @if (Model.DragDropQuestions?.Any() == true)
+                    {
+                        foreach (var q in Model.DragDropQuestions)
+                        {
+                            var isChecked = Model.SelectedQuestionIds.Contains(q.Id);
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="SelectedQuestionIds" value="@q.Id" @(isChecked ? "checked" : "") />
+                                <label class="form-check-label"><b>@q.SubjectId</b> — @q.Content</label>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+
+                        <div class="text-muted">No Drag & Drop questions.</div>
+                    }
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end align-items-center mt-2">
+                <partial name="_Pager" model="Model.Page" />
+            </div>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+    <script>
+        (function(){
+          const map = {
+            Title:           {src:'input[name="Title"]',            hid:'#q_Title'},
+            DurationMinutes: {src:'input[name="DurationMinutes"]',  hid:'#q_DurationMinutes'},
+            PassScore:       {src:'input[name="PassScore"]',        hid:'#q_PassScore'},
+            ShuffleQuestions:{src:'input[name="ShuffleQuestions"]', hid:'#q_ShuffleQuestions', isCheckbox:true},
+            SubjectIdFilter: {src:'input[name="SubjectIdFilter"]',  hid:'#q_SubjectIdFilter'},
+            RandomMCQ:       {src:'input[name="RandomMCQ"]',        hid:'#q_RandomMCQ'},
+            RandomTF:        {src:'input[name="RandomTF"]',         hid:'#q_RandomTF'},
+            RandomEssay:     {src:'input[name="RandomEssay"]',      hid:'#q_RandomEssay'},
+            ShuffleOptions:  {src:'input[name="ShuffleOptions"]',   hid:'#q_ShuffleOptions', isCheckbox:true}
+          };
+          function syncHidden(){
+            Object.values(map).forEach(m=>{
+              const src = document.querySelector(m.src);
+              const hid = document.querySelector(m.hid);
+              if (!src || !hid) return;
+              hid.value = m.isCheckbox ? (src.checked ? 'true' : 'false') : src.value;
+            });
+          }
+          function patchPagerLinks(){
+            const getForm = document.querySelector('form[method="get"][asp-action="Edit"]') || document.querySelector('form[method="get"]');
+            if (!getForm) return;
+            const params = new URLSearchParams(new FormData(getForm));
+            document.querySelectorAll('a[href*="Page="], a[href*="page="]').forEach(a=>{
+              try{
+                const url = new URL(a.getAttribute('href'), window.location.origin);
+                params.forEach((v,k)=> url.searchParams.set(k,v));
+                a.setAttribute('href', url.pathname + '?' + url.searchParams.toString());
+              }catch{}
+            });
+          }
+          syncHidden(); patchPagerLinks();
+          Object.values(map).forEach(m=>{
+            const src = document.querySelector(m.src);
+            if (!src) return;
+            const ev = m.isCheckbox ? 'change' : 'input';
+            src.addEventListener(ev, ()=>{ syncHidden(); patchPagerLinks(); });
+          });
+          document.querySelector('select[name="PageSize"]')?.addEventListener('change', patchPagerLinks);
+          document.querySelector('input[name="Keyword"]')?.addEventListener('input', patchPagerLinks);
+        })();
+    </script>
+}

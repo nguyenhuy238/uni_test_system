@@ -1,0 +1,53 @@
+@using UniTestSystem.Application.Models
+@model StudentSubjectReportVm
+@{
+    ViewData["Title"] = "Student Subject Report";
+    var userId = (string)ViewBag.UserId;
+    var userName = (string)ViewBag.UserName;
+    var from = (string)ViewBag.From;
+    var to = (string)ViewBag.To;
+    bool canExport = (bool)(ViewBag.CanExport ?? false);
+}
+<h2 class="mb-2">Student Subjects — @userName</h2>
+
+<form method="get" class="row g-2 mb-3" action="/reports/student-subject">
+    <input type="hidden" name="userId" value="@userId" />
+    <div class="col-auto">
+        <label class="form-label">From</label>
+        <input type="date" name="from" class="form-control" value="@from" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label">To</label>
+        <input type="date" name="to" class="form-control" value="@to" />
+    </div>
+    <div class="col-auto align-self-end">
+        <button class="btn btn-primary">Apply</button>
+        @if (canExport)
+        {
+            <a class="btn btn-outline-success" href="/reports/student-subject/export/xlsx?userId=@userId&from=@from&to=@to">Export Excel</a>
+            <a class="btn btn-outline-danger" href="/reports/student-subject/export/pdf?userId=@userId&from=@from&to=@to">Export PDF</a>
+        }
+    </div>
+</form>
+
+<div class="card shadow-sm">
+    <div class="card-body table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr><th>Subject</th><th>#Questions</th><th>Total</th><th>Avg/Q</th><th>Last</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var r in Model.Rows)
+                {
+                    <tr>
+                        <td>@r.Subject</td>
+                        <td>@r.QuestionCount</td>
+                        <td>@r.TotalScore</td>
+                        <td>@r.AvgPerQuestion</td>
+                        <td>@(r.LastSubmissionAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

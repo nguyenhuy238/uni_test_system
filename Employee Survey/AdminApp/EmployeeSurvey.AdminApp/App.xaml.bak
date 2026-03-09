@@ -1,8 +1,0 @@
-﻿<Application x:Class="EmployeeSurvey.AdminApp.App"
-             xmlns="http://schemas.microsoft.com/winfx/2003/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2003/xaml"
-             xmlns:local="clr-namespace:EmployeeSurvey.AdminApp">
-    <Application.Resources>
-        <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
-    </Application.Resources>
-</Application>

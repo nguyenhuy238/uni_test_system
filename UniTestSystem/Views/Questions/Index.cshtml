@@ -1,0 +1,105 @@
+@using UniTestSystem.Application
+@using UniTestSystem.Domain
+@model PagedResult<Question>
+
+@{
+    var f = new QuestionFilter
+    {
+        Keyword = Context.Request.Query["Keyword"],
+        SubjectId = Context.Request.Query["SubjectId"],
+        DifficultyLevelId = Context.Request.Query["DifficultyLevelId"],
+        TagsCsv = Context.Request.Query["TagsCsv"],
+        Page = int.TryParse(Context.Request.Query["Page"], out var p) ? p : 1,
+        PageSize = int.TryParse(Context.Request.Query["PageSize"], out var s) ? s : 20
+    };
+}
+
+<h2>Question Bank</h2>
+
+<form method="get" class="row g-2 mb-2">
+    <div class="col"><input name="Keyword" value="@f.Keyword" class="form-control" placeholder="Search content..." /></div>
+    <div class="col">
+        <select name="Type" class="form-select">
+            <option value="">--Type--</option>
+            @foreach (var t in Enum.GetNames(typeof(QType)))
+            {
+                <option value="@t" selected="@(Context.Request.Query["Type"] == t)">@t</option>
+            }
+        </select>
+    </div>
+    <div class="col"><input name="SubjectId" value="@f.SubjectId" class="form-control" placeholder="Môn học (ID)" /></div>
+    <div class="col"><input name="DifficultyLevelId" value="@f.DifficultyLevelId" class="form-control" placeholder="Độ khó (ID)" /></div>
+    <div class="col">
+        <select name="Status" class="form-select">
+            <option value="">--Status--</option>
+            @foreach (var statusName in Enum.GetNames(typeof(QuestionStatus)))
+            {
+                <option value="@statusName" selected="@(Context.Request.Query["Status"] == statusName)">@statusName</option>
+            }
+        </select>
+    </div>
+    <div class="col"><input name="TagsCsv" value="@f.TagsCsv" class="form-control" placeholder="Tags" /></div>
+    <div class="col-1"><button class="btn btn-primary w-100">Filter</button></div>
+</form>
+
+<div class="d-flex gap-2 mb-2">
+    <a class="btn btn-success" href="/Questions/Create">Create</a>
+    <a class="btn btn-outline-secondary" href="/Questions/ExportExcel">Export</a>
+    <form asp-action="ImportExcel" method="post" enctype="multipart/form-data">
+        <div class="input-group">
+            <input type="file" name="file" class="form-control" accept=".xlsx,.xls" />
+            <button class="btn btn-outline-primary">Import</button>
+        </div>
+    </form>
+</div>
+
+<table class="table table-striped">
+    <thead><tr><th>Nội dung</th><th>Loại</th><th>Trạng thái</th><th>Môn học</th><th>Độ khó</th><th>Tags</th><th></th></tr></thead>
+    <tbody>
+        @foreach (var q in Model.Items)
+        {
+            <tr>
+                <td>@q.Content</td>
+                <td>@q.Type</td>
+                <td>
+                    @{
+                        var color = q.Status switch {
+                            QuestionStatus.Approved => "success",
+                            QuestionStatus.Pending => "warning",
+                            QuestionStatus.Rejected => "danger",
+                            _ => "secondary"
+                        };
+                    }
+                    <span class="badge bg-@color">@q.Status</span>
+                </td>
+                <td>@q.SubjectId</td>
+                <td>@q.DifficultyLevelId</td>
+                <td>@string.Join(", ", q.Tags)</td>
+                <td class="text-nowrap">
+                    <a class="btn btn-sm btn-outline-primary" href="/Questions/Edit/@q.Id">Edit</a>
+                    <form asp-action="Clone" method="post" class="d-inline">
+                        <input type="hidden" name="id" value="@q.Id" /><button class="btn btn-sm btn-outline-secondary">Clone</button>
+                    </form>
+                    <form asp-action="Delete" method="post" class="d-inline" onsubmit="return confirm('Delete?')">
+                        <input type="hidden" name="id" value="@q.Id" /><button class="btn btn-sm btn-outline-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@{
+    var totalPages = (int)Math.Ceiling(Model.Total / (double)Model.PageSize);
+}
+<nav>
+    <ul class="pagination">
+        @for (int i = 1; i <= totalPages; i++)
+        {
+            var active = i == Model.Page ? "active" : "";
+            <li class="page-item @active">
+                <a class="page-link" href="@Context.Request.Path?@($"Page={i}&PageSize={Model.PageSize}&Keyword={f.Keyword}&Type={Context.Request.Query["Type"]}&SubjectId={f.SubjectId}&DifficultyLevelId={f.DifficultyLevelId}&TagsCsv={f.TagsCsv}")">@i</a>
+            </li>
+        }
+    </ul>
+</nav>
