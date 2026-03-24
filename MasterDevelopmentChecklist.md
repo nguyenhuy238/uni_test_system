@@ -7,6 +7,8 @@ Tài liệu này đóng vai trò là danh sách kiểm tra chủ chốt cho toà
 - Bổ sung cơ chế token truy cập bài thi cho luồng vào bài từ lịch thi sinh viên (`/mytests/start` với `scheduleId + accessToken`).
 - Bổ sung guard chống đa thiết bị cho phiên thi đang làm (`DeviceFingerprint`) trên luồng start/resume/save/submit.
 - Sửa tổng hợp báo cáo khoa/năm học để trả đúng `StudentCount` và `PassRatePercent`.
+- Bổ sung khôi phục phiên bản câu hỏi từ Audit Log (UI + service).
+- Bổ sung kiểm tra trùng lặp nâng cao bằng độ tương đồng nội dung (Jaccard).
 
 ---
 
@@ -98,15 +100,15 @@ Mô tả: Kho lưu trữ câu hỏi phong phú, hỗ trợ đa dạng loại hì
 - [x] **Quy trình Phê duyệt (Approval Workflow)** [WPF AdminApp/Web App] [Staff/Admin]
     - [x] Trạng thái câu hỏi: Draft (Nháp) -> Pending (Chờ duyệt) -> Approved (Đã duyệt) -> Rejected (Từ chối).
     - [x] Chỉ giảng viên/staff có quyền mới được phê duyệt. (Note: Đăng ký quyền trong PermissionService)
-- [/] **Phiên bản & Lịch sử (Versioning)** [Web App] [Lecturer/Staff]
+- [x] **Phiên bản & Lịch sử (Versioning)** [Web App] [Lecturer/Staff]
     - [x] Lưu vết các thay đổi của câu hỏi thông qua Audit Log/Versioning logic.
-    - [ ] Khôi phục phiên bản cũ nếu cần (Dữ liệu đã sẵn sàng trong Audit, cần UI/Service cụ thể để Restore).
+    - [x] Khôi phục phiên bản cũ nếu cần (Restore từ Audit trên màn hình chỉnh sửa câu hỏi).
 - [/] **Import/Export Hàng loạt** [WPF AdminApp/Web App] [Lecturer/Staff]
     - [x] Import từ Excel theo template chuẩn (Hỗ trợ Question, Options, Matching, DragDrop).
     - [/] Xử lý hình ảnh nhúng trong Excel (Hiện tại hỗ trợ qua URL/Meta, chưa hỗ trợ binary embedded).
-- [/] **Phát hiện Trùng lặp (Duplicate Detection)** [Web App] [Lecturer]
+- [x] **Phát hiện Trùng lặp (Duplicate Detection)** [Web App] [Lecturer]
     - [x] Kiểm tra trùng lặp cơ bản (Exact match on Content + Type + Subject) khi Import.
-    - [ ] Kiểm tra độ tương đồng nội dung nâng cao (Similarity algorithms).
+    - [x] Kiểm tra độ tương đồng nội dung nâng cao (Jaccard token similarity, chặn tạo/sửa/import câu hỏi tương đồng cao).
 
 ---
 

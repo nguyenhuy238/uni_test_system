@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Application.Models;
@@ -9,10 +10,16 @@ public class QuestionService : IQuestionService
 {
     private readonly IRepository<Question> _qRepo;
     private readonly IRepository<Test> _tRepo;
+    private readonly IRepository<AuditEntry> _auditRepo;
     private readonly IAuditService _audit;
 
-    public QuestionService(IRepository<Question> qRepo, IRepository<Test> tRepo, IAuditService audit)
-    { _qRepo = qRepo; _tRepo = tRepo; _audit = audit; }
+    public QuestionService(IRepository<Question> qRepo, IRepository<Test> tRepo, IRepository<AuditEntry> auditRepo, IAuditService audit)
+    {
+        _qRepo = qRepo;
+        _tRepo = tRepo;
+        _auditRepo = auditRepo;
+        _audit = audit;
+    }
 
     public async Task<PagedResult<Question>> SearchAsync(QuestionFilter f)
     {
@@ -49,6 +56,10 @@ public class QuestionService : IQuestionService
 
     public async Task<string> CreateAsync(Question q, string actor)
     {
+        var duplicate = await DetectAdvancedDuplicateAsync(q, null);
+        if (duplicate.IsDuplicate)
+            throw new ValidationException($"Possible duplicate question detected (ID: {duplicate.MatchedQuestionId}, similarity: {duplicate.Similarity:P0}).");
+
         ValidateQuestion(q, isNew: true);
         q.CreatedBy = actor; q.CreatedAt = DateTime.UtcNow;
         await _qRepo.InsertAsync(q);
@@ -71,6 +82,10 @@ public class QuestionService : IQuestionService
         var before = await GetAsync(q.Id);
         if (before == null) return (false, "Not found");
 
+        var duplicate = await DetectAdvancedDuplicateAsync(q, q.Id);
+        if (duplicate.IsDuplicate)
+            return (false, $"Possible duplicate with Question {duplicate.MatchedQuestionId} (similarity: {duplicate.Similarity:P0}).");
+
         ValidateQuestion(q, isNew: false);
         q.UpdatedBy = actor; q.UpdatedAt = DateTime.UtcNow;
         
@@ -80,6 +95,31 @@ public class QuestionService : IQuestionService
 
         await _qRepo.UpsertAsync(x => x.Id == q.Id, q);
         await _audit.LogAsync(actor, "Question.Update", "Question", q.Id, before, q);
+        return (true, null);
+    }
+
+    public async Task<(bool Success, string? Reason)> RestoreVersionAsync(string id, int auditId, string actor)
+    {
+        var current = await GetAsync(id);
+        if (current == null) return (false, "Question not found");
+
+        var audit = await _auditRepo.FirstOrDefaultAsync(x => x.Id == auditId && x.EntityName == "Question" && x.EntityId == id);
+        if (audit == null) return (false, "Audit version not found");
+
+        var snapshot = DeserializeQuestionSnapshot(audit.After) ?? DeserializeQuestionSnapshot(audit.Before);
+        if (snapshot == null) return (false, "Selected audit entry does not contain a restorable question snapshot");
+
+        // Keep stable identity; restore content fields from selected snapshot.
+        snapshot.Id = current.Id;
+        snapshot.CreatedAt = current.CreatedAt;
+        snapshot.CreatedBy = current.CreatedBy;
+        snapshot.UpdatedAt = DateTime.UtcNow;
+        snapshot.UpdatedBy = actor;
+
+        var (ok, reason) = await UpdateAsync(snapshot, actor);
+        if (!ok) return (false, reason ?? "Restore failed");
+
+        await _audit.LogAsync(actor, "Question.RestoreVersion", "Question", id, current, snapshot);
         return (true, null);
     }
 
@@ -200,6 +240,79 @@ public class QuestionService : IQuestionService
                 break;
             case QType.Essay:
                 break;
+        }
+    }
+
+    private async Task<(bool IsDuplicate, string? MatchedQuestionId, decimal Similarity)> DetectAdvancedDuplicateAsync(Question q, string? excludeId)
+    {
+        var candidates = await _qRepo.GetAllAsync(x =>
+            x.Id != excludeId &&
+            x.Type == q.Type &&
+            x.SubjectId == q.SubjectId);
+
+        var content = q.Content ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(content) || candidates.Count == 0)
+            return (false, null, 0m);
+
+        const decimal threshold = 0.90m;
+        var sourceTokens = Tokenize(content);
+        if (sourceTokens.Count == 0) return (false, null, 0m);
+
+        string? bestId = null;
+        decimal bestScore = 0m;
+
+        foreach (var candidate in candidates)
+        {
+            var score = ComputeJaccard(sourceTokens, Tokenize(candidate.Content ?? string.Empty));
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestId = candidate.Id;
+            }
+        }
+
+        return (bestScore >= threshold, bestId, bestScore);
+    }
+
+    private static HashSet<string> Tokenize(string input)
+    {
+        var normalized = new string(input
+            .ToLowerInvariant()
+            .Select(ch => char.IsLetterOrDigit(ch) ? ch : ' ')
+            .ToArray());
+
+        return normalized
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => x.Length > 1)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static decimal ComputeJaccard(HashSet<string> left, HashSet<string> right)
+    {
+        if (left.Count == 0 || right.Count == 0) return 0m;
+        var intersection = left.Intersect(right, StringComparer.Ordinal).Count();
+        var union = left.Union(right, StringComparer.Ordinal).Count();
+        if (union == 0) return 0m;
+        return (decimal)intersection / union;
+    }
+
+    private static Question? DeserializeQuestionSnapshot(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            var q = JsonSerializer.Deserialize<Question>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (q == null) return null;
+
+            q.Tags ??= new List<string>();
+            q.Options ??= new List<Option>();
+            q.MatchingPairs ??= new List<MatchPair>();
+            q.Media ??= new List<MediaFile>();
+            return q;
+        }
+        catch
+        {
+            return null;
         }
     }
 }
