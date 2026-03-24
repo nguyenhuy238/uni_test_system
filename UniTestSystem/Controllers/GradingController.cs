@@ -22,10 +22,21 @@ namespace UniTestSystem.Controllers
         {
             var lecturerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
             var sessions = await _gradingService.GetPendingGradingSessionsAsync(lecturerId);
+
+            var lockMap = new Dictionary<string, bool>(StringComparer.Ordinal);
+            var regradeMap = new Dictionary<string, bool>(StringComparer.Ordinal);
+            foreach (var s in sessions)
+            {
+                lockMap[s.Id] = await _gradingService.IsGradeLockedAsync(s.Id);
+                regradeMap[s.Id] = await _gradingService.HasPendingRegradeRequestAsync(s.Id);
+            }
+
+            ViewBag.LockMap = lockMap;
+            ViewBag.RegradeMap = regradeMap;
             return View(sessions);
         }
 
-        [HttpGet("/grading/{id}")]
+        [HttpGet("/grading/{id:length(32)}")]
         public async Task<IActionResult> Edit(string id)
         {
             var s = await _gradingService.GetSessionForGradingAsync(id);
@@ -50,10 +61,14 @@ namespace UniTestSystem.Controllers
                     }).ToList()
             };
 
+            ViewBag.IsLocked = await _gradingService.IsGradeLockedAsync(id);
+            ViewBag.HasPendingRegrade = await _gradingService.HasPendingRegradeRequestAsync(id);
+            ViewBag.PendingRegradeReason = await _gradingService.GetPendingRegradeReasonAsync(id);
+            ViewBag.ModerationLogs = await _gradingService.GetModerationLogsAsync(id);
             return View(vm);
         }
 
-        [HttpPost("/grading/{id}")]
+        [HttpPost("/grading/{id:length(32)}")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(string id, [FromForm] Dictionary<string, decimal> scores, [FromForm] Dictionary<string, string> comments, bool finalize = false)
         {
@@ -81,6 +96,62 @@ namespace UniTestSystem.Controllers
                 TempData["Err"] = "Error saving grades: " + ex.Message;
                 return RedirectToAction(nameof(Edit), new { id });
             }
+        }
+
+        [HttpPost("/grading/{id:length(32)}/lock")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Lock(string id, string? note = null)
+        {
+            try
+            {
+                await _gradingService.LockGradeAsync(id, User.Identity?.Name ?? "unknown", note);
+                TempData["Msg"] = "Grade is now locked.";
+            }
+            catch (Exception ex)
+            {
+                TempData["Err"] = "Error locking grade: " + ex.Message;
+            }
+            return RedirectToAction(nameof(Edit), new { id });
+        }
+
+        [HttpPost("/grading/{id:length(32)}/unlock")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Unlock(string id, string? note = null)
+        {
+            try
+            {
+                await _gradingService.UnlockGradeAsync(id, User.Identity?.Name ?? "unknown", note);
+                TempData["Msg"] = "Grade lock removed.";
+            }
+            catch (Exception ex)
+            {
+                TempData["Err"] = "Error unlocking grade: " + ex.Message;
+            }
+            return RedirectToAction(nameof(Edit), new { id });
+        }
+
+        [HttpGet("/grading/regrade/requests")]
+        public async Task<IActionResult> RegradeRequests()
+        {
+            var lecturerId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var items = await _gradingService.GetPendingRegradeRequestsAsync(lecturerId);
+            return View(items);
+        }
+
+        [HttpPost("/grading/regrade/{id:length(32)}/resolve")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ResolveRegrade(string id, bool approved, string? note = null)
+        {
+            try
+            {
+                await _gradingService.ResolveRegradeRequestAsync(id, User.Identity?.Name ?? "unknown", approved, note);
+                TempData["Msg"] = approved ? "Regrade approved." : "Regrade rejected.";
+            }
+            catch (Exception ex)
+            {
+                TempData["Err"] = "Error resolving regrade request: " + ex.Message;
+            }
+            return RedirectToAction(nameof(RegradeRequests));
         }
     }
 }

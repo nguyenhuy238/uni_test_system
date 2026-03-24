@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = "Kết quả bài test";
     var passClass = Model.IsPassed ? "badge bg-success" : "badge bg-danger";
+    bool hasPendingRegrade = (bool)(ViewBag.HasPendingRegrade ?? false);
 }
 
 <h2 class="mb-3">Kết quả bài test</h2>
@@ -84,3 +85,39 @@
         Gửi feedback cho bài test này
     </a>
 </div>
+
+@if (TempData["Msg"] != null)
+{
+    <div class="alert alert-success mt-3">@TempData["Msg"]</div>
+}
+@if (TempData["Err"] != null)
+{
+    <div class="alert alert-danger mt-3">@TempData["Err"]</div>
+}
+
+@if (Model.Status == SessionStatus.Graded)
+{
+    <div class="card mt-3 border-0 shadow-sm">
+        <div class="card-body">
+            <h5 class="mb-3">Phúc khảo (Regrade)</h5>
+            @if (hasPendingRegrade)
+            {
+                <div class="alert alert-warning mb-0">
+                    Yêu cầu phúc khảo của bạn đang chờ xử lý.
+                </div>
+            }
+            else
+            {
+                <form method="post" action="/mytests/regrade/request">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="sessionId" value="@Model.Id" />
+                    <div class="mb-2">
+                        <label class="form-label">Lý do yêu cầu phúc khảo</label>
+                        <textarea class="form-control" name="reason" rows="3" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-outline-warning">Gửi yêu cầu phúc khảo</button>
+                </form>
+            }
+        </div>
+    </div>
+}

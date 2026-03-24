@@ -11,6 +11,8 @@ Tài liệu này đóng vai trò là danh sách kiểm tra chủ chốt cho toà
 - Bổ sung kiểm tra trùng lặp nâng cao bằng độ tương đồng nội dung (Jaccard).
 - Bổ sung quản lý bảng điểm có lọc theo khoa/lớp/kỳ trên web và export transcript Excel/PDF (QuestPDF).
 - Bổ sung chấm điểm từng phần cho câu hỏi Matching/DragDrop trong auto-grading.
+- Bổ sung luồng phúc khảo (regrade request) cho sinh viên và moderation xử lý bởi giảng viên/staff.
+- Bổ sung khóa/mở khóa điểm (grade locking) trên phiên chấm.
 
 ---
 
@@ -186,10 +188,10 @@ Mô tả: Chấm điểm tự động và thủ công.
 - [x] **Chấm thủ công (Manual Grading - Essay)** [Web App] [Lecturer]
     - [x] Giảng viên truy cập giao diện chấm bài tự luận.
     - [x] Nhận xét và cho điểm từng câu hỏi.
-- [/] **Moderation & Regrade** [Web App] [Lecturer/Staff]
-    - [ ] Tính năng phúc khảo (Regrade request).
+- [x] **Moderation & Regrade** [Web App] [Lecturer/Staff]
+    - [x] Tính năng phúc khảo (Regrade request).
     - [x] Nhật ký thay đổi điểm (Audit trail).
-    - [ ] Khóa điểm (Grade locking) sau khi hoàn tất.
+    - [x] Khóa điểm (Grade locking) sau khi hoàn tất.
 
 ---
 

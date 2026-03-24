@@ -16,13 +16,15 @@ namespace UniTestSystem.Controllers
         private readonly AssessmentService _assessSvc;
         private readonly ExamAccessTokenService _examAccessTokenService;
         private readonly SessionDeviceGuardService _sessionDeviceGuardService;
+        private readonly IGradingService _gradingService;
 
         public SessionsController(IRepository<Session> s,
                                   IRepository<Test> t,
                                   TestService testSvc,
                                   AssessmentService assessSvc,
                                   ExamAccessTokenService examAccessTokenService,
-                                  SessionDeviceGuardService sessionDeviceGuardService)
+                                  SessionDeviceGuardService sessionDeviceGuardService,
+                                  IGradingService gradingService)
         {
             _sRepo = s;
             _tRepo = t;
@@ -30,6 +32,7 @@ namespace UniTestSystem.Controllers
             _assessSvc = assessSvc;
             _examAccessTokenService = examAccessTokenService;
             _sessionDeviceGuardService = sessionDeviceGuardService;
+            _gradingService = gradingService;
         }
 
         [HttpGet("/mytests/start/{testId}")]
@@ -159,7 +162,32 @@ namespace UniTestSystem.Controllers
 
             var t = await _tRepo.FirstOrDefaultAsync(x => x.Id == s.TestId);
             ViewBag.TestTitle = t?.Title ?? "Result";
+            ViewBag.HasPendingRegrade = await _gradingService.HasPendingRegradeRequestAsync(id);
             return View(s);
+        }
+
+        [HttpPost("/mytests/regrade/request")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RequestRegrade(string sessionId, string reason)
+        {
+            var uid = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(uid)) return Forbid();
+
+            try
+            {
+                await _gradingService.RequestRegradeAsync(
+                    sessionId,
+                    uid,
+                    reason,
+                    HttpContext.Connection.RemoteIpAddress?.ToString());
+                TempData["Msg"] = "Yêu cầu phúc khảo đã được gửi.";
+            }
+            catch (Exception ex)
+            {
+                TempData["Err"] = "Không thể gửi yêu cầu phúc khảo: " + ex.Message;
+            }
+
+            return Redirect($"/mytests/result/{sessionId}");
         }
 
         private int ComputeRemainingSeconds(Session s, Test t)
