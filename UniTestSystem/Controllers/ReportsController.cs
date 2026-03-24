@@ -6,6 +6,7 @@ using UniTestSystem.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
 
 namespace UniTestSystem.Controllers
 {
@@ -80,6 +81,43 @@ namespace UniTestSystem.Controllers
             ViewBag.Courses = courses.OrderBy(c => c.Name).ToList();
 
             return View("QuestionAnalytics", vm);
+        }
+
+        [HttpGet("/reports/lecturer-performance")]
+        public async Task<IActionResult> LecturerPerformance(string? from = null, string? to = null, string? lecturerId = null)
+        {
+            if (!await _perms.HasAsync(User, PermissionCodes.Reports_View))
+                return Redirect("/auth/denied");
+
+            var toUtc = string.IsNullOrWhiteSpace(to) ? DateTime.UtcNow : DateTime.Parse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            var fromUtc = string.IsNullOrWhiteSpace(from) ? toUtc.AddDays(-30) : DateTime.Parse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var isAdminOrStaff = User.IsInRole(Role.Admin.ToString()) || User.IsInRole(Role.Staff.ToString());
+
+            if (!isAdminOrStaff)
+            {
+                lecturerId = currentUserId;
+            }
+            else if (string.IsNullOrWhiteSpace(lecturerId))
+            {
+                lecturerId = null;
+            }
+
+            var vm = await _svc.GetLecturerPerformanceReportAsync(fromUtc, toUtc, lecturerId);
+
+            var lecturers = await _userRepo.Query()
+                .Where(x => x.Role == Role.Lecturer && x.IsActive)
+                .OrderBy(x => x.Name)
+                .ToListAsync();
+
+            ViewBag.From = fromUtc.ToString("yyyy-MM-dd");
+            ViewBag.To = toUtc.ToString("yyyy-MM-dd");
+            ViewBag.LecturerId = lecturerId;
+            ViewBag.Lecturers = lecturers;
+            ViewBag.IsAdminOrStaff = isAdminOrStaff;
+
+            return View("LecturerPerformance", vm);
         }
 
         [HttpGet("/reports/student-subject")]

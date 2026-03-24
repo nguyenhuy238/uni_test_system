@@ -447,6 +447,73 @@ namespace UniTestSystem.Application
             };
         }
 
+        public async Task<LecturerPerformanceVm> GetLecturerPerformanceReportAsync(DateTime fromUtc, DateTime toUtc, string? lecturerId = null)
+        {
+            var sessionsQuery = _sesRepo.Query()
+                .Include(s => s.Test)
+                    .ThenInclude(t => t!.Course)
+                .Where(s => s.EndAt.HasValue &&
+                            s.EndAt.Value >= fromUtc &&
+                            s.EndAt.Value <= toUtc &&
+                            s.Status != SessionStatus.NotStarted &&
+                            s.Test != null &&
+                            s.Test.Course != null &&
+                            !string.IsNullOrWhiteSpace(s.Test.Course.LecturerId));
+
+            if (!string.IsNullOrWhiteSpace(lecturerId))
+            {
+                sessionsQuery = sessionsQuery.Where(s => s.Test != null &&
+                                                         s.Test.Course != null &&
+                                                         s.Test.Course.LecturerId == lecturerId);
+            }
+
+            var sessions = await sessionsQuery.ToListAsync();
+            if (!sessions.Any())
+                return new LecturerPerformanceVm();
+
+            var lecturerIds = sessions
+                .Select(s => s.Test?.Course?.LecturerId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Cast<string>()
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var lecturers = await _userRepo.Query()
+                .Where(u => lecturerIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.Name ?? u.Email ?? u.Id);
+
+            var rows = sessions
+                .GroupBy(s => s.Test!.Course!.LecturerId)
+                .Select(g =>
+                {
+                    var testIds = g.Select(x => x.TestId).Distinct(StringComparer.Ordinal).Count();
+                    var courseIds = g.Select(x => x.Test!.CourseId).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).Count();
+                    var submissionCount = g.Count();
+                    var passCount = g.Count(x => x.TotalScore >= (x.Test?.PassScore ?? 5));
+
+                    var avgScore = submissionCount > 0
+                        ? Math.Round(g.Average(x => NormalizeScoreTo10(x)), 2)
+                        : 0m;
+
+                    return new LecturerPerformanceRow
+                    {
+                        LecturerId = g.Key,
+                        LecturerName = lecturers.TryGetValue(g.Key, out var name) ? name : g.Key,
+                        CourseCount = courseIds,
+                        TestCount = testIds,
+                        SubmissionCount = submissionCount,
+                        AvgScore = avgScore,
+                        PassRatePercent = submissionCount > 0 ? Math.Round(passCount * 100m / submissionCount, 2) : 0m,
+                        LastSubmissionAt = g.Max(x => x.EndAt)
+                    };
+                })
+                .OrderByDescending(x => x.SubmissionCount)
+                .ThenBy(x => x.LecturerName)
+                .ToList();
+
+            return new LecturerPerformanceVm { Rows = rows };
+        }
+
         private static decimal NormalizeScoreTo10(Session s)
         {
             if (s.MaxScore <= 0) return Math.Round(Math.Clamp(s.TotalScore, 0m, 10m), 2);

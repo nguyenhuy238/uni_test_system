@@ -109,4 +109,21 @@ namespace UniTestSystem.Application.Models
         public decimal DiscriminationIndex { get; set; }
         public string DiscriminationLabel { get; set; } = "";
     }
+
+    public class LecturerPerformanceVm
+    {
+        public List<LecturerPerformanceRow> Rows { get; set; } = new();
+    }
+
+    public class LecturerPerformanceRow
+    {
+        public string LecturerId { get; set; } = "";
+        public string LecturerName { get; set; } = "";
+        public int CourseCount { get; set; }
+        public int TestCount { get; set; }
+        public int SubmissionCount { get; set; }
+        public decimal AvgScore { get; set; }
+        public decimal PassRatePercent { get; set; }
+        public DateTime? LastSubmissionAt { get; set; }
+    }
 }

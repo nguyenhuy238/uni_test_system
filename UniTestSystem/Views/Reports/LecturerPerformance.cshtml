@@ -1,0 +1,83 @@
+@using UniTestSystem.Application.Models
+@using UniTestSystem.Domain
+@model LecturerPerformanceVm
+@{
+    ViewData["Title"] = "Lecturer Performance Report";
+    var from = (string)ViewBag.From;
+    var to = (string)ViewBag.To;
+    var selectedLecturerId = (string?)ViewBag.LecturerId;
+    var isAdminOrStaff = (bool?)ViewBag.IsAdminOrStaff ?? false;
+    var lecturers = ViewBag.Lecturers as List<User> ?? new List<User>();
+}
+
+<h2 class="mb-3">Lecturer Performance Report</h2>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-auto">
+        <label class="form-label">From</label>
+        <input type="date" name="from" class="form-control" value="@from" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label">To</label>
+        <input type="date" name="to" class="form-control" value="@to" />
+    </div>
+    @if (isAdminOrStaff)
+    {
+        <div class="col-auto">
+            <label class="form-label">Lecturer</label>
+            <select name="lecturerId" class="form-select">
+                <option value="">All lecturers</option>
+                @foreach (var l in lecturers)
+                {
+                    <option value="@l.Id" selected="@(selectedLecturerId == l.Id ? "selected" : null)">@l.Name (@l.Email)</option>
+                }
+            </select>
+        </div>
+    }
+    <div class="col-auto align-self-end">
+        <button class="btn btn-primary">Apply</button>
+        <a class="btn btn-outline-secondary" href="/reports/lecturer-performance">Reset</a>
+    </div>
+</form>
+
+<div class="card shadow-sm">
+    <div class="card-header fw-bold">Teaching Performance by Lecturer</div>
+    <div class="card-body table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Lecturer</th>
+                    <th class="text-center">#Courses</th>
+                    <th class="text-center">#Tests</th>
+                    <th class="text-center">#Submissions</th>
+                    <th class="text-center">Avg Score (10)</th>
+                    <th class="text-center">Pass %</th>
+                    <th class="text-center">Last Submission</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Rows.Any())
+                {
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">No lecturer performance data in selected range.</td>
+                    </tr>
+                }
+                @foreach (var r in Model.Rows)
+                {
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">@r.LecturerName</div>
+                            <div class="small text-muted">@r.LecturerId</div>
+                        </td>
+                        <td class="text-center">@r.CourseCount</td>
+                        <td class="text-center">@r.TestCount</td>
+                        <td class="text-center">@r.SubmissionCount</td>
+                        <td class="text-center">@r.AvgScore.ToString("0.00")</td>
+                        <td class="text-center">@r.PassRatePercent.ToString("0.00")%</td>
+                        <td class="text-center">@(r.LastSubmissionAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "-")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

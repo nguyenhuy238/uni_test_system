@@ -18,6 +18,7 @@ Tài liệu này đóng vai trò là danh sách kiểm tra chủ chốt cho toà
 - Bổ sung khóa/mở bảng điểm cấp khoa/trường và chặn finalize khi đang bị khóa.
 - Hoàn thiện Widget Dashboard trên Web Reports: tỷ lệ đạt/trượt theo môn, điểm trung bình theo kỳ, và biểu đồ phổ điểm.
 - Hoàn thiện Phân tích Câu hỏi trên Web Reports: độ khó thực tế (difficulty index) và độ phân biệt (discrimination index) theo dữ liệu làm bài thật.
+- Hoàn thiện Báo cáo giảng dạy (Lecturer performance) trên Web Reports với thống kê theo giảng viên (số môn/số đề/số lượt nộp/điểm TB/tỷ lệ đạt).
 
 ---
 
@@ -228,8 +229,8 @@ Mô tả: Cung cấp góc nhìn số liệu cho nhà quản lý.
 - [x] **Phân tích Câu hỏi** [Web App/WPF AdminApp] [Lecturer/Staff]
     - [x] Đánh giá độ khó thực tế của câu hỏi dựa trên kết quả thi.
     - [x] Độ phân biệt của câu hỏi.
-- [/] **Báo cáo Hiệu suất** [WPF AdminApp/Web App] [Staff/Admin]
-    - [ ] Báo cáo giảng dạy (Lecturer performance).
+- [x] **Báo cáo Hiệu suất** [WPF AdminApp/Web App] [Staff/Admin]
+    - [x] Báo cáo giảng dạy (Lecturer performance).
     - [x] Báo cáo chất lượng đào tạo theo Khoa.
 
 ---
