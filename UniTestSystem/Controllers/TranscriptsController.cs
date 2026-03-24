@@ -14,6 +14,7 @@ namespace UniTestSystem.Controllers
         private readonly ITranscriptService _transcriptService;
         private readonly IRepository<Faculty> _facultyRepo;
         private readonly IRepository<StudentClass> _classRepo;
+        private readonly IRepository<Student> _studentRepo;
         private readonly IRepository<User> _userRepo;
         private readonly IExportService _exportService;
         private readonly ISettingsService _settingsService;
@@ -22,6 +23,7 @@ namespace UniTestSystem.Controllers
             ITranscriptService transcriptService,
             IRepository<Faculty> facultyRepo,
             IRepository<StudentClass> classRepo,
+            IRepository<Student> studentRepo,
             IRepository<User> userRepo,
             IExportService exportService,
             ISettingsService settingsService)
@@ -29,6 +31,7 @@ namespace UniTestSystem.Controllers
             _transcriptService = transcriptService;
             _facultyRepo = facultyRepo;
             _classRepo = classRepo;
+            _studentRepo = studentRepo;
             _userRepo = userRepo;
             _exportService = exportService;
             _settingsService = settingsService;
@@ -76,6 +79,7 @@ namespace UniTestSystem.Controllers
         public async Task<IActionResult> Index(string? facultyId = null, string? classId = null, string? semester = null)
         {
             await PrepareFiltersAsync(facultyId, classId, semester);
+            await PrepareLockStateAsync(facultyId);
             var rows = await _transcriptService.GetAdminTranscriptRowsAsync(facultyId, classId, semester);
             return View(rows);
         }
@@ -96,6 +100,25 @@ namespace UniTestSystem.Controllers
             ViewBag.Summary = summary;
             ViewBag.Semester = semester;
             ViewBag.Semesters = new SelectList(await _transcriptService.GetAvailableSemestersAsync(), semester);
+
+            var schoolLocked = await _transcriptService.IsSchoolTranscriptLockedAsync();
+            var student = await _studentRepo.FirstOrDefaultAsync(x => x.Id == id);
+            var facultyLocked = false;
+            string? facultyName = null;
+            if (!string.IsNullOrWhiteSpace(student?.StudentClassId))
+            {
+                var studentClass = await _classRepo.FirstOrDefaultAsync(x => x.Id == student.StudentClassId);
+                if (!string.IsNullOrWhiteSpace(studentClass?.FacultyId))
+                {
+                    facultyLocked = await _transcriptService.IsFacultyTranscriptLockedAsync(studentClass.FacultyId);
+                    facultyName = (await _facultyRepo.FirstOrDefaultAsync(x => x.Id == studentClass.FacultyId))?.Name;
+                }
+            }
+
+            ViewBag.IsTranscriptLocked = schoolLocked || facultyLocked;
+            ViewBag.SchoolLocked = schoolLocked;
+            ViewBag.FacultyLocked = facultyLocked;
+            ViewBag.FacultyLockName = facultyName;
             return View(grades);
         }
 
@@ -154,10 +177,106 @@ namespace UniTestSystem.Controllers
         // Admin/Staff/Lecturer: Finalize a grade
         [HttpPost]
         [Authorize(Policy = "RequireLecturerOrStaffOrAdmin")]
-        public async Task<IActionResult> FinalizeGrade(string enrollmentId, decimal finalScore, string returnUrl)
+        public async Task<IActionResult> FinalizeGrade(
+            string enrollmentId,
+            decimal? finalScore,
+            decimal? examScore,
+            decimal? assignmentScore,
+            decimal? examWeight,
+            decimal? assignmentWeight,
+            string returnUrl)
         {
-            await _transcriptService.FinalizeCourseGradeAsync(enrollmentId, finalScore);
-            return Redirect(returnUrl ?? "/Transcripts/Index");
+            try
+            {
+                decimal resolvedFinalScore;
+                if (examScore.HasValue || assignmentScore.HasValue)
+                {
+                    if (!examScore.HasValue || !assignmentScore.HasValue)
+                        throw new Exception("Both exam score and assignment score are required when weighted formula is used.");
+
+                    resolvedFinalScore = _transcriptService.CalculateWeightedFinalScore(
+                        assignmentScore.Value,
+                        examScore.Value,
+                        assignmentWeight ?? 30m,
+                        examWeight ?? 70m);
+                }
+                else if (finalScore.HasValue)
+                {
+                    resolvedFinalScore = finalScore.Value;
+                }
+                else
+                {
+                    throw new Exception("Final score is required.");
+                }
+
+                await _transcriptService.FinalizeCourseGradeAsync(enrollmentId, resolvedFinalScore);
+                TempData["Msg"] = $"Saved final score: {resolvedFinalScore:0.00}";
+            }
+            catch (Exception ex)
+            {
+                TempData["Err"] = ex.Message;
+            }
+
+            if (string.IsNullOrWhiteSpace(returnUrl) || !Url.IsLocalUrl(returnUrl))
+                returnUrl = "/Transcripts/Index";
+
+            return Redirect(returnUrl);
+        }
+
+        [Authorize(Policy = "RequireStaffOrAdmin")]
+        [HttpPost("/transcripts/lock/school")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> LockSchool(string? note, string? returnUrl)
+        {
+            var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
+            await _transcriptService.LockSchoolTranscriptAsync(actor, note);
+            TempData["Msg"] = "School transcript is now locked.";
+            return RedirectToLocalOrIndex(returnUrl);
+        }
+
+        [Authorize(Policy = "RequireStaffOrAdmin")]
+        [HttpPost("/transcripts/unlock/school")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UnlockSchool(string? note, string? returnUrl)
+        {
+            var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
+            await _transcriptService.UnlockSchoolTranscriptAsync(actor, note);
+            TempData["Msg"] = "School transcript lock removed.";
+            return RedirectToLocalOrIndex(returnUrl);
+        }
+
+        [Authorize(Policy = "RequireStaffOrAdmin")]
+        [HttpPost("/transcripts/lock/faculty")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> LockFaculty(string facultyId, string? note, string? returnUrl)
+        {
+            if (string.IsNullOrWhiteSpace(facultyId))
+            {
+                TempData["Err"] = "Faculty is required.";
+                return RedirectToLocalOrIndex(returnUrl);
+            }
+
+            var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
+            await _transcriptService.LockFacultyTranscriptAsync(facultyId, actor, note);
+            TempData["Msg"] = "Faculty transcript is now locked.";
+            return RedirectToLocalOrIndex(returnUrl);
+        }
+
+        [Authorize(Policy = "RequireStaffOrAdmin")]
+        [HttpPost("/transcripts/unlock/faculty")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UnlockFaculty(string facultyId, string? note, string? returnUrl)
+        {
+            if (string.IsNullOrWhiteSpace(facultyId))
+            {
+                TempData["Err"] = "Faculty is required.";
+                return RedirectToLocalOrIndex(returnUrl);
+            }
+
+            var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
+            await _transcriptService.UnlockFacultyTranscriptAsync(facultyId, actor, note);
+            TempData["Msg"] = "Faculty transcript lock removed.";
+            return RedirectToLocalOrIndex(returnUrl);
         }
 
         private async Task PrepareFiltersAsync(string? facultyId, string? classId, string? semester)
@@ -172,6 +291,27 @@ namespace UniTestSystem.Controllers
             ViewBag.SelectedFacultyId = facultyId;
             ViewBag.SelectedClassId = classId;
             ViewBag.SelectedSemester = semester;
+        }
+
+        private async Task PrepareLockStateAsync(string? selectedFacultyId)
+        {
+            var schoolLocked = await _transcriptService.IsSchoolTranscriptLockedAsync();
+            var facultyLockMap = await _transcriptService.GetFacultyTranscriptLockMapAsync();
+
+            var selectedFacultyLocked = false;
+            if (!string.IsNullOrWhiteSpace(selectedFacultyId))
+                selectedFacultyLocked = facultyLockMap.TryGetValue(selectedFacultyId, out var locked) && locked;
+
+            ViewBag.SchoolTranscriptLocked = schoolLocked;
+            ViewBag.FacultyTranscriptLockMap = facultyLockMap;
+            ViewBag.SelectedFacultyTranscriptLocked = selectedFacultyLocked;
+        }
+
+        private IActionResult RedirectToLocalOrIndex(string? returnUrl)
+        {
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+                return Redirect(returnUrl);
+            return RedirectToAction(nameof(Index));
         }
     }
 }

@@ -1,6 +1,8 @@
 using System.Text;
 using System.Security;
+using System.Security.Claims;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -44,6 +46,49 @@ builder.Services.AddAuthentication(options =>
         o.Cookie.HttpOnly = true;
         o.Cookie.SameSite = SameSiteMode.Lax;
         o.Cookie.Name = "unitest_auth";
+        o.Events = new CookieAuthenticationEvents
+        {
+            OnValidatePrincipal = async context =>
+            {
+                var principal = context.Principal;
+                var userId = principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    context.RejectPrincipal();
+                    await context.HttpContext.SignOutAsync("cookie");
+                    return;
+                }
+
+                var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId);
+                if (user == null || !user.IsActive)
+                {
+                    context.RejectPrincipal();
+                    await context.HttpContext.SignOutAsync("cookie");
+                    return;
+                }
+
+                var roleClaim = principal?.FindFirst(ClaimTypes.Role)?.Value;
+                if (!string.Equals(roleClaim, user.Role.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    context.RejectPrincipal();
+                    await context.HttpContext.SignOutAsync("cookie");
+                    return;
+                }
+
+                var sid = principal?.FindFirst("sid")?.Value;
+                if (string.IsNullOrWhiteSpace(sid))
+                    return;
+
+                var session = await db.UserSessions.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.Id == sid && x.UserId == userId);
+                if (session == null || session.IsRevoked || (session.ExpiresAt.HasValue && session.ExpiresAt <= DateTime.UtcNow))
+                {
+                    context.RejectPrincipal();
+                    await context.HttpContext.SignOutAsync("cookie");
+                }
+            }
+        };
     })
     .AddJwtBearer("jwt", options =>
     {
@@ -75,6 +120,30 @@ builder.Services.AddAuthentication(options =>
                     context.Token = token;
                 }
                 return Task.CompletedTask;
+            },
+            OnTokenValidated = async context =>
+            {
+                var principal = context.Principal;
+                var userId = principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    context.Fail("Invalid token principal.");
+                    return;
+                }
+
+                var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId);
+                if (user == null || !user.IsActive)
+                {
+                    context.Fail("User is inactive or not found.");
+                    return;
+                }
+
+                var roleClaim = principal?.FindFirst(ClaimTypes.Role)?.Value;
+                if (!string.Equals(roleClaim, user.Role.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Fail("User role has changed.");
+                }
             }
         };
     });

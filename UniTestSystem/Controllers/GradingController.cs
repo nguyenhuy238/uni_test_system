@@ -49,11 +49,11 @@ namespace UniTestSystem.Controllers
                 Session = s,
                 Test = s.Test ?? new Test(),
                 Essays = s.StudentAnswers
-                    .Where(sa => sa.Question.Type == QType.Essay)
+                    .Where(sa => sa.Question != null && sa.Question.Type == QType.Essay)
                     .Select(sa => new GradeSessionViewModel.EssayItem
                     {
                         QuestionId = sa.QuestionId,
-                        Content = sa.Question.Content,
+                        Content = sa.Question?.Content ?? "(Question removed)",
                         UserAnswer = sa.EssayAnswer,
                         MaxPoints = testQPoints.TryGetValue(sa.QuestionId, out var p) ? p : 1m,
                         GivenScore = sa.Score,

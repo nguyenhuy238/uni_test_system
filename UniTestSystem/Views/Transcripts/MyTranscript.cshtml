@@ -86,7 +86,7 @@
                         <tfoot class="bg-light-subtle">
                             @{
                                 var semCredits = semester.Sum(e => e.Course?.Credits ?? 0);
-                                var semPoints = semester.Where(e => e.GradePoint.HasValue).Sum(e => e.GradePoint.Value * (e.Course?.Credits ?? 0));
+                                var semPoints = semester.Where(e => e.GradePoint.HasValue).Sum(e => e.GradePoint.GetValueOrDefault() * (e.Course?.Credits ?? 0));
                                 var semGpa = semCredits > 0 ? semPoints / semCredits : 0;
                             }
                             <tr class="fw-bold">

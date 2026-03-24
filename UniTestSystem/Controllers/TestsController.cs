@@ -399,8 +399,10 @@ namespace UniTestSystem.Controllers
 
         private async Task CreateSnapshotsAsync(Test test)
         {
+            test.QuestionSnapshots ??= new List<TestQuestionSnapshot>();
+
             // Nếu đã có snapshot thì không cần tạo lại (tránh tốn tài nguyên)
-            if (test.QuestionSnapshots != null && test.QuestionSnapshots.Any()) return;
+            if (test.QuestionSnapshots.Any()) return;
 
             foreach (var tq in test.TestQuestions)
             {

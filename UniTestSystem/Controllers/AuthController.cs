@@ -150,7 +150,7 @@ namespace UniTestSystem.Controllers
                 ExpiresUtc = rememberMe ? DateTimeOffset.UtcNow.AddDays(30) : null
             };
 
-            await HttpContext.SignInAsync("cookie", AuthService.CreatePrincipal(u), props);
+            await HttpContext.SignInAsync("cookie", AuthService.CreatePrincipal(u, session.Id), props);
 
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                 return Redirect(returnUrl);

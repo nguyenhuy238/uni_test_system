@@ -13,6 +13,9 @@ Tài liệu này đóng vai trò là danh sách kiểm tra chủ chốt cho toà
 - Bổ sung chấm điểm từng phần cho câu hỏi Matching/DragDrop trong auto-grading.
 - Bổ sung luồng phúc khảo (regrade request) cho sinh viên và moderation xử lý bởi giảng viên/staff.
 - Bổ sung khóa/mở khóa điểm (grade locking) trên phiên chấm.
+- Bổ sung vô hiệu hóa phiên đăng nhập ngay khi vai trò người dùng thay đổi (cookie/JWT validation + revoke session/refresh token).
+- Bổ sung công thức tính điểm trọng số (điểm quá trình + điểm thi, tùy chỉnh trọng số) trong luồng finalize bảng điểm.
+- Bổ sung khóa/mở bảng điểm cấp khoa/trường và chặn finalize khi đang bị khóa.
 
 ---
 
@@ -50,10 +53,10 @@ Mô tả: Quản lý vòng đời người dùng, phân quyền và bảo mật 
     - [x] Bảo vệ API Endpoints và UI Components theo quyền hạn.
 - [x] **Quản lý Hồ sơ (Profile Management)** [Web App] [All Roles]
     - [x] Xem và cập nhật thông tin cá nhân (Họ tên, ngày sinh, ảnh đại diện).
-- [/] **Xử lý Đa thiết bị & Phiên làm việc (Multi-device & Session Handling)** [Web App] [All Roles]
+- [x] **Xử lý Đa thiết bị & Phiên làm việc (Multi-device & Session Handling)** [Web App] [All Roles]
     - [x] Hiển thị danh sách các phiên làm việc đang hoạt động.
     - [x] Chức năng "Đăng xuất khỏi tất cả các thiết bị".
-    - [ ] Vô hiệu hóa phiên làm việc ngay lập tức khi vai trò người dùng thay đổi.
+    - [x] Vô hiệu hóa phiên làm việc ngay lập tức khi vai trò người dùng thay đổi.
 
 ---
 
@@ -202,9 +205,9 @@ Mô tả: Tổng hợp kết quả học tập.
 
 - [/] **Tính toán Điểm** [Server-side/WPF AdminApp] [Staff]
     - [/] Tính điểm trung bình (GPA) theo học kỳ và năm học (đã có GPA tích lũy + hiển thị GPA theo kỳ; chưa tách pipeline year-end hoàn chỉnh).
-    - [ ] Xử lý công thức tính điểm phức tạp (trọng số thi, trọng số bài tập).
-- [/] **Quản lý Bảng điểm** [WPF AdminApp] [Staff/Admin]
-    - [ ] Khóa/Mở bảng điểm cấp khoa/trường.
+    - [x] Xử lý công thức tính điểm phức tạp (trọng số thi, trọng số bài tập).
+- [x] **Quản lý Bảng điểm** [WPF AdminApp] [Staff/Admin]
+    - [x] Khóa/Mở bảng điểm cấp khoa/trường.
     - [x] Lọc bảng điểm theo khoa, lớp, kỳ học.
 - [x] **Xuất Bảng điểm** [Web App/WPF AdminApp] [Student/Staff]
     - [x] Xuất PDF chuyên nghiệp bằng QuestPDF.

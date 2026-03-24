@@ -13,6 +13,16 @@ public interface ITranscriptService
     
     // Grading
     Task<bool> FinalizeCourseGradeAsync(string enrollmentId, decimal finalScore);
+    decimal CalculateWeightedFinalScore(decimal assignmentScore, decimal examScore, decimal assignmentWeightPercent, decimal examWeightPercent);
+
+    // Transcript Locking
+    Task<bool> IsSchoolTranscriptLockedAsync();
+    Task<bool> IsFacultyTranscriptLockedAsync(string facultyId);
+    Task<Dictionary<string, bool>> GetFacultyTranscriptLockMapAsync();
+    Task LockSchoolTranscriptAsync(string actor, string? note = null);
+    Task UnlockSchoolTranscriptAsync(string actor, string? note = null);
+    Task LockFacultyTranscriptAsync(string facultyId, string actor, string? note = null);
+    Task UnlockFacultyTranscriptAsync(string facultyId, string actor, string? note = null);
     
     // Retrieval
     Task<List<Enrollment>> GetStudentGradesAsync(string studentId);

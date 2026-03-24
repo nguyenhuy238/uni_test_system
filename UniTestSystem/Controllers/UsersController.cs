@@ -1,4 +1,5 @@
 using UniTestSystem.Application.Interfaces;
+using UniTestSystem.Application;
 using UniTestSystem.Domain;
 using UniTestSystem.Application.Models.Users;
 using Microsoft.AspNetCore.Authorization;
@@ -15,6 +16,7 @@ namespace UniTestSystem.Controllers
         private readonly IRepository<Lecturer> _lecturerRepo;
         private readonly IRepository<StudentClass> _classRepo;
         private readonly IRepository<Faculty> _facultyRepo;
+        private readonly AuthService _authService;
         private readonly ILogger<UsersController> _logger;
 
         public UsersController(
@@ -23,6 +25,7 @@ namespace UniTestSystem.Controllers
             IRepository<Lecturer> lecturerRepo,
             IRepository<StudentClass> classRepo,
             IRepository<Faculty> facultyRepo,
+            AuthService authService,
             ILogger<UsersController> logger)
         {
             _userRepo = userRepo;
@@ -30,6 +33,7 @@ namespace UniTestSystem.Controllers
             _lecturerRepo = lecturerRepo;
             _classRepo = classRepo;
             _facultyRepo = facultyRepo;
+            _authService = authService;
             _logger = logger;
         }
 
@@ -175,6 +179,7 @@ namespace UniTestSystem.Controllers
         {
             var u = await _userRepo.FirstOrDefaultAsync(x => x.Id == id);
             if (u == null) return NotFound();
+            var oldRole = u.Role;
 
             await LoadLookups();
 
@@ -187,6 +192,7 @@ namespace UniTestSystem.Controllers
             u.Name = vm.Name.Trim();
             u.Email = vm.Email.Trim();
             u.Role = vm.Role;
+            await _userRepo.UpsertAsync(x => x.Id == id, u);
 
             if (u.Role == Role.Student)
             {
@@ -213,13 +219,21 @@ namespace UniTestSystem.Controllers
             }
             else
             {
-                await _userRepo.UpsertAsync(x => x.Id == id, u);
+                // Base user row already saved above.
             }
 
             if (!string.IsNullOrWhiteSpace(vm.Password))
             {
                 u.PasswordHash = BCrypt.Net.BCrypt.HashPassword(vm.Password);
                 await _userRepo.UpsertAsync(x => x.Id == id, u);
+            }
+            
+            if (oldRole != u.Role)
+            {
+                var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "system";
+                await _authService.InvalidateAllAuthSessionsAsync(u.Id, ip);
+                TempData["Msg"] = $"Cập nhật người dùng thành công. Đã vô hiệu hóa mọi phiên đăng nhập do thay đổi vai trò ({oldRole} -> {u.Role}).";
+                return RedirectToAction(nameof(Index));
             }
 
             TempData["Msg"] = "Cập nhật người dùng thành công.";

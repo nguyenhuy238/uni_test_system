@@ -2,17 +2,24 @@ using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Application.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace UniTestSystem.Application
 {
     public class TranscriptService : ITranscriptService
     {
+        private const string TranscriptLockEntityName = "TranscriptLock";
+        private const string TranscriptLockActionLock = "Lock";
+        private const string TranscriptLockActionUnlock = "Unlock";
+        private const string SchoolScope = "school";
+
         private readonly IRepository<Enrollment> _enrollmentRepo;
         private readonly IRepository<Transcript> _transcriptRepo;
         private readonly IRepository<Course> _courseRepo;
         private readonly IRepository<Student> _studentRepo;
         private readonly IRepository<StudentClass> _classRepo;
         private readonly IRepository<Faculty> _facultyRepo;
+        private readonly IRepository<AuditEntry> _auditRepo;
 
         public TranscriptService(
             IRepository<Enrollment> enrollmentRepo,
@@ -20,7 +27,8 @@ namespace UniTestSystem.Application
             IRepository<Course> courseRepo,
             IRepository<Student> studentRepo,
             IRepository<StudentClass> classRepo,
-            IRepository<Faculty> facultyRepo)
+            IRepository<Faculty> facultyRepo,
+            IRepository<AuditEntry> auditRepo)
         {
             _enrollmentRepo = enrollmentRepo;
             _transcriptRepo = transcriptRepo;
@@ -28,6 +36,7 @@ namespace UniTestSystem.Application
             _studentRepo = studentRepo;
             _classRepo = classRepo;
             _facultyRepo = facultyRepo;
+            _auditRepo = auditRepo;
         }
 
         public async Task<Transcript> CalculateGPAAsync(string studentId)
@@ -161,6 +170,23 @@ namespace UniTestSystem.Application
                 .ToListAsync();
         }
 
+        public decimal CalculateWeightedFinalScore(decimal assignmentScore, decimal examScore, decimal assignmentWeightPercent, decimal examWeightPercent)
+        {
+            if (assignmentScore < 0 || assignmentScore > 10)
+                throw new Exception("Assignment score must be between 0 and 10.");
+            if (examScore < 0 || examScore > 10)
+                throw new Exception("Exam score must be between 0 and 10.");
+
+            var assignmentWeight = Math.Clamp(assignmentWeightPercent, 0m, 100m);
+            var examWeight = Math.Clamp(examWeightPercent, 0m, 100m);
+            var totalWeight = assignmentWeight + examWeight;
+            if (totalWeight <= 0m)
+                throw new Exception("Total weight must be greater than 0.");
+
+            var finalScore = ((assignmentScore * assignmentWeight) + (examScore * examWeight)) / totalWeight;
+            return Math.Round(Math.Clamp(finalScore, 0m, 10m), 2);
+        }
+
         public async Task<bool> FinalizeCourseGradeAsync(string enrollmentId, decimal finalScore)
         {
             var enrollment = await _enrollmentRepo.Query()
@@ -168,7 +194,12 @@ namespace UniTestSystem.Application
                 .FirstOrDefaultAsync(e => e.Id == enrollmentId)
                 ?? throw new Exception("Enrollment not found");
 
-            enrollment.FinalScore = finalScore;
+            if (finalScore < 0 || finalScore > 10)
+                throw new Exception("Final score must be between 0 and 10.");
+
+            await EnsureTranscriptEditableAsync(enrollment.StudentId);
+
+            enrollment.FinalScore = Math.Round(finalScore, 2);
             
             // Map 10-point scale to Grade and 4.0 scale
             if (finalScore >= 8.5m) { enrollment.Grade = "A"; enrollment.GradePoint = 4.0m; }
@@ -185,6 +216,45 @@ namespace UniTestSystem.Application
             return true;
         }
 
+        public Task<bool> IsSchoolTranscriptLockedAsync() => IsScopeLockedAsync(SchoolScope);
+
+        public async Task<bool> IsFacultyTranscriptLockedAsync(string facultyId)
+        {
+            if (string.IsNullOrWhiteSpace(facultyId))
+                return false;
+            return await IsScopeLockedAsync(GetFacultyScope(facultyId));
+        }
+
+        public async Task<Dictionary<string, bool>> GetFacultyTranscriptLockMapAsync()
+        {
+            var logs = await _auditRepo.Query()
+                .Where(x => x.EntityName == TranscriptLockEntityName &&
+                            x.EntityId.StartsWith("faculty:") &&
+                            (x.Action == TranscriptLockActionLock || x.Action == TranscriptLockActionUnlock))
+                .OrderByDescending(x => x.At)
+                .ThenByDescending(x => x.Id)
+                .ToListAsync();
+
+            return logs
+                .GroupBy(x => x.EntityId, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key["faculty:".Length..],
+                    g => g.First().Action == TranscriptLockActionLock,
+                    StringComparer.OrdinalIgnoreCase);
+        }
+
+        public Task LockSchoolTranscriptAsync(string actor, string? note = null) =>
+            SaveScopeLockAsync(SchoolScope, lockState: true, actor, note);
+
+        public Task UnlockSchoolTranscriptAsync(string actor, string? note = null) =>
+            SaveScopeLockAsync(SchoolScope, lockState: false, actor, note);
+
+        public Task LockFacultyTranscriptAsync(string facultyId, string actor, string? note = null) =>
+            SaveScopeLockAsync(GetFacultyScope(facultyId), lockState: true, actor, note);
+
+        public Task UnlockFacultyTranscriptAsync(string facultyId, string actor, string? note = null) =>
+            SaveScopeLockAsync(GetFacultyScope(facultyId), lockState: false, actor, note);
+
         public async Task<List<Enrollment>> GetStudentGradesAsync(string studentId)
         {
             return await _enrollmentRepo.Query()
@@ -198,6 +268,70 @@ namespace UniTestSystem.Application
         {
             return await _transcriptRepo.Query()
                 .FirstOrDefaultAsync(x => x.StudentId == studentId && !x.IsDeleted);
+        }
+
+        private static string GetFacultyScope(string facultyId) => $"faculty:{facultyId}";
+
+        private async Task<bool> IsScopeLockedAsync(string scope)
+        {
+            var latest = await _auditRepo.Query()
+                .Where(x => x.EntityName == TranscriptLockEntityName &&
+                            x.EntityId == scope &&
+                            (x.Action == TranscriptLockActionLock || x.Action == TranscriptLockActionUnlock))
+                .OrderByDescending(x => x.At)
+                .ThenByDescending(x => x.Id)
+                .FirstOrDefaultAsync();
+
+            return latest?.Action == TranscriptLockActionLock;
+        }
+
+        private async Task SaveScopeLockAsync(string scope, bool lockState, string actor, string? note)
+        {
+            if (string.IsNullOrWhiteSpace(scope))
+                throw new Exception("Lock scope is required.");
+
+            var currentlyLocked = await IsScopeLockedAsync(scope);
+            if (currentlyLocked == lockState)
+                return;
+
+            var payload = JsonSerializer.Serialize(new
+            {
+                Scope = scope,
+                Note = note,
+                At = DateTime.UtcNow
+            });
+
+            await _auditRepo.InsertAsync(new AuditEntry
+            {
+                At = DateTime.UtcNow,
+                Actor = string.IsNullOrWhiteSpace(actor) ? "system" : actor,
+                Action = lockState ? TranscriptLockActionLock : TranscriptLockActionUnlock,
+                EntityName = TranscriptLockEntityName,
+                EntityId = scope,
+                After = payload
+            });
+        }
+
+        private async Task EnsureTranscriptEditableAsync(string studentId)
+        {
+            if (await IsSchoolTranscriptLockedAsync())
+                throw new Exception("Transcript is locked at school level.");
+
+            var classId = await _studentRepo.Query()
+                .Where(s => s.Id == studentId)
+                .Select(s => s.StudentClassId)
+                .FirstOrDefaultAsync();
+
+            if (string.IsNullOrWhiteSpace(classId))
+                return;
+
+            var facultyId = await _classRepo.Query()
+                .Where(c => c.Id == classId)
+                .Select(c => c.FacultyId)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrWhiteSpace(facultyId) && await IsFacultyTranscriptLockedAsync(facultyId))
+                throw new Exception("Transcript is locked at faculty level.");
         }
     }
 }

@@ -41,7 +41,7 @@ namespace UniTestSystem.Application
                 .Include(s => s.Test)
                 .Include(s => s.User)
                 .Where(s => (s.Status == SessionStatus.Submitted || s.Status == SessionStatus.AutoSubmitted || s.Status == SessionStatus.Graded))
-                .Where(s => s.StudentAnswers.Any(sa => sa.Question.Type == QType.Essay))
+                .Where(s => s.StudentAnswers.Any(sa => sa.Question != null && sa.Question.Type == QType.Essay))
                 .OrderByDescending(s => s.EndAt)
                 .ToListAsync();
         }
@@ -51,7 +51,7 @@ namespace UniTestSystem.Application
             return await _sRepo.Query()
                 .Include(s => s.User)
                 .Include(s => s.Test)
-                    .ThenInclude(t => t.TestQuestions)
+                    .ThenInclude(t => t!.TestQuestions)
                 .Include(s => s.StudentAnswers)
                     .ThenInclude(sa => sa.Question)
                 .FirstOrDefaultAsync(s => s.Id == sessionId) 
@@ -89,7 +89,7 @@ namespace UniTestSystem.Application
                 // Manual score is the sum of scores of questions that were manually graded (Essays)
                 // Note: In this system, sa.Score is already the points (not a 0..1 scale)
                 s.ManualScore = s.StudentAnswers
-                    .Where(x => x.Question.Type == QType.Essay && x.GradedAt != null)
+                    .Where(x => x.Question != null && x.Question.Type == QType.Essay && x.GradedAt != null)
                     .Sum(x => x.Score);
                 
                 s.TotalScore = s.AutoScore + s.ManualScore;
