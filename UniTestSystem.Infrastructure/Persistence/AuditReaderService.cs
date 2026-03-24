@@ -28,6 +28,7 @@ namespace UniTestSystem.Infrastructure.Persistence
                     Id = x.Id,
                     At = x.At,
                     Actor = x.Actor,
+                    Action = x.Action,
                     EntityName = x.EntityName,
                     EntityId = x.EntityId,
                     Before = x.Before,

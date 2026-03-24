@@ -23,16 +23,43 @@ namespace UniTestSystem.AdminApp.ViewModels
         private StudentClass? _selectedClass;
         private Course? _selectedCourse;
         private Enrollment? _selectedEnrollment;
+        private SystemSettingsModel _systemSettings = new();
+        private ExamSchedule? _selectedExamSchedule;
+        private ExamScheduleDraft? _selectedScheduleDraft;
+        private string _auditFrom = "";
+        private string _auditTo = "";
+        private string _auditKeyword = "";
+        private string _auditActor = "";
+        private string _selectedScheduleTestId = "";
+        private string _selectedScheduleCourseId = "";
+        private string _selectedScheduleRoom = "";
+        private string _selectedScheduleExamType = "Final";
+        private DateTime _selectedScheduleStartTime = DateTime.Now.AddDays(1).Date.AddHours(8);
+        private DateTime _selectedScheduleEndTime = DateTime.Now.AddDays(1).Date.AddHours(10);
+        private string _selectedExportPeriod = "Monthly";
+        private string _selectedExportFormat = "xlsx";
+        private bool _isDarkTheme;
 
         // UI Helpers for nested collections
         private ObservableCollection<OptionWrapper> _selectedQuestionOptions = new();
         private ObservableCollection<string> _selectedQuestionCorrectKeys = new();
         private ObservableCollection<TestItem> _selectedTestItems = new();
         public string CurrentUserName => _apiService.CurrentUser?.Name ?? "Admin";
+        public string CurrentUserRole => _apiService.CurrentUser?.Role ?? "Unknown";
         public bool IsAdmin => _apiService.CurrentUser?.Role == "Admin";
         public bool IsStaff => _apiService.CurrentUser?.Role == "Staff";
         public bool CanManageAcademic => IsAdmin || IsStaff;
         public bool CanManageSystem => IsAdmin;
+        public bool CanManageUsersRoles => IsAdmin || IsStaff;
+        public bool CanViewAudit => IsAdmin;
+        public bool CanViewSettings => IsAdmin;
+        public bool CanViewMaintenance => IsAdmin;
+        public bool CanManageScheduling => IsAdmin || IsStaff;
+        public bool CanExportReports => IsAdmin || IsStaff;
+        public bool CanEditRoles => IsAdmin;
+        public IEnumerable<string> EditableRoles => IsAdmin
+            ? new[] { "Admin", "Staff", "Lecturer", "Student" }
+            : new[] { "Lecturer", "Student" };
 
         public MainViewModel(ApiService apiService)
         {
@@ -46,58 +73,75 @@ namespace UniTestSystem.AdminApp.ViewModels
             Courses = new ObservableCollection<Course>();
             Enrollments = new ObservableCollection<Enrollment>();
             Lecturers = new ObservableCollection<User>(); // Filtered from Users
+            AuditLogs = new ObservableCollection<AuditLogEntry>();
+            ExamSchedules = new ObservableCollection<ExamSchedule>();
+            ScheduleDrafts = new ObservableCollection<ExamScheduleDraft>();
+            BackupFiles = new ObservableCollection<BackupFileInfo>();
+            PeriodOptions = new ObservableCollection<string> { "Weekly", "Monthly", "Quarterly" };
+            ExportFormatOptions = new ObservableCollection<string> { "xlsx", "pdf" };
 
             LoadDataCommand = new RelayCommand(async () => await LoadDataAsync());
             
-            AddTestCommand = new RelayCommand(() => { SelectedTest = new Test(); StatusMessage = "Adding new test..."; });
-            SaveTestCommand = new RelayCommand(async () => await SaveTestAsync(), () => SelectedTest != null);
-            DeleteTestCommand = new RelayCommand(async () => await DeleteTestAsync(), () => SelectedTest != null && !string.IsNullOrEmpty(SelectedTest.Id));
+            AddTestCommand = new RelayCommand(() => { SelectedTest = new Test(); StatusMessage = "Adding new test..."; }, () => IsAdmin);
+            SaveTestCommand = new RelayCommand(async () => await SaveTestAsync(), () => IsAdmin && SelectedTest != null);
+            DeleteTestCommand = new RelayCommand(async () => await DeleteTestAsync(), () => IsAdmin && SelectedTest != null && !string.IsNullOrEmpty(SelectedTest.Id));
             
-            AddUserCommand = new RelayCommand(() => { SelectedUser = new User(); StatusMessage = "Adding new student..."; });
-            SaveUserCommand = new RelayCommand(async () => await SaveUserAsync(), () => SelectedUser != null);
-            DeleteUserCommand = new RelayCommand(async () => await DeleteUserAsync(), () => SelectedUser != null && !string.IsNullOrEmpty(SelectedUser.Id));
+            AddUserCommand = new RelayCommand(() => { SelectedUser = new User { Role = "Student" }; StatusMessage = "Adding new user..."; }, () => CanManageUsersRoles);
+            SaveUserCommand = new RelayCommand(async () => await SaveUserAsync(), () => CanManageUsersRoles && SelectedUser != null);
+            DeleteUserCommand = new RelayCommand(async () => await DeleteUserAsync(), () => CanManageUsersRoles && SelectedUser != null && !string.IsNullOrEmpty(SelectedUser.Id));
 
-            AddQuestionCommand = new RelayCommand(() => { SelectedQuestion = new Question(); StatusMessage = "Adding new question..."; });
-            SaveQuestionCommand = new RelayCommand(async () => await SaveQuestionAsync(), () => SelectedQuestion != null);
-            DeleteQuestionCommand = new RelayCommand(async () => await DeleteQuestionAsync(), () => SelectedQuestion != null && !string.IsNullOrEmpty(SelectedQuestion.Id));
+            AddQuestionCommand = new RelayCommand(() => { SelectedQuestion = new Question(); StatusMessage = "Adding new question..."; }, () => IsAdmin);
+            SaveQuestionCommand = new RelayCommand(async () => await SaveQuestionAsync(), () => IsAdmin && SelectedQuestion != null);
+            DeleteQuestionCommand = new RelayCommand(async () => await DeleteQuestionAsync(), () => IsAdmin && SelectedQuestion != null && !string.IsNullOrEmpty(SelectedQuestion.Id));
 
-            DeleteSessionCommand = new RelayCommand(async () => await DeleteSessionAsync(), () => SelectedSession != null);
+            DeleteSessionCommand = new RelayCommand(async () => await DeleteSessionAsync(), () => CanManageAcademic && SelectedSession != null);
 
-            ExportXlsxCommand = new RelayCommand(async () => await ExportAsync("xlsx"));
-            ExportPdfCommand = new RelayCommand(async () => await ExportAsync("pdf"));
+            ExportXlsxCommand = new RelayCommand(async () => await ExportAsync("xlsx"), () => CanExportReports);
+            ExportPdfCommand = new RelayCommand(async () => await ExportAsync("pdf"), () => CanExportReports);
+            ExportPeriodicReportCommand = new RelayCommand(async () => await ExportPeriodicReportAsync(), () => CanExportReports);
 
-            SubmitQuestionCommand = new RelayCommand(async () => await SubmitQuestionAsync(), () => SelectedQuestion != null && SelectedQuestion.Status == "Draft");
-            ApproveQuestionCommand = new RelayCommand(async () => await ApproveQuestionAsync(), () => SelectedQuestion != null && SelectedQuestion.Status == "Pending");
-            RejectQuestionCommand = new RelayCommand(async () => await RejectQuestionAsync(), () => SelectedQuestion != null && SelectedQuestion.Status == "Pending");
+            SubmitQuestionCommand = new RelayCommand(async () => await SubmitQuestionAsync(), () => IsAdmin && SelectedQuestion != null && SelectedQuestion.Status == "Draft");
+            ApproveQuestionCommand = new RelayCommand(async () => await ApproveQuestionAsync(), () => IsAdmin && SelectedQuestion != null && SelectedQuestion.Status == "Pending");
+            RejectQuestionCommand = new RelayCommand(async () => await RejectQuestionAsync(), () => IsAdmin && SelectedQuestion != null && SelectedQuestion.Status == "Pending");
 
             // Question Option Commands
-            AddOptionCommand = new RelayCommand(AddOption);
-            RemoveOptionCommand = new RelayCommand(RemoveOption, () => SelectedOption != null);
-            ToggleCorrectKeyCommand = new RelayCommand(ToggleCorrectKey, () => SelectedOption != null);
+            AddOptionCommand = new RelayCommand(AddOption, () => IsAdmin);
+            RemoveOptionCommand = new RelayCommand(RemoveOption, () => IsAdmin && SelectedOption != null);
+            ToggleCorrectKeyCommand = new RelayCommand(ToggleCorrectKey, () => IsAdmin && SelectedOption != null);
 
             // Test Item Commands
-            AddTestItemCommand = new RelayCommand(AddTestItem);
-            RemoveTestItemCommand = new RelayCommand(RemoveTestItem, () => SelectedTestItem != null);
+            AddTestItemCommand = new RelayCommand(AddTestItem, () => IsAdmin);
+            RemoveTestItemCommand = new RelayCommand(RemoveTestItem, () => IsAdmin && SelectedTestItem != null);
 
-            AddFacultyCommand = new RelayCommand(() => { SelectedFaculty = new Faculty { Name = "New Faculty" }; });
-            SaveFacultyCommand = new RelayCommand(async () => await SaveFacultyAsync());
-            DeleteFacultyCommand = new RelayCommand(async () => await DeleteFacultyAsync());
+            AddFacultyCommand = new RelayCommand(() => { SelectedFaculty = new Faculty { Name = "New Faculty" }; }, () => CanManageAcademic);
+            SaveFacultyCommand = new RelayCommand(async () => await SaveFacultyAsync(), () => CanManageAcademic);
+            DeleteFacultyCommand = new RelayCommand(async () => await DeleteFacultyAsync(), () => CanManageAcademic);
 
-            AddClassCommand = new RelayCommand(() => { SelectedClass = new StudentClass { Name = "New Class" }; });
-            SaveClassCommand = new RelayCommand(async () => await SaveClassAsync());
-            DeleteClassCommand = new RelayCommand(async () => await DeleteClassAsync());
+            AddClassCommand = new RelayCommand(() => { SelectedClass = new StudentClass { Name = "New Class" }; }, () => CanManageAcademic);
+            SaveClassCommand = new RelayCommand(async () => await SaveClassAsync(), () => CanManageAcademic);
+            DeleteClassCommand = new RelayCommand(async () => await DeleteClassAsync(), () => CanManageAcademic);
 
-            AddCourseCommand = new RelayCommand(() => { SelectedCourse = new Course { Name = "New Course" }; });
-            SaveCourseCommand = new RelayCommand(async () => await SaveCourseAsync());
-            DeleteCourseCommand = new RelayCommand(async () => await DeleteCourseAsync());
+            AddCourseCommand = new RelayCommand(() => { SelectedCourse = new Course { Name = "New Course" }; }, () => CanManageAcademic);
+            SaveCourseCommand = new RelayCommand(async () => await SaveCourseAsync(), () => CanManageAcademic);
+            DeleteCourseCommand = new RelayCommand(async () => await DeleteCourseAsync(), () => CanManageAcademic);
 
-            EnrollStudentCommand = new RelayCommand(async () => await EnrollStudentAsync());
-            UnenrollStudentCommand = new RelayCommand(async () => await UnenrollStudentAsync());
+            EnrollStudentCommand = new RelayCommand(async () => await EnrollStudentAsync(), () => CanManageAcademic);
+            UnenrollStudentCommand = new RelayCommand(async () => await UnenrollStudentAsync(), () => CanManageAcademic);
 
-            ImportStudentsCommand = new RelayCommand(async () => await ImportAsync("students"));
-            ImportCoursesCommand = new RelayCommand(async () => await ImportAsync("courses"));
+            ImportStudentsCommand = new RelayCommand(async () => await ImportAsync("students"), () => CanManageAcademic);
+            ImportCoursesCommand = new RelayCommand(async () => await ImportAsync("courses"), () => CanManageAcademic);
 
-            SaveSettingsCommand = new RelayCommand(async () => await SaveSettingsAsync());
+            SaveSettingsCommand = new RelayCommand(async () => await SaveSettingsAsync(), () => CanViewSettings);
+            LoadAuditCommand = new RelayCommand(async () => await LoadAuditAsync(), () => CanViewAudit);
+            CreateBackupCommand = new RelayCommand(async () => await CreateBackupAsync(), () => CanViewMaintenance);
+            RestoreBackupCommand = new RelayCommand(async () => await RestoreBackupAsync(), () => CanViewMaintenance);
+            AddScheduleDraftCommand = new RelayCommand(AddScheduleDraft, () => CanManageScheduling);
+            RemoveScheduleDraftCommand = new RelayCommand(RemoveScheduleDraft, () => CanManageScheduling && SelectedScheduleDraft != null);
+            CreateSingleScheduleCommand = new RelayCommand(async () => await CreateSingleScheduleAsync(), () => CanManageScheduling);
+            CreateBulkScheduleCommand = new RelayCommand(async () => await CreateBulkSchedulesAsync(), () => CanManageScheduling && ScheduleDrafts.Count > 0);
+            DeleteScheduleCommand = new RelayCommand(async () => await DeleteScheduleAsync(), () => CanManageScheduling && SelectedExamSchedule != null);
+            ExportScheduleCsvCommand = new RelayCommand(async () => await ExportScheduleCsvAsync(), () => CanManageScheduling);
+            ToggleThemeCommand = new RelayCommand(() => { IsDarkTheme = !IsDarkTheme; StatusMessage = IsDarkTheme ? "Dark mode enabled." : "Light mode enabled."; });
 
             // Load data automatically on startup
             _ = LoadDataAsync();
@@ -112,6 +156,12 @@ namespace UniTestSystem.AdminApp.ViewModels
         public ObservableCollection<Course> Courses { get; }
         public ObservableCollection<Enrollment> Enrollments { get; }
         public ObservableCollection<User> Lecturers { get; }
+        public ObservableCollection<AuditLogEntry> AuditLogs { get; }
+        public ObservableCollection<ExamSchedule> ExamSchedules { get; }
+        public ObservableCollection<ExamScheduleDraft> ScheduleDrafts { get; }
+        public ObservableCollection<BackupFileInfo> BackupFiles { get; }
+        public ObservableCollection<string> PeriodOptions { get; }
+        public ObservableCollection<string> ExportFormatOptions { get; }
 
         public ObservableCollection<OptionWrapper> SelectedQuestionOptions => _selectedQuestionOptions;
         public ObservableCollection<string> SelectedQuestionCorrectKeys => _selectedQuestionCorrectKeys;
@@ -182,10 +232,28 @@ namespace UniTestSystem.AdminApp.ViewModels
             set { _selectedEnrollment = value; OnPropertyChanged(); }
         }
 
+        public ExamSchedule? SelectedExamSchedule
+        {
+            get => _selectedExamSchedule;
+            set { _selectedExamSchedule = value; OnPropertyChanged(); }
+        }
+
+        public ExamScheduleDraft? SelectedScheduleDraft
+        {
+            get => _selectedScheduleDraft;
+            set { _selectedScheduleDraft = value; OnPropertyChanged(); }
+        }
+
         public DashboardStats? Stats
         {
             get => _stats;
             set { _stats = value; OnPropertyChanged(); }
+        }
+
+        public SystemSettingsModel SystemSettings
+        {
+            get => _systemSettings;
+            set { _systemSettings = value; OnPropertyChanged(); }
         }
 
         public Faculty? SelectedFaculty
@@ -206,6 +274,84 @@ namespace UniTestSystem.AdminApp.ViewModels
             set { _statusMessage = value; OnPropertyChanged(); }
         }
 
+        public string AuditFrom
+        {
+            get => _auditFrom;
+            set { _auditFrom = value; OnPropertyChanged(); }
+        }
+
+        public string AuditTo
+        {
+            get => _auditTo;
+            set { _auditTo = value; OnPropertyChanged(); }
+        }
+
+        public string AuditKeyword
+        {
+            get => _auditKeyword;
+            set { _auditKeyword = value; OnPropertyChanged(); }
+        }
+
+        public string AuditActor
+        {
+            get => _auditActor;
+            set { _auditActor = value; OnPropertyChanged(); }
+        }
+
+        public string SelectedScheduleTestId
+        {
+            get => _selectedScheduleTestId;
+            set { _selectedScheduleTestId = value; OnPropertyChanged(); }
+        }
+
+        public string SelectedScheduleCourseId
+        {
+            get => _selectedScheduleCourseId;
+            set { _selectedScheduleCourseId = value; OnPropertyChanged(); }
+        }
+
+        public string SelectedScheduleRoom
+        {
+            get => _selectedScheduleRoom;
+            set { _selectedScheduleRoom = value; OnPropertyChanged(); }
+        }
+
+        public string SelectedScheduleExamType
+        {
+            get => _selectedScheduleExamType;
+            set { _selectedScheduleExamType = value; OnPropertyChanged(); }
+        }
+
+        public DateTime SelectedScheduleStartTime
+        {
+            get => _selectedScheduleStartTime;
+            set { _selectedScheduleStartTime = value; OnPropertyChanged(); }
+        }
+
+        public DateTime SelectedScheduleEndTime
+        {
+            get => _selectedScheduleEndTime;
+            set { _selectedScheduleEndTime = value; OnPropertyChanged(); }
+        }
+
+        public string SelectedExportPeriod
+        {
+            get => _selectedExportPeriod;
+            set { _selectedExportPeriod = value; OnPropertyChanged(); }
+        }
+
+        public string SelectedExportFormat
+        {
+            get => _selectedExportFormat;
+            set { _selectedExportFormat = value; OnPropertyChanged(); }
+        }
+
+        public bool IsDarkTheme
+        {
+            get => _isDarkTheme;
+            set { _isDarkTheme = value; OnPropertyChanged(); }
+        }
+
         public RelayCommand LoadDataCommand { get; }
         public RelayCommand AddTestCommand { get; }
         public RelayCommand SaveTestCommand { get; }
@@ -219,6 +365,7 @@ namespace UniTestSystem.AdminApp.ViewModels
         public RelayCommand DeleteSessionCommand { get; }
         public RelayCommand ExportXlsxCommand { get; }
         public RelayCommand ExportPdfCommand { get; }
+        public RelayCommand ExportPeriodicReportCommand { get; }
         public RelayCommand SubmitQuestionCommand { get; }
         public RelayCommand ApproveQuestionCommand { get; }
         public RelayCommand RejectQuestionCommand { get; }
@@ -230,6 +377,16 @@ namespace UniTestSystem.AdminApp.ViewModels
         public RelayCommand EnrollStudentCommand { get; }
         public RelayCommand UnenrollStudentCommand { get; }
         public RelayCommand SaveSettingsCommand { get; }
+        public RelayCommand LoadAuditCommand { get; }
+        public RelayCommand CreateBackupCommand { get; }
+        public RelayCommand RestoreBackupCommand { get; }
+        public RelayCommand AddScheduleDraftCommand { get; }
+        public RelayCommand RemoveScheduleDraftCommand { get; }
+        public RelayCommand CreateSingleScheduleCommand { get; }
+        public RelayCommand CreateBulkScheduleCommand { get; }
+        public RelayCommand DeleteScheduleCommand { get; }
+        public RelayCommand ExportScheduleCsvCommand { get; }
+        public RelayCommand ToggleThemeCommand { get; }
 
         public RelayCommand ImportStudentsCommand { get; }
         public RelayCommand ImportCoursesCommand { get; }
@@ -282,13 +439,33 @@ namespace UniTestSystem.AdminApp.ViewModels
                 if (statsTask.Result != null) Stats = statsTask.Result;
                 else failures.Add("Stats");
 
+                if (CanViewSettings)
+                {
+                    await LoadSettingsAsync();
+                }
+
+                if (CanViewAudit)
+                {
+                    await LoadAuditAsync();
+                }
+
+                if (CanManageScheduling)
+                {
+                    await LoadExamSchedulesAsync();
+                }
+
+                if (CanViewMaintenance)
+                {
+                    await LoadBackupsAsync();
+                }
+
                 if (failures.Count > 0)
                 {
                     StatusMessage = $"Warning: Failed to load {string.Join(", ", failures)}. Other data loaded.";
                 }
                 else
                 {
-                    StatusMessage = $"Loaded {Tests.Count} tests, {Users.Count} students, {Questions.Count} questions, {Sessions.Count} sessions.";
+                    StatusMessage = $"Loaded {Tests.Count} tests, {Users.Count} users, {Questions.Count} questions, {Sessions.Count} sessions.";
                 }
             }
             catch (Exception ex)
@@ -331,15 +508,27 @@ namespace UniTestSystem.AdminApp.ViewModels
         private async Task SaveUserAsync()
         {
             if (SelectedUser == null) return;
+            if (!IsAdmin &&
+                (string.Equals(SelectedUser.Role, "Admin", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(SelectedUser.Role, "Staff", StringComparison.OrdinalIgnoreCase)))
+            {
+                StatusMessage = "Staff cannot assign Admin/Staff roles.";
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(SelectedUser.Role))
+            {
+                SelectedUser.Role = "Student";
+            }
+
             try
             {
-                StatusMessage = "Saving student...";
+                StatusMessage = "Saving user...";
                 bool success = string.IsNullOrEmpty(SelectedUser.Id)
                     ? await _apiService.CreateUserAsync(SelectedUser, "Password123!")
                     : await _apiService.UpdateUserAsync(SelectedUser.Id, SelectedUser);
                 
-                if (success) { StatusMessage = "Student saved successfully"; await LoadDataAsync(); }
-                else StatusMessage = "Failed to save student";
+                if (success) { StatusMessage = "User saved successfully"; await LoadDataAsync(); }
+                else StatusMessage = "Failed to save user";
             }
             catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
         }
@@ -352,9 +541,9 @@ namespace UniTestSystem.AdminApp.ViewModels
 
             try
             {
-                StatusMessage = "Deleting student...";
-                if (await _apiService.DeleteUserAsync(SelectedUser.Id)) { StatusMessage = "Student deleted"; await LoadDataAsync(); }
-                else StatusMessage = "Failed to delete student";
+                StatusMessage = "Deleting user...";
+                if (await _apiService.DeleteUserAsync(SelectedUser.Id)) { StatusMessage = "User deleted"; await LoadDataAsync(); }
+                else StatusMessage = "Failed to delete user";
             }
             catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
         }
@@ -532,6 +721,242 @@ namespace UniTestSystem.AdminApp.ViewModels
             catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
         }
 
+        private async Task ExportPeriodicReportAsync()
+        {
+            try
+            {
+                var now = DateTime.Now;
+                var from = SelectedExportPeriod switch
+                {
+                    "Weekly" => now.Date.AddDays(-7),
+                    "Quarterly" => new DateTime(now.Year, ((now.Month - 1) / 3) * 3 + 1, 1),
+                    _ => new DateTime(now.Year, now.Month, 1)
+                };
+
+                var to = now.Date;
+                StatusMessage = $"Exporting {SelectedExportPeriod.ToLowerInvariant()} report ({SelectedExportFormat})...";
+
+                byte[]? data = string.Equals(SelectedExportFormat, "pdf", StringComparison.OrdinalIgnoreCase)
+                    ? await _apiService.DownloadReportPdfAsync(from.ToString("yyyy-MM-dd"), to.ToString("yyyy-MM-dd"))
+                    : await _apiService.DownloadReportXlsxAsync(from.ToString("yyyy-MM-dd"), to.ToString("yyyy-MM-dd"));
+
+                if (data == null)
+                {
+                    StatusMessage = "Periodic export failed.";
+                    return;
+                }
+
+                var ext = string.Equals(SelectedExportFormat, "pdf", StringComparison.OrdinalIgnoreCase) ? "pdf" : "xlsx";
+                var fileName = $"PeriodicReport_{SelectedExportPeriod}_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
+                var filePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), fileName);
+                await File.WriteAllBytesAsync(filePath, data);
+                StatusMessage = $"Periodic report saved: {fileName}";
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task LoadSettingsAsync()
+        {
+            try
+            {
+                var settings = await _apiService.GetSystemSettingsAsync();
+                if (settings != null)
+                {
+                    SystemSettings = settings;
+                }
+            }
+            catch { }
+        }
+
+        private async Task LoadAuditAsync()
+        {
+            try
+            {
+                var logs = await _apiService.GetAuditLogsAsync(
+                    string.IsNullOrWhiteSpace(AuditFrom) ? null : AuditFrom,
+                    string.IsNullOrWhiteSpace(AuditTo) ? null : AuditTo,
+                    string.IsNullOrWhiteSpace(AuditKeyword) ? null : AuditKeyword,
+                    string.IsNullOrWhiteSpace(AuditActor) ? null : AuditActor,
+                    500);
+
+                AuditLogs.Clear();
+                if (logs != null)
+                {
+                    foreach (var log in logs) AuditLogs.Add(log);
+                }
+            }
+            catch { }
+        }
+
+        private async Task LoadExamSchedulesAsync()
+        {
+            try
+            {
+                var list = await _apiService.GetExamSchedulesAsync();
+                ExamSchedules.Clear();
+                if (list != null)
+                {
+                    foreach (var item in list) ExamSchedules.Add(item);
+                }
+            }
+            catch { }
+        }
+
+        private void AddScheduleDraft()
+        {
+            if (string.IsNullOrWhiteSpace(SelectedScheduleTestId) ||
+                string.IsNullOrWhiteSpace(SelectedScheduleCourseId) ||
+                string.IsNullOrWhiteSpace(SelectedScheduleRoom))
+            {
+                StatusMessage = "Select test/course/room before adding schedule.";
+                return;
+            }
+
+            if (SelectedScheduleEndTime <= SelectedScheduleStartTime)
+            {
+                StatusMessage = "End time must be greater than start time.";
+                return;
+            }
+
+            ScheduleDrafts.Add(new ExamScheduleDraft
+            {
+                TestId = SelectedScheduleTestId,
+                CourseId = SelectedScheduleCourseId,
+                Room = SelectedScheduleRoom.Trim(),
+                StartTime = SelectedScheduleStartTime,
+                EndTime = SelectedScheduleEndTime,
+                ExamType = string.IsNullOrWhiteSpace(SelectedScheduleExamType) ? "Final" : SelectedScheduleExamType.Trim()
+            });
+
+            StatusMessage = $"Added draft. Queue: {ScheduleDrafts.Count}";
+        }
+
+        private void RemoveScheduleDraft()
+        {
+            if (SelectedScheduleDraft == null) return;
+            ScheduleDrafts.Remove(SelectedScheduleDraft);
+            StatusMessage = $"Removed draft. Queue: {ScheduleDrafts.Count}";
+        }
+
+        private async Task CreateSingleScheduleAsync()
+        {
+            var draft = new ExamScheduleDraft
+            {
+                TestId = SelectedScheduleTestId,
+                CourseId = SelectedScheduleCourseId,
+                Room = SelectedScheduleRoom,
+                StartTime = SelectedScheduleStartTime,
+                EndTime = SelectedScheduleEndTime,
+                ExamType = SelectedScheduleExamType
+            };
+
+            try
+            {
+                var ok = await _apiService.CreateExamScheduleAsync(draft);
+                StatusMessage = ok ? "Schedule created." : "Failed to create schedule.";
+                if (ok) await LoadExamSchedulesAsync();
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task CreateBulkSchedulesAsync()
+        {
+            if (ScheduleDrafts.Count == 0)
+            {
+                StatusMessage = "Bulk queue is empty.";
+                return;
+            }
+
+            try
+            {
+                var ok = await _apiService.BulkCreateExamSchedulesAsync(ScheduleDrafts.ToList());
+                StatusMessage = ok ? "Bulk schedule operation completed." : "Bulk schedule failed.";
+                if (ok)
+                {
+                    ScheduleDrafts.Clear();
+                    await LoadExamSchedulesAsync();
+                }
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task DeleteScheduleAsync()
+        {
+            if (SelectedExamSchedule == null || string.IsNullOrEmpty(SelectedExamSchedule.Id)) return;
+            try
+            {
+                var ok = await _apiService.DeleteExamScheduleAsync(SelectedExamSchedule.Id);
+                StatusMessage = ok ? "Schedule deleted." : "Failed to delete schedule.";
+                if (ok) await LoadExamSchedulesAsync();
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task ExportScheduleCsvAsync()
+        {
+            try
+            {
+                var data = await _apiService.DownloadExamScheduleCsvAsync();
+                if (data == null)
+                {
+                    StatusMessage = "Failed to export exam schedules.";
+                    return;
+                }
+
+                var fileName = $"exam-schedules-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+                var filePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), fileName);
+                await File.WriteAllBytesAsync(filePath, data);
+                StatusMessage = $"Exam schedules exported: {fileName}";
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task LoadBackupsAsync()
+        {
+            try
+            {
+                var backups = await _apiService.GetBackupsAsync();
+                BackupFiles.Clear();
+                if (backups != null)
+                {
+                    foreach (var backup in backups) BackupFiles.Add(backup);
+                }
+            }
+            catch { }
+        }
+
+        private async Task CreateBackupAsync()
+        {
+            try
+            {
+                StatusMessage = "Creating database backup...";
+                var result = await _apiService.CreateBackupAsync();
+                StatusMessage = result?.Message ?? "Backup completed.";
+                await LoadBackupsAsync();
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task RestoreBackupAsync()
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "SQL Backup (*.bak)|*.bak",
+                Title = "Choose backup file"
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                StatusMessage = "Restoring backup...";
+                var result = await _apiService.RestoreBackupAsync(dialog.FileName);
+                StatusMessage = result?.Message ?? "Restore completed.";
+                await LoadBackupsAsync();
+                await LoadDataAsync();
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
         private async Task SaveFacultyAsync()
         {
             if (SelectedFaculty == null) return;
@@ -692,8 +1117,14 @@ namespace UniTestSystem.AdminApp.ViewModels
 
         private async Task SaveSettingsAsync()
         {
-            StatusMessage = "Settings updated (Mock). Core backend settings updated via AcademicService.";
-            await Task.Yield();
+            try
+            {
+                StatusMessage = "Saving settings...";
+                var ok = await _apiService.SaveSystemSettingsAsync(SystemSettings);
+                StatusMessage = ok ? "Settings saved." : "Failed to save settings.";
+                if (ok) await LoadSettingsAsync();
+            }
+            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

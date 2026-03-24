@@ -5,8 +5,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:UniTestSystem.AdminApp"
         mc:Ignorable="d"
-        Title="UniTestSystem Admin" Height="600" Width="1000"
-        WindowStartupLocation="CenterScreen">
+        Title="UniTestSystem Admin" Height="700" Width="1200"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource AppBackgroundBrush}"
+        Foreground="{DynamicResource AppForegroundBrush}">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -17,6 +19,9 @@
 
         <Grid.Resources>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F5F8FC"/>
+            <SolidColorBrush x:Key="AppForegroundBrush" Color="#1F2937"/>
+            <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FFFFFF"/>
         </Grid.Resources>
 
         <!-- Menu Bar -->
@@ -26,8 +31,10 @@
             </MenuItem>
             <MenuItem Header="Actions">
                 <MenuItem Header="Refresh Data" Command="{Binding LoadDataCommand}"/>
+                <MenuItem Header="Toggle Dark/Light" Command="{Binding ToggleThemeCommand}"/>
             </MenuItem>
-            <MenuItem Header="{Binding CurrentUserName, StringFormat='Welcome, {0}'}" IsEnabled="False" Foreground="Blue"/>
+            <MenuItem Header="{Binding CurrentUserName, StringFormat='Welcome, {0}'}" IsEnabled="False" Foreground="DodgerBlue"/>
+            <MenuItem Header="{Binding CurrentUserRole, StringFormat='Role: {0}'}" IsEnabled="False"/>
         </Menu>
 
         <!-- Toolbar -->
@@ -35,15 +42,18 @@
             <Button Content="Refresh" Command="{Binding LoadDataCommand}" Width="80" Height="30"/>
             <Separator/>
             <Button Content="+ Test" Command="{Binding AddTestCommand}" Width="80" Height="30" Background="#E3F2FD" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}"/>
-            <Button Content="+ Student" Command="{Binding AddUserCommand}" Width="80" Height="30" Background="#F1F8E9" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}"/>
+            <Button Content="+ User" Command="{Binding AddUserCommand}" Width="80" Height="30" Background="#F1F8E9" Visibility="{Binding CanManageUsersRoles, Converter={StaticResource BoolToVis}}"/>
             <Button Content="+ Question" Command="{Binding AddQuestionCommand}" Width="80" Height="30" Background="#FFF3E0" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}"/>
             <Separator/>
             <Button Content="Export Excel" Command="{Binding ExportXlsxCommand}" Width="80" Height="30"/>
             <Button Content="Export PDF" Command="{Binding ExportPdfCommand}" Width="80" Height="30"/>
+            <Separator/>
+            <Button Content="Export Periodic" Command="{Binding ExportPeriodicReportCommand}" Width="110" Height="30"/>
+            <Button Content="Dark/Light" Command="{Binding ToggleThemeCommand}" Width="90" Height="30"/>
         </ToolBar>
 
         <!-- Main Content -->
-        <TabControl Grid.Row="2">
+        <TabControl Grid.Row="2" x:Name="MainTabControl" Background="{DynamicResource PanelBackgroundBrush}" SelectionChanged="MainTabControl_SelectionChanged">
             <!-- Dashboard Tab -->
             <TabItem Header="Dashboard">
                 <ScrollViewer>
@@ -261,8 +271,8 @@
                 </Grid>
             </TabItem>
 
-            <!-- Students Tab -->
-            <TabItem Header="Students" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}">
+            <!-- Users & Roles Tab -->
+            <TabItem Header="Users &amp; Roles" Visibility="{Binding CanManageUsersRoles, Converter={StaticResource BoolToVis}}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="2*"/>
@@ -278,7 +288,7 @@
                         </DataGrid.Columns>
                     </DataGrid>
 
-                    <GroupBox Grid.Column="1" Header="Student Details" Margin="10">
+                    <GroupBox Grid.Column="1" Header="User Details" Margin="10">
                         <ScrollViewer>
                             <Grid Margin="10">
                                 <Grid.RowDefinitions>
@@ -306,11 +316,7 @@
                                 <TextBox Grid.Row="3" Text="{Binding SelectedUser.Email}" Margin="0,0,0,10"/>
 
                                 <TextBlock Grid.Row="4" Text="Role:"/>
-                                <ComboBox Grid.Row="5" Text="{Binding SelectedUser.Role}" Margin="0,0,0,10">
-                                    <ComboBoxItem Content="Admin"/>
-                                    <ComboBoxItem Content="Lecturer"/>
-                                    <ComboBoxItem Content="Student"/>
-                                </ComboBox>
+                                <ComboBox Grid.Row="5" SelectedItem="{Binding SelectedUser.Role}" ItemsSource="{Binding EditableRoles}" Margin="0,0,0,10"/>
 
                                 <TextBlock Grid.Row="6" Text="Faculty:"/>
                                 <TextBox Grid.Row="7" Text="{Binding SelectedUser.Department}" Margin="0,0,0,10"/>
@@ -339,7 +345,7 @@
             </TabItem>
 
             <!-- Sessions Tab -->
-            <TabItem Header="Sessions">
+            <TabItem Header="Sessions" Visibility="{Binding CanManageAcademic, Converter={StaticResource BoolToVis}}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>
@@ -364,7 +370,7 @@
             </TabItem>
 
             <!-- Academic Management - Faculties -->
-            <TabItem Header="Faculties">
+            <TabItem Header="Faculties" Visibility="{Binding CanManageAcademic, Converter={StaticResource BoolToVis}}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -418,7 +424,7 @@
             </TabItem>
 
             <!-- Academic Management - Classes -->
-            <TabItem Header="Classes">
+            <TabItem Header="Classes" Visibility="{Binding CanManageAcademic, Converter={StaticResource BoolToVis}}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -469,7 +475,7 @@
             </TabItem>
 
             <!-- Courses Tab -->
-            <TabItem Header="Courses">
+            <TabItem Header="Courses" Visibility="{Binding CanManageAcademic, Converter={StaticResource BoolToVis}}">
                 <Grid Margin="10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="2*"/>
@@ -535,7 +541,7 @@
             </TabItem>
 
             <!-- Enrollments Tab -->
-            <TabItem Header="Enrollments">
+            <TabItem Header="Enrollments" Visibility="{Binding CanManageAcademic, Converter={StaticResource BoolToVis}}">
                 <Grid Margin="10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -567,25 +573,149 @@
                         </DataGrid>
                     </DockPanel>
                 </Grid>
-                </TabItem>
+            </TabItem>
 
-                <!-- Settings Tab -->
-                <TabItem Header="Settings">
-                    <Grid Margin="20">
-                        <StackPanel MaxWidth="400" HorizontalAlignment="Left">
-                            <TextBlock Text="System Settings" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
-                            
-                            <Label Content="Current Semester:"/>
-                            <TextBox Text="Học kỳ 2" Margin="0,0,0,10"/> <!-- Bound to Stats/Settings in real app -->
-                            
-                            <Label Content="Current Academic Year:"/>
-                            <TextBox Text="2025-2026" Margin="0,0,0,20"/>
-                            
-                            <Button Content="Save Settings" Command="{Binding SaveSettingsCommand}" Width="120" HorizontalAlignment="Left" Height="30" Background="#2196F3" Foreground="White" BorderThickness="0"/>
+            <!-- Audit Log Tab -->
+            <TabItem Header="Audit Log" Visibility="{Binding CanViewAudit, Converter={StaticResource BoolToVis}}">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <WrapPanel Grid.Row="0" Margin="0,0,0,10">
+                        <TextBlock Text="From" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBox Width="120" Text="{Binding AuditFrom, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0"/>
+                        <TextBlock Text="To" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBox Width="120" Text="{Binding AuditTo, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0"/>
+                        <TextBlock Text="Actor" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBox Width="140" Text="{Binding AuditActor, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0"/>
+                        <TextBlock Text="Keyword" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBox Width="180" Text="{Binding AuditKeyword, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0"/>
+                        <Button Content="Load Audit" Command="{Binding LoadAuditCommand}" Width="100"/>
+                    </WrapPanel>
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding AuditLogs}" AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="At (UTC)" Binding="{Binding At, StringFormat=\{0:yyyy-MM-dd HH:mm:ss\}}" Width="160"/>
+                            <DataGridTextColumn Header="Actor" Binding="{Binding Actor}" Width="160"/>
+                            <DataGridTextColumn Header="Action" Binding="{Binding Action}" Width="160"/>
+                            <DataGridTextColumn Header="Entity" Binding="{Binding EntityName}" Width="140"/>
+                            <DataGridTextColumn Header="Entity ID" Binding="{Binding EntityId}" Width="180"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <!-- Exam Scheduling Tab -->
+            <TabItem Header="Exam Scheduling" Visibility="{Binding CanManageScheduling, Converter={StaticResource BoolToVis}}">
+                <Grid Margin="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0" Margin="0,0,10,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                            <Button Content="Create Single" Command="{Binding CreateSingleScheduleCommand}" Width="100" Margin="0,0,8,0"/>
+                            <Button Content="Create Bulk Queue" Command="{Binding CreateBulkScheduleCommand}" Width="120" Margin="0,0,8,0"/>
+                            <Button Content="Export CSV" Command="{Binding ExportScheduleCsvCommand}" Width="90" Margin="0,0,8,0"/>
+                            <Button Content="Delete Selected" Command="{Binding DeleteScheduleCommand}" Width="110"/>
                         </StackPanel>
+                        <DataGrid Grid.Row="1" ItemsSource="{Binding ExamSchedules}" SelectedItem="{Binding SelectedExamSchedule}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Course" Binding="{Binding Course.Name}" Width="*"/>
+                                <DataGridTextColumn Header="Test" Binding="{Binding Test.Title}" Width="*"/>
+                                <DataGridTextColumn Header="Room" Binding="{Binding Room}" Width="120"/>
+                                <DataGridTextColumn Header="Start" Binding="{Binding StartTime, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="150"/>
+                                <DataGridTextColumn Header="End" Binding="{Binding EndTime, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="150"/>
+                                <DataGridTextColumn Header="Type" Binding="{Binding ExamType}" Width="100"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
                     </Grid>
-                </TabItem>
-            </TabControl>
+
+                    <ScrollViewer Grid.Column="1">
+                        <StackPanel>
+                            <TextBlock Text="Bulk Scheduling Form" FontSize="16" FontWeight="Bold" Margin="0,0,0,12"/>
+                            <Label Content="Test"/>
+                            <ComboBox ItemsSource="{Binding Tests}" SelectedValuePath="Id" DisplayMemberPath="Title" SelectedValue="{Binding SelectedScheduleTestId}" Margin="0,0,0,8"/>
+                            <Label Content="Course"/>
+                            <ComboBox ItemsSource="{Binding Courses}" SelectedValuePath="Id" DisplayMemberPath="Name" SelectedValue="{Binding SelectedScheduleCourseId}" Margin="0,0,0,8"/>
+                            <Label Content="Room"/>
+                            <TextBox Text="{Binding SelectedScheduleRoom, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                            <Label Content="Start Time"/>
+                            <TextBox Text="{Binding SelectedScheduleStartTime, StringFormat=\{0:yyyy-MM-dd HH:mm\}, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                            <Label Content="End Time"/>
+                            <TextBox Text="{Binding SelectedScheduleEndTime, StringFormat=\{0:yyyy-MM-dd HH:mm\}, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
+                            <Label Content="Exam Type"/>
+                            <TextBox Text="{Binding SelectedScheduleExamType, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
+                            <Button Content="+ Add To Queue" Command="{Binding AddScheduleDraftCommand}" Width="140" Margin="0,0,0,8"/>
+                            <Button Content="Remove Queue Item" Command="{Binding RemoveScheduleDraftCommand}" Width="140" Margin="0,0,0,12"/>
+                            <TextBlock Text="Queue" FontWeight="Bold" Margin="0,8,0,6"/>
+                            <DataGrid ItemsSource="{Binding ScheduleDrafts}" SelectedItem="{Binding SelectedScheduleDraft}" AutoGenerateColumns="False" Height="180">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="CourseId" Binding="{Binding CourseId}" Width="*"/>
+                                    <DataGridTextColumn Header="TestId" Binding="{Binding TestId}" Width="*"/>
+                                    <DataGridTextColumn Header="Room" Binding="{Binding Room}" Width="80"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- Settings Tab -->
+            <TabItem Header="Settings" Visibility="{Binding CanViewSettings, Converter={StaticResource BoolToVis}}">
+                <Grid Margin="20">
+                    <StackPanel MaxWidth="420" HorizontalAlignment="Left">
+                        <TextBlock Text="System Settings" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
+
+                        <Label Content="System Name"/>
+                        <TextBox Text="{Binding SystemSettings.SystemName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                        <Label Content="Current Semester"/>
+                        <TextBox Text="{Binding SystemSettings.CurrentSemester, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                        <Label Content="Current Academic Year"/>
+                        <TextBox Text="{Binding SystemSettings.CurrentAcademicYear, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                        <Label Content="Logo URL"/>
+                        <TextBox Text="{Binding SystemSettings.LogoUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20"/>
+
+                        <WrapPanel>
+                            <Button Content="Save Settings" Command="{Binding SaveSettingsCommand}" Width="120" Height="30" Background="#2196F3" Foreground="White" BorderThickness="0" Margin="0,0,8,0"/>
+                            <ComboBox Width="120" ItemsSource="{Binding PeriodOptions}" SelectedItem="{Binding SelectedExportPeriod}" Margin="0,0,8,0"/>
+                            <ComboBox Width="90" ItemsSource="{Binding ExportFormatOptions}" SelectedItem="{Binding SelectedExportFormat}" Margin="0,0,8,0"/>
+                            <Button Content="Export Periodic" Command="{Binding ExportPeriodicReportCommand}" Width="120" Height="30"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- Maintenance Tab -->
+            <TabItem Header="Backup/Restore" Visibility="{Binding CanViewMaintenance, Converter={StaticResource BoolToVis}}">
+                <Grid Margin="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                        <Button Content="Create Backup" Command="{Binding CreateBackupCommand}" Width="130" Margin="0,0,8,0"/>
+                        <Button Content="Restore From File" Command="{Binding RestoreBackupCommand}" Width="140"/>
+                    </StackPanel>
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding BackupFiles}" AutoGenerateColumns="False" IsReadOnly="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="File" Binding="{Binding Name}" Width="*"/>
+                            <DataGridTextColumn Header="Size (bytes)" Binding="{Binding Length}" Width="150"/>
+                            <DataGridTextColumn Header="LastWriteUtc" Binding="{Binding LastWriteTimeUtc, StringFormat=\{0:yyyy-MM-dd HH:mm:ss\}}" Width="180"/>
+                            <DataGridTextColumn Header="Path" Binding="{Binding FullName}" Width="2*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+        </TabControl>
 
         <!-- Status Bar -->
         <StatusBar Grid.Row="3">

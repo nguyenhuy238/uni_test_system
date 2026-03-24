@@ -3,6 +3,9 @@
 Tài liệu này đóng vai trò là danh sách kiểm tra chủ chốt cho toàn bộ quá trình phát triển hệ thống quản lý thi Đại học (UniTestSystem). Được thiết kế theo chuẩn Enterprise, bao gồm mọi khía cạnh từ chức năng, phi chức năng đến quy trình triển khai và sẵn sàng vận hành.
 
 ## Cập nhật gần nhất (2026-03-24)
+- Hoàn thiện cụm **J. WPF AdminApp**: bổ sung chế độ Admin/Staff theo role-based UI, tab Audit Log, cấu hình hệ thống qua API, backup/restore DB (SQL `.bak`), lập lịch thi đơn lẻ & đồng loạt (bulk queue + export CSV), và export báo cáo định kỳ.
+- Nâng cấp bảo mật phiên AdminApp: lưu token cục bộ bằng DPAPI (Windows), hỗ trợ refresh token rotation và tự làm mới access token khi gần hết hạn/401.
+- Nâng cấp UI/UX AdminApp: thêm Dark/Light mode và hiệu ứng chuyển tab (fade) mượt.
 - Hoàn thiện thêm kiểm tra lịch thi: xung đột phòng/sinh viên/giảng viên, kiểm tra quá tải theo `ExamScheduling:RoomCapacities`, và export CSV lịch thi.
 - Bổ sung cơ chế token truy cập bài thi cho luồng vào bài từ lịch thi sinh viên (`/mytests/start` với `scheduleId + accessToken`).
 - Bổ sung guard chống đa thiết bị cho phiên thi đang làm (`DeviceFingerprint`) trên luồng start/resume/save/submit.
@@ -241,20 +244,20 @@ Mô tả: Ứng dụng Desktop quản lý chuyên sâu.
 - **Ứng dụng:** WPF AdminApp.
 - **Vai trò:** Admin, Staff.
 
-- [ ] **Chế độ Admin:** [WPF AdminApp] [Admin]
-    - [ ] Quản lý toàn bộ người dùng và vai trò.
-    - [ ] Xem nhật ký hệ thống (Audit log).
-    - [ ] Cấu hình tham số hệ thống.
-    - [ ] Sao lưu và Phục hồi cơ sở dữ liệu (Backup/Restore).
-- [ ] **Chế độ Staff:** [WPF AdminApp] [Staff]
-    - [ ] Thực hiện mọi thao tác học vụ (Quản lý khoa, lớp, sinh viên).
-    - [ ] Lập lịch thi đồng loạt.
-    - [ ] Export báo cáo định kỳ.
-- [ ] **UI/UX & Kỹ thuật:** [WPF AdminApp] [Developer]
-    - [ ] MVVM Pattern chuẩn chỉnh.
-    - [ ] Quản lý Token (JWT/Refresh Token) an toàn.
-    - [ ] Điều khiển hiển thị menu dựa trên quyền hạn Role-based.
-    - [ ] Hiệu ứng chuyển cảnh mượt mà, Dark/Light mode.
+- [x] **Chế độ Admin:** [WPF AdminApp] [Admin]
+    - [x] Quản lý toàn bộ người dùng và vai trò.
+    - [x] Xem nhật ký hệ thống (Audit log).
+    - [x] Cấu hình tham số hệ thống.
+    - [x] Sao lưu và Phục hồi cơ sở dữ liệu (Backup/Restore).
+- [x] **Chế độ Staff:** [WPF AdminApp] [Staff]
+    - [x] Thực hiện mọi thao tác học vụ (Quản lý khoa, lớp, sinh viên).
+    - [x] Lập lịch thi đồng loạt.
+    - [x] Export báo cáo định kỳ.
+- [x] **UI/UX & Kỹ thuật:** [WPF AdminApp] [Developer]
+    - [x] MVVM Pattern chuẩn chỉnh.
+    - [x] Quản lý Token (JWT/Refresh Token) an toàn.
+    - [x] Điều khiển hiển thị menu dựa trên quyền hạn Role-based.
+    - [x] Hiệu ứng chuyển cảnh mượt mà, Dark/Light mode.
 
 ---
 
