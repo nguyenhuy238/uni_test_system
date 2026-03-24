@@ -4,6 +4,8 @@
 }
 <h2>Đăng nhập</h2>
 
+<partial name="~/Views/Shared/_Flash.cshtml" />
+
 <form method="post" action="/auth/login">
     <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
     <div class="mb-3">
@@ -24,4 +26,16 @@
 
 <div class="mt-3">
     <a href="/auth/forgot">Quên mật khẩu?</a> | <a href="/auth/register">Đăng ký tài khoản</a>
+</div>
+
+<div class="mt-3">
+    <form method="post" action="/auth/resend-confirmation" class="row g-2">
+        @Html.AntiForgeryToken()
+        <div class="col-md-4">
+            <input name="email" type="email" class="form-control" placeholder="Nhập email để gửi lại link xác nhận" />
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-secondary">Gửi lại email xác nhận</button>
+        </div>
+    </form>
 </div>

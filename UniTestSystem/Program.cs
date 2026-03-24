@@ -212,6 +212,7 @@ builder.Services.AddScoped<TestService>();
 builder.Services.AddScoped<AssessmentService>();
 builder.Services.AddScoped<ReportService>();
 builder.Services.AddScoped<PasswordResetService>();
+builder.Services.AddScoped<EmailVerificationService>();
 builder.Services.AddScoped<ExamAccessTokenService>();
 
 builder.Services.AddScoped<ISettingsService, SettingsService>();

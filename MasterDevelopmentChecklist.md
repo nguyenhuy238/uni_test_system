@@ -19,6 +19,7 @@ Tài liệu này đóng vai trò là danh sách kiểm tra chủ chốt cho toà
 - Hoàn thiện Widget Dashboard trên Web Reports: tỷ lệ đạt/trượt theo môn, điểm trung bình theo kỳ, và biểu đồ phổ điểm.
 - Hoàn thiện Phân tích Câu hỏi trên Web Reports: độ khó thực tế (difficulty index) và độ phân biệt (discrimination index) theo dữ liệu làm bài thật.
 - Hoàn thiện Báo cáo giảng dạy (Lecturer performance) trên Web Reports với thống kê theo giảng viên (số môn/số đề/số lượt nộp/điểm TB/tỷ lệ đạt).
+- Hoàn thiện email xác nhận đăng ký (optional): gửi link xác nhận sau đăng ký, endpoint xác nhận token và gửi lại email xác nhận.
 
 ---
 
@@ -31,11 +32,11 @@ Mô tả: Quản lý vòng đời người dùng, phân quyền và bảo mật 
 - **Ứng dụng:** Web App (User access), WPF AdminApp (Management).
 - **Vai trò:** Toàn bộ (Đăng nhập/Hồ sơ), Admin/Staff (Quản trị).
 
-- [ ] **Đăng ký (Register)** [Web App] [Student/Lecturer]
+- [x] **Đăng ký (Register)** [Web App] [Student/Lecturer]
     - [x] Tạo tài khoản mới với các trường bắt buộc (Email, Password, Role).
     - [x] Xác thực định dạng email (miền nội bộ trường đại học).
     - [x] Kiểm tra độ mạnh mật khẩu (Tối thiểu 8 ký tự, chữ hoa, chữ thường, số, ký tự đặc biệt).
-    - [ ] Gửi email xác nhận (Optional).
+    - [x] Gửi email xác nhận (Optional).
 - [x] **Đăng nhập (Login)** [Web App/WPF App] [All Roles]
     - [x] Đăng nhập bằng Cookie (Web) và JWT (API).
     - [x] Lưu trữ mật khẩu bằng hashing BCrypt.

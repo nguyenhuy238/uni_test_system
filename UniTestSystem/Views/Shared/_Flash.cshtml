@@ -2,6 +2,10 @@
 {
     <div class="alert alert-success">@TempData["Msg"]</div>
 }
+@if (TempData["Info"] != null)
+{
+    <div class="alert alert-info">@TempData["Info"]</div>
+}
 @if (TempData["Err"] != null)
 {
     <div class="alert alert-danger">@TempData["Err"]</div>

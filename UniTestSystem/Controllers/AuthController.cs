@@ -10,11 +10,19 @@ namespace UniTestSystem.Controllers
     {
         private readonly AuthService _auth;
         private readonly PasswordResetService _reset;
+        private readonly EmailVerificationService _emailVerification;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(AuthService auth, PasswordResetService reset)
+        public AuthController(
+            AuthService auth,
+            PasswordResetService reset,
+            EmailVerificationService emailVerification,
+            ILogger<AuthController> logger)
         {
             _auth = auth;
             _reset = reset;
+            _emailVerification = emailVerification;
+            _logger = logger;
         }
 
         [HttpGet("/auth/login")]
@@ -124,8 +132,60 @@ namespace UniTestSystem.Controllers
             user.IsActive = true;
 
             await _auth.CreateUserAsync(user);
-            TempData["Info"] = "Đăng ký thành công. Vui lòng đăng nhập.";
+
+            try
+            {
+                var baseUrl = $"{Request.Scheme}://{Request.Host}";
+                await _emailVerification.IssueVerificationEmailAsync(user.Id, user.Email, user.Name, baseUrl);
+                TempData["Msg"] = "Đăng ký thành công. Hệ thống đã gửi email xác nhận, vui lòng kiểm tra hộp thư.";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send verification email for user {UserId}", user.Id);
+                TempData["Msg"] = "Đăng ký thành công. Không thể gửi email xác nhận ở thời điểm hiện tại.";
+            }
+
             return RedirectToAction("Login");
+        }
+
+        [HttpGet("/auth/confirm-email")]
+        public async Task<IActionResult> ConfirmEmail(string token)
+        {
+            var result = await _emailVerification.ConfirmEmailAsync(token);
+            if (result.Success)
+                TempData["Msg"] = result.Message;
+            else
+                TempData["Err"] = result.Message;
+
+            return RedirectToAction(nameof(Login));
+        }
+
+        [HttpPost("/auth/resend-confirmation")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ResendConfirmation(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                TempData["Err"] = "Vui lòng nhập email để gửi lại liên kết xác nhận.";
+                return RedirectToAction(nameof(Login));
+            }
+
+            var user = await _auth.FindByEmailAsync(email.Trim());
+            if (user != null)
+            {
+                try
+                {
+                    var baseUrl = $"{Request.Scheme}://{Request.Host}";
+                    await _emailVerification.IssueVerificationEmailAsync(user.Id, user.Email, user.Name, baseUrl);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to resend verification email for user {UserId}", user.Id);
+                }
+            }
+
+            TempData["Msg"] = "Nếu email tồn tại, liên kết xác nhận đã được gửi lại.";
+            return RedirectToAction(nameof(Login));
         }
 
         [HttpPost("/auth/login")]
