@@ -16,6 +16,8 @@ Tài liệu này đóng vai trò là danh sách kiểm tra chủ chốt cho toà
 - Bổ sung vô hiệu hóa phiên đăng nhập ngay khi vai trò người dùng thay đổi (cookie/JWT validation + revoke session/refresh token).
 - Bổ sung công thức tính điểm trọng số (điểm quá trình + điểm thi, tùy chỉnh trọng số) trong luồng finalize bảng điểm.
 - Bổ sung khóa/mở bảng điểm cấp khoa/trường và chặn finalize khi đang bị khóa.
+- Hoàn thiện Widget Dashboard trên Web Reports: tỷ lệ đạt/trượt theo môn, điểm trung bình theo kỳ, và biểu đồ phổ điểm.
+- Hoàn thiện Phân tích Câu hỏi trên Web Reports: độ khó thực tế (difficulty index) và độ phân biệt (discrimination index) theo dữ liệu làm bài thật.
 
 ---
 
@@ -219,13 +221,13 @@ Mô tả: Cung cấp góc nhìn số liệu cho nhà quản lý.
 - **Ứng dụng:** Web App (Dashboard), WPF AdminApp (Báo cáo chi tiết/Export).
 - **Vai trò:** Lecturer, Staff, Admin.
 
-- [ ] **Widget Dashboard** [Web App] [Lecturer/Staff/Admin]
-    - [ ] Tỷ lệ đạt/trượt theo môn.
-    - [ ] Điểm trung bình qua các kỳ.
-    - [ ] Biểu đồ phổ điểm.
-- [ ] **Phân tích Câu hỏi** [Web App/WPF AdminApp] [Lecturer/Staff]
-    - [ ] Đánh giá độ khó thực tế của câu hỏi dựa trên kết quả thi.
-    - [ ] Độ phân biệt của câu hỏi.
+- [x] **Widget Dashboard** [Web App] [Lecturer/Staff/Admin]
+    - [x] Tỷ lệ đạt/trượt theo môn.
+    - [x] Điểm trung bình qua các kỳ.
+    - [x] Biểu đồ phổ điểm.
+- [x] **Phân tích Câu hỏi** [Web App/WPF AdminApp] [Lecturer/Staff]
+    - [x] Đánh giá độ khó thực tế của câu hỏi dựa trên kết quả thi.
+    - [x] Độ phân biệt của câu hỏi.
 - [/] **Báo cáo Hiệu suất** [WPF AdminApp/Web App] [Staff/Admin]
     - [ ] Báo cáo giảng dạy (Lecturer performance).
     - [x] Báo cáo chất lượng đào tạo theo Khoa.

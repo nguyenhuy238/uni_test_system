@@ -1,0 +1,111 @@
+@using UniTestSystem.Application.Models
+@using UniTestSystem.Domain
+@model QuestionAnalyticsVm
+@{
+    ViewData["Title"] = "Question Analytics";
+    var from = (string)ViewBag.From;
+    var to = (string)ViewBag.To;
+    var minAttempts = (int)ViewBag.MinAttempts;
+    var selectedCourseId = (string?)ViewBag.CourseId;
+    var courses = ViewBag.Courses as List<Course> ?? new List<Course>();
+}
+
+<h2 class="mb-3">Question Analytics</h2>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-auto">
+        <label class="form-label">From</label>
+        <input type="date" name="from" class="form-control" value="@from" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label">To</label>
+        <input type="date" name="to" class="form-control" value="@to" />
+    </div>
+    <div class="col-auto">
+        <label class="form-label">Course</label>
+        <select name="courseId" class="form-select">
+            <option value="">All courses</option>
+            @foreach (var c in courses)
+            {
+                <option value="@c.Id" selected="@(selectedCourseId == c.Id ? "selected" : null)">
+                    @c.Code - @c.Name
+                </option>
+            }
+        </select>
+    </div>
+    <div class="col-auto">
+        <label class="form-label">Min Attempts</label>
+        <input type="number" min="1" name="minAttempts" class="form-control" value="@minAttempts" />
+    </div>
+    <div class="col-auto align-self-end">
+        <button class="btn btn-primary">Apply</button>
+        <a class="btn btn-outline-secondary" href="/reports/question-analytics">Reset</a>
+    </div>
+</form>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm"><div class="card-body"><div class="small text-muted">Total Questions</div><div class="fs-4 fw-bold">@Model.TotalQuestions</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm"><div class="card-body"><div class="small text-muted">Hard</div><div class="fs-4 fw-bold text-danger">@Model.HardQuestions</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm"><div class="card-body"><div class="small text-muted">Medium</div><div class="fs-4 fw-bold text-warning">@Model.MediumQuestions</div></div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm"><div class="card-body"><div class="small text-muted">Low Discrimination (&lt; 0.2)</div><div class="fs-4 fw-bold text-danger">@Model.LowDiscriminationQuestions</div></div></div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header fw-bold">Difficulty & Discrimination by Question</div>
+    <div class="card-body table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr>
+                    <th>Question</th>
+                    <th>Type</th>
+                    <th>Subject</th>
+                    <th class="text-center">Attempts</th>
+                    <th class="text-center">Avg Score %</th>
+                    <th class="text-center">Difficulty</th>
+                    <th class="text-center">Discrimination D</th>
+                    <th class="text-center">Discrimination</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Rows.Any())
+                {
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">No analytics data for the selected filter.</td>
+                    </tr>
+                }
+                @foreach (var r in Model.Rows)
+                {
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">@r.ContentPreview</div>
+                            <div class="small text-muted">@r.QuestionId</div>
+                        </td>
+                        <td>@r.Type</td>
+                        <td>@r.Subject</td>
+                        <td class="text-center">@r.Attempts</td>
+                        <td class="text-center">@r.AvgScorePercent.ToString("0.00")</td>
+                        <td class="text-center">
+                            <span class="badge @(r.DifficultyLabel == "Hard" ? "bg-danger" : r.DifficultyLabel == "Medium" ? "bg-warning text-dark" : "bg-success")">
+                                @r.DifficultyLabel
+                            </span>
+                        </td>
+                        <td class="text-center">@r.DiscriminationIndex.ToString("0.000")</td>
+                        <td class="text-center">
+                            <span class="badge @(r.DiscriminationLabel == "Excellent" ? "bg-success" : r.DiscriminationLabel == "Good" ? "bg-primary" : r.DiscriminationLabel == "Weak" ? "bg-warning text-dark" : "bg-danger")">
+                                @r.DiscriminationLabel
+                            </span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
