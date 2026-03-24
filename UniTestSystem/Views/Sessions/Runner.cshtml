@@ -393,6 +393,16 @@
                             <div><input id="@r0" type="radio" name="@q.Id" value="False" /><label for="@r0">False</label></div>
                         </div>
                     }
+                    else if (q.Type == QType.Matching)
+                    {
+                        <textarea class="form-control" name="@q.Id" rows="5" placeholder="Matching format: each line Left=Right"></textarea>
+                        <div class="hint mt-1">Example: Capital of France=Paris</div>
+                    }
+                    else if (q.Type == QType.DragDrop)
+                    {
+                        <textarea class="form-control" name="@q.Id" rows="5" placeholder="DragDrop format: each line Slot=Token"></textarea>
+                        <div class="hint mt-1">Example: Blank1=photosynthesis</div>
+                    }
                     else
                     {
                         <textarea class="form-control" name="@q.Id" rows="4" placeholder="Type your answer here..."></textarea>

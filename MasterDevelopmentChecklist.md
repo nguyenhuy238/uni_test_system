@@ -10,6 +10,7 @@ Tài liệu này đóng vai trò là danh sách kiểm tra chủ chốt cho toà
 - Bổ sung khôi phục phiên bản câu hỏi từ Audit Log (UI + service).
 - Bổ sung kiểm tra trùng lặp nâng cao bằng độ tương đồng nội dung (Jaccard).
 - Bổ sung quản lý bảng điểm có lọc theo khoa/lớp/kỳ trên web và export transcript Excel/PDF (QuestPDF).
+- Bổ sung chấm điểm từng phần cho câu hỏi Matching/DragDrop trong auto-grading.
 
 ---
 
@@ -179,9 +180,9 @@ Mô tả: Chấm điểm tự động và thủ công.
 - **Ứng dụng:** Web App (Giảng viên chấm), WPF AdminApp (Giám sát).
 - **Vai trò:** Lecturer (Chấm), Staff/Admin (Xem).
 
-- [/] **Chấm điểm tự động (Auto Grading)** [Server-side] [Student]
+- [x] **Chấm điểm tự động (Auto Grading)** [Server-side] [Student]
     - [x] Áp dụng ngay sau khi nộp bài cho MCQ, Đúng/Sai.
-    - [ ] Hỗ trợ chấm điểm từng phần (Partial scoring) cho các loại câu hỏi phức tạp.
+    - [x] Hỗ trợ chấm điểm từng phần (Partial scoring) cho các loại câu hỏi phức tạp.
 - [x] **Chấm thủ công (Manual Grading - Essay)** [Web App] [Lecturer]
     - [x] Giảng viên truy cập giao diện chấm bài tự luận.
     - [x] Nhận xét và cho điểm từng câu hỏi.
