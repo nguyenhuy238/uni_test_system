@@ -14,17 +14,26 @@ namespace UniTestSystem.Controllers
         private readonly IRepository<Test> _tRepo;
         private readonly TestService _testSvc;
         private readonly AssessmentService _assessSvc;
+        private readonly ExamAccessTokenService _examAccessTokenService;
+        private readonly SessionDeviceGuardService _sessionDeviceGuardService;
 
         public SessionsController(IRepository<Session> s,
                                   IRepository<Test> t,
                                   TestService testSvc,
-                                  AssessmentService assessSvc)
+                                  AssessmentService assessSvc,
+                                  ExamAccessTokenService examAccessTokenService,
+                                  SessionDeviceGuardService sessionDeviceGuardService)
         {
-            _sRepo = s; _tRepo = t; _testSvc = testSvc; _assessSvc = assessSvc;
+            _sRepo = s;
+            _tRepo = t;
+            _testSvc = testSvc;
+            _assessSvc = assessSvc;
+            _examAccessTokenService = examAccessTokenService;
+            _sessionDeviceGuardService = sessionDeviceGuardService;
         }
 
         [HttpGet("/mytests/start/{testId}")]
-        public async Task<IActionResult> Start(string testId)
+        public async Task<IActionResult> Start(string testId, string? scheduleId = null, string? accessToken = null)
         {
             var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(uid)) return Forbid();
@@ -35,6 +44,25 @@ namespace UniTestSystem.Controllers
             var now = DateTime.UtcNow;
             var availIds = await _assessSvc.GetAvailableTestIdsAsync(uid, now);
             if (!availIds.Contains(testId)) return Forbid();
+
+            if (!string.IsNullOrWhiteSpace(scheduleId))
+            {
+                var ok = _examAccessTokenService.Validate(
+                    accessToken ?? string.Empty,
+                    uid,
+                    testId,
+                    scheduleId,
+                    out _);
+                if (!ok) return Forbid();
+            }
+
+            var fingerprint = _sessionDeviceGuardService.GetRequestFingerprint(Request, HttpContext.Connection.RemoteIpAddress?.ToString());
+            var hasOtherActiveDevice = await _sessionDeviceGuardService.HasActiveSessionOnOtherDeviceAsync(uid, fingerprint);
+            if (hasOtherActiveDevice)
+            {
+                TempData["Err"] = "Bạn đang có phiên làm bài trên thiết bị khác. Vui lòng kết thúc phiên đó trước khi bắt đầu.";
+                return RedirectToAction("Index", "MyTests");
+            }
 
             var sessionsOfUser = (await _sRepo.GetAllAsync()).Where(s => s.UserId == uid && s.TestId == testId).ToList();
             var submittedStatuses = new[] { SessionStatus.Submitted, SessionStatus.AutoSubmitted, SessionStatus.Graded };
@@ -50,9 +78,32 @@ namespace UniTestSystem.Controllers
                 .OrderByDescending(s => s.StartAt)
                 .FirstOrDefault();
             if (inProgress != null)
+            {
+                var sessionAllowed = await _sessionDeviceGuardService.EnsureSessionDeviceAsync(
+                    inProgress.Id,
+                    fingerprint,
+                    Request.Headers["User-Agent"].ToString(),
+                    HttpContext.Connection.RemoteIpAddress?.ToString());
+                if (!sessionAllowed)
+                {
+                    TempData["Err"] = "Phiên đang làm đã được gắn với thiết bị khác.";
+                    return RedirectToAction("Index", "MyTests");
+                }
                 return Redirect($"/mytests/session/{inProgress.Id}");
+            }
 
             var sNew = await _testSvc.StartAsync(testId, uid);
+            var bound = await _sessionDeviceGuardService.EnsureSessionDeviceAsync(
+                sNew.Id,
+                fingerprint,
+                Request.Headers["User-Agent"].ToString(),
+                HttpContext.Connection.RemoteIpAddress?.ToString());
+            if (!bound)
+            {
+                TempData["Err"] = "Không thể bắt đầu phiên làm bài trên thiết bị này.";
+                return RedirectToAction("Index", "MyTests");
+            }
+
             return Redirect($"/mytests/session/{sNew.Id}");
         }
 
@@ -65,6 +116,18 @@ namespace UniTestSystem.Controllers
 
             var uid = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (uid == null || !string.Equals(uid, s.UserId, StringComparison.Ordinal)) return Forbid();
+
+            var requestFp = _sessionDeviceGuardService.GetRequestFingerprint(Request, HttpContext.Connection.RemoteIpAddress?.ToString());
+            var deviceOk = await _sessionDeviceGuardService.EnsureSessionDeviceAsync(
+                s.Id,
+                requestFp,
+                Request.Headers["User-Agent"].ToString(),
+                HttpContext.Connection.RemoteIpAddress?.ToString());
+            if (!deviceOk)
+            {
+                TempData["Err"] = "Phiên làm bài này thuộc về thiết bị khác.";
+                return RedirectToAction("Index", "MyTests");
+            }
 
             s.LastActivityAt = DateTime.UtcNow;
             if (!s.TimerStartedAt.HasValue)

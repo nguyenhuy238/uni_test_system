@@ -2,6 +2,12 @@
 
 Tài liệu này đóng vai trò là danh sách kiểm tra chủ chốt cho toàn bộ quá trình phát triển hệ thống quản lý thi Đại học (UniTestSystem). Được thiết kế theo chuẩn Enterprise, bao gồm mọi khía cạnh từ chức năng, phi chức năng đến quy trình triển khai và sẵn sàng vận hành.
 
+## Cập nhật gần nhất (2026-03-24)
+- Hoàn thiện thêm kiểm tra lịch thi: xung đột phòng/sinh viên/giảng viên, kiểm tra quá tải theo `ExamScheduling:RoomCapacities`, và export CSV lịch thi.
+- Bổ sung cơ chế token truy cập bài thi cho luồng vào bài từ lịch thi sinh viên (`/mytests/start` với `scheduleId + accessToken`).
+- Bổ sung guard chống đa thiết bị cho phiên thi đang làm (`DeviceFingerprint`) trên luồng start/resume/save/submit.
+- Sửa tổng hợp báo cáo khoa/năm học để trả đúng `StudentCount` và `PassRatePercent`.
+
 ---
 
 ## 1️⃣ Yêu cầu Chức năng (Functional Requirements - FR)
@@ -25,7 +31,7 @@ Mô tả: Quản lý vòng đời người dùng, phân quyền và bảo mật 
     - [x] Chống tấn công Brute Force (Lockout sau 5 lần thử sai).
 - [/] **Đăng xuất (Logout)** [Web App/WPF App] [All Roles]
     - [x] Thu hồi session cookie.
-    - [ ] Vô hiệu hóa JWT/Refresh Token (Blacklisting).
+    - [/] Vô hiệu hóa JWT/Refresh Token (đã revoke Refresh Token qua API logout; chưa triển khai blacklist Access Token tức thời).
 - [x] **Refresh Token** [Web App/WPF App] [All Roles]
     - [x] Cấp mới Access Token bằng Refresh Token (cho AdminApp/API).
     - [x] Refresh Token quay vòng (Rotation) để tăng tính bảo mật.
@@ -131,16 +137,16 @@ Mô tả: Sắp xếp ca thi, phòng thi và thí sinh.
 - **Ứng dụng:** Web App (Giao đề), WPF AdminApp (Lập lịch tập trung).
 - **Vai trò:** Staff, Admin, Lecturer.
 
-- [ ] **Tạo Lịch thi (Exam Schedule)** [Web App/WPF AdminApp] [Staff/Lecturer]
-    - [ ] Chọn đề thi, ngày thi, giờ thi.
-    - [ ] Gán phòng thi và sức chứa (Capacity).
-- [ ] **Kiểm tra Xung đột (Conflict Detection)** [System] [Staff]
-    - [ ] Cảnh báo nếu một sinh viên/giảng viên bị trùng lịch thi.
-    - [ ] Cảnh báo nếu phòng thi bị quá tải hoặc trùng giờ.
-- [ ] **Khóa/Mở Lịch thi** [WPF AdminApp/Web App] [Staff/Admin]
-    - [ ] Cho phép hoặc ngăn chặn sinh viên truy cập bài thi ngoài khung giờ thi.
-- [ ] **Xuất báo cáo lịch thi** [WPF AdminApp/Web App] [Staff]
-    - [ ] Xuất PDF/Excel lịch thi cho sinh viên và cán bộ coi thi.
+- [x] **Tạo Lịch thi (Exam Schedule)** [Web App/WPF AdminApp] [Staff/Lecturer]
+    - [x] Chọn đề thi, ngày thi, giờ thi.
+    - [x] Gán phòng thi và sức chứa (Capacity theo cấu hình phòng).
+- [x] **Kiểm tra Xung đột (Conflict Detection)** [System] [Staff]
+    - [x] Cảnh báo nếu một sinh viên/giảng viên bị trùng lịch thi.
+    - [x] Cảnh báo nếu phòng thi bị quá tải hoặc trùng giờ.
+- [/] **Khóa/Mở Lịch thi** [WPF AdminApp/Web App] [Staff/Admin]
+    - [/] Cho phép hoặc ngăn chặn sinh viên truy cập bài thi ngoài khung giờ thi (đang chặn theo khung giờ + assignment; chưa có toggle khóa/mở thủ công theo lịch).
+- [/] **Xuất báo cáo lịch thi** [WPF AdminApp/Web App] [Staff]
+    - [/] Xuất CSV lịch thi (chưa có PDF/Excel template chính thức).
 
 ---
 
@@ -150,14 +156,14 @@ Mô tả: Giao diện và logic cho sinh viên làm bài trực tuyến.
 - **Vai trò:** Student.
 
 - [/] **Quá trình Làm bài** [Web App] [Student]
-    - [ ] Truy cập bài thi bằng Token bảo mật.
+    - [/] Truy cập bài thi bằng Token bảo mật (đã áp dụng cho luồng vào bài từ lịch thi).
     - [x] Đồng hồ đếm ngược (Timer) chính xác từng giây.
     - [x] Tự động lưu bài thi (Auto-save) sau mỗi X giây hoặc khi chuyển câu hỏi.
     - [x] Hỗ trợ xem lại danh sách câu hỏi và đánh dấu câu chưa làm.
 - [/] **Bảo mật & Chống gian lận (Anti-cheat)** [Web App] [Student]
     - [x] Phát hiện chuyển Tab/Cửa sổ (Window Blur event).
     - [x] Ngăn chặn phím tắt (F12, Ctr+C, Ctrl+V, v.v.).
-    - [ ] Giới hạn mỗi tài khoản chỉ được thực hiện trên 1 thiết bị/phiên duy nhất.
+    - [x] Giới hạn mỗi tài khoản chỉ được thực hiện trên 1 thiết bị/phiên duy nhất.
 - [/] **Nộp bài (Submission)** [Web App] [Student]
     - [x] Xác nhận trước khi nộp.
     - [x] Tự động nộp bài khi hết giờ (Timeout auto-submit).
@@ -170,15 +176,15 @@ Mô tả: Chấm điểm tự động và thủ công.
 - **Ứng dụng:** Web App (Giảng viên chấm), WPF AdminApp (Giám sát).
 - **Vai trò:** Lecturer (Chấm), Staff/Admin (Xem).
 
-- [ ] **Chấm điểm tự động (Auto Grading)** [Server-side] [Student]
-    - [ ] Áp dụng ngay sau khi nộp bài cho MCQ, Đúng/Sai.
+- [/] **Chấm điểm tự động (Auto Grading)** [Server-side] [Student]
+    - [x] Áp dụng ngay sau khi nộp bài cho MCQ, Đúng/Sai.
     - [ ] Hỗ trợ chấm điểm từng phần (Partial scoring) cho các loại câu hỏi phức tạp.
-- [ ] **Chấm thủ công (Manual Grading - Essay)** [Web App] [Lecturer]
-    - [ ] Giảng viên truy cập giao diện chấm bài tự luận.
-    - [ ] Nhận xét và cho điểm từng câu hỏi.
-- [ ] **Moderation & Regrade** [Web App] [Lecturer/Staff]
+- [x] **Chấm thủ công (Manual Grading - Essay)** [Web App] [Lecturer]
+    - [x] Giảng viên truy cập giao diện chấm bài tự luận.
+    - [x] Nhận xét và cho điểm từng câu hỏi.
+- [/] **Moderation & Regrade** [Web App] [Lecturer/Staff]
     - [ ] Tính năng phúc khảo (Regrade request).
-    - [ ] Nhật ký thay đổi điểm (Audit trail).
+    - [x] Nhật ký thay đổi điểm (Audit trail).
     - [ ] Khóa điểm (Grade locking) sau khi hoàn tất.
 
 ---
@@ -188,8 +194,8 @@ Mô tả: Tổng hợp kết quả học tập.
 - **Ứng dụng:** Web App (Sinh viên/Giảng viên xem), WPF AdminApp (Quản lý).
 - **Vai trò:** Student (Xem), Lecturer (Xem), Staff/Admin (Quản lý).
 
-- [ ] **Tính toán Điểm** [Server-side/WPF AdminApp] [Staff]
-    - [ ] Tính điểm trung bình (GPA) theo học kỳ và năm học.
+- [/] **Tính toán Điểm** [Server-side/WPF AdminApp] [Staff]
+    - [/] Tính điểm trung bình (GPA) theo học kỳ và năm học (đã có GPA tích lũy + hiển thị GPA theo kỳ; chưa tách pipeline year-end hoàn chỉnh).
     - [ ] Xử lý công thức tính điểm phức tạp (trọng số thi, trọng số bài tập).
 - [ ] **Quản lý Bảng điểm** [WPF AdminApp] [Staff/Admin]
     - [ ] Khóa/Mở bảng điểm cấp khoa/trường.
@@ -211,9 +217,9 @@ Mô tả: Cung cấp góc nhìn số liệu cho nhà quản lý.
 - [ ] **Phân tích Câu hỏi** [Web App/WPF AdminApp] [Lecturer/Staff]
     - [ ] Đánh giá độ khó thực tế của câu hỏi dựa trên kết quả thi.
     - [ ] Độ phân biệt của câu hỏi.
-- [ ] **Báo cáo Hiệu suất** [WPF AdminApp/Web App] [Staff/Admin]
+- [/] **Báo cáo Hiệu suất** [WPF AdminApp/Web App] [Staff/Admin]
     - [ ] Báo cáo giảng dạy (Lecturer performance).
-    - [ ] Báo cáo chất lượng đào tạo theo Khoa.
+    - [x] Báo cáo chất lượng đào tạo theo Khoa.
 
 ---
 

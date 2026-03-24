@@ -421,6 +421,22 @@
     const elTimeSide = document.getElementById('t_side');
     const sid = "@Model.Id";
     const totalQs = @questionCount;
+    const DEVICE_FP_KEY = 'unitest_device_fp';
+
+    function getDeviceFingerprint(){
+        let fp = localStorage.getItem(DEVICE_FP_KEY);
+        if(!fp){
+            fp = (crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random()}`).toString();
+            localStorage.setItem(DEVICE_FP_KEY, fp);
+        }
+        return fp;
+    }
+
+    function authFetch(url, options){
+        const opts = options || {};
+        opts.headers = Object.assign({}, opts.headers || {}, { 'X-Device-Fingerprint': getDeviceFingerprint() });
+        return fetch(url, opts);
+    }
 
     function fmt(ss){ const m = Math.floor(ss/60).toString().padStart(2,'0'); const s = (ss%60).toString().padStart(2,'0'); return `${m}:${s}`; }
     function renderTime(){ const t = fmt(secs); elTimeTop.textContent = t; elTimeSide.textContent = t; }
@@ -444,7 +460,7 @@
 
     async function callResume(){
         try{
-            const r = await fetch(`/api/tests/sessions/${sid}/resume`, { method:'POST' });
+            const r = await authFetch(`/api/tests/sessions/${sid}/resume`, { method:'POST' });
             if(r.ok){
                 const data = await r.json();
                 secs = data.remainingSeconds ?? secs;
@@ -456,7 +472,7 @@
     }
     async function callPause(){
         try{
-            const r = await fetch(`/api/tests/sessions/${sid}/pause`, { method:'POST' });
+            const r = await authFetch(`/api/tests/sessions/${sid}/pause`, { method:'POST' });
             if(r.ok){
                 const data = await r.json();
                 secs = data.remainingSeconds ?? secs;
@@ -468,7 +484,7 @@
     }
 
         function logSessionEvent(actionType, detail){
-            fetch(`/api/tests/sessions/${sid}/log`, {
+            authFetch(`/api/tests/sessions/${sid}/log`, {
                 method: 'POST',
                 headers: { 'Content-Type':'application/json' },
                 body: JSON.stringify({ actionType, detail })
@@ -542,7 +558,7 @@
             savingServer = true;
 
             try{
-                const r = await fetch(`/api/tests/sessions/${sid}/save-draft`, {
+                const r = await authFetch(`/api/tests/sessions/${sid}/save-draft`, {
                     method: 'POST',
                     headers: { 'Content-Type':'application/json' },
                     body: JSON.stringify({ answers: collect() })
@@ -762,7 +778,7 @@
 
       const payload = { answers: collect() };
       try{
-        const r = await fetch(`/api/tests/sessions/${sid}/submit`,{
+        const r = await authFetch(`/api/tests/sessions/${sid}/submit`,{
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify(payload)

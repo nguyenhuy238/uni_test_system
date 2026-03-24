@@ -1,6 +1,7 @@
 @model List<UniTestSystem.Domain.ExamSchedule>
 @{
     ViewData["Title"] = "My Exam Schedule";
+    var accessTokens = ViewBag.ScheduleAccessTokens as Dictionary<string, string> ?? new Dictionary<string, string>();
 }
 
 <div class="container py-4">
@@ -61,7 +62,8 @@
                             }
                             @if (isNow)
                             {
-                                <a href="/Student/TakeTest/@item.TestId" class="btn btn-success w-100 shadow-sm">
+                                var token = accessTokens.TryGetValue(item.Id, out var t) ? t : "";
+                                <a href="/mytests/start/@item.TestId?scheduleId=@item.Id&accessToken=@Uri.EscapeDataString(token)" class="btn btn-success w-100 shadow-sm">
                                     <i class="bi bi-play-fill me-1"></i> Start Exam Now
                                 </a>
                             }

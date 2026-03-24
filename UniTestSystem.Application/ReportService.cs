@@ -76,25 +76,43 @@ namespace UniTestSystem.Application
         // ==== Báo cáo theo Khoa (Faculty) ====
         public async Task<FacultyReportVm> GetFacultyReportAsync(DateTime fromUtc, DateTime toUtc)
         {
-            // Use Query() to perform joins and grouping at the Database level
-            var query = from s in _sesRepo.Query()
-                        join st in _studentRepo.Query() on s.UserId equals st.Id
-                        where s.EndAt.HasValue && s.EndAt.Value >= fromUtc && s.EndAt.Value <= toUtc && s.Status != SessionStatus.NotStarted
-                        group s by st.StudentClassId into g
-                        select new {
-                            FacultyName = g.Key ?? "(Unknown)",
-                            SubmissionCount = g.Count(),
-                            AvgScore = g.Average(x => x.TotalScore),
-                            LastSubmissionAt = g.Max(x => x.EndAt)
-                        };
+            var passMap = await _testRepo.Query()
+                .Select(t => new { t.Id, t.PassScore })
+                .ToDictionaryAsync(x => x.Id, x => (decimal)x.PassScore);
 
-            var data = await query.ToListAsync();
-            var rows = data.Select(d => new FacultyReportRow {
-                FacultyName = d.FacultyName,
-                SubmissionCount = d.SubmissionCount,
-                AvgScore = Math.Round(d.AvgScore, 2),
-                LastSubmissionAt = d.LastSubmissionAt
-            }).ToList();
+            var data = await (from s in _sesRepo.Query()
+                              join st in _studentRepo.Query() on s.UserId equals st.Id
+                              where s.EndAt.HasValue
+                                    && s.EndAt.Value >= fromUtc
+                                    && s.EndAt.Value <= toUtc
+                                    && s.Status != SessionStatus.NotStarted
+                              select new
+                              {
+                                  FacultyName = st.StudentClassId ?? "(Unknown)",
+                                  StudentId = s.UserId,
+                                  s.TestId,
+                                  s.TotalScore,
+                                  s.EndAt
+                              }).ToListAsync();
+
+            var rows = data
+                .GroupBy(x => x.FacultyName)
+                .Select(g =>
+                {
+                    var passCount = g.Count(x => passMap.TryGetValue(x.TestId, out var pass) && x.TotalScore >= pass);
+                    var submitCount = g.Count();
+                    return new FacultyReportRow
+                    {
+                        FacultyName = g.Key,
+                        StudentCount = g.Select(x => x.StudentId).Distinct().Count(),
+                        SubmissionCount = submitCount,
+                        AvgScore = submitCount > 0 ? Math.Round(g.Average(x => x.TotalScore), 2) : 0m,
+                        PassRatePercent = submitCount > 0 ? Math.Round((passCount * 100m) / submitCount, 2) : 0m,
+                        LastSubmissionAt = g.Max(x => x.EndAt)
+                    };
+                })
+                .OrderBy(x => x.FacultyName)
+                .ToList();
 
             return new FacultyReportVm { Rows = rows };
         }
@@ -102,24 +120,43 @@ namespace UniTestSystem.Application
         // ==== Báo cáo theo Năm học (Academic Year) ====
         public async Task<AcademicYearReportVm> GetAcademicYearReportAsync(DateTime fromUtc, DateTime toUtc)
         {
-            var query = from s in _sesRepo.Query()
-                        join st in _studentRepo.Query() on s.UserId equals st.Id
-                        where s.EndAt.HasValue && s.EndAt.Value >= fromUtc && s.EndAt.Value <= toUtc && s.Status != SessionStatus.NotStarted
-                        group s by st.AcademicYear into g
-                        select new {
-                            AcademicYear = g.Key ?? "(Unknown)",
-                            SubmissionCount = g.Count(),
-                            AvgScore = g.Average(x => x.TotalScore),
-                            LastSubmissionAt = g.Max(x => x.EndAt)
-                        };
+            var passMap = await _testRepo.Query()
+                .Select(t => new { t.Id, t.PassScore })
+                .ToDictionaryAsync(x => x.Id, x => (decimal)x.PassScore);
 
-            var data = await query.ToListAsync();
-            var rows = data.Select(d => new AcademicYearReportRow {
-                AcademicYear = d.AcademicYear,
-                SubmissionCount = d.SubmissionCount,
-                AvgScore = Math.Round(d.AvgScore, 2),
-                LastSubmissionAt = d.LastSubmissionAt
-            }).ToList();
+            var data = await (from s in _sesRepo.Query()
+                              join st in _studentRepo.Query() on s.UserId equals st.Id
+                              where s.EndAt.HasValue
+                                    && s.EndAt.Value >= fromUtc
+                                    && s.EndAt.Value <= toUtc
+                                    && s.Status != SessionStatus.NotStarted
+                              select new
+                              {
+                                  AcademicYear = st.AcademicYear ?? "(Unknown)",
+                                  StudentId = s.UserId,
+                                  s.TestId,
+                                  s.TotalScore,
+                                  s.EndAt
+                              }).ToListAsync();
+
+            var rows = data
+                .GroupBy(x => x.AcademicYear)
+                .Select(g =>
+                {
+                    var passCount = g.Count(x => passMap.TryGetValue(x.TestId, out var pass) && x.TotalScore >= pass);
+                    var submitCount = g.Count();
+                    return new AcademicYearReportRow
+                    {
+                        AcademicYear = g.Key,
+                        StudentCount = g.Select(x => x.StudentId).Distinct().Count(),
+                        SubmissionCount = submitCount,
+                        AvgScore = submitCount > 0 ? Math.Round(g.Average(x => x.TotalScore), 2) : 0m,
+                        PassRatePercent = submitCount > 0 ? Math.Round((passCount * 100m) / submitCount, 2) : 0m,
+                        LastSubmissionAt = g.Max(x => x.EndAt)
+                    };
+                })
+                .OrderBy(x => x.AcademicYear)
+                .ToList();
 
             return new AcademicYearReportVm { Rows = rows };
         }

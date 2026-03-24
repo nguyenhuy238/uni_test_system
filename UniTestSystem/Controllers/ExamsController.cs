@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using UniTestSystem.Application;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Domain;
 using System.Security.Claims;
+using System.Text;
 
 namespace UniTestSystem.Controllers
 {
@@ -13,15 +15,18 @@ namespace UniTestSystem.Controllers
         private readonly IExamScheduleService _scheduleService;
         private readonly IAcademicService _academicService;
         private readonly IRepository<Test> _testRepo;
+        private readonly ExamAccessTokenService _examAccessTokenService;
 
         public ExamsController(
             IExamScheduleService scheduleService, 
             IAcademicService academicService,
-            IRepository<Test> testRepo)
+            IRepository<Test> testRepo,
+            ExamAccessTokenService examAccessTokenService)
         {
             _scheduleService = scheduleService;
             _academicService = academicService;
             _testRepo = testRepo;
+            _examAccessTokenService = examAccessTokenService;
         }
 
         // Student's View of their exams
@@ -29,6 +34,11 @@ namespace UniTestSystem.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
             var schedules = await _scheduleService.GetSchedulesForStudentAsync(userId);
+
+            ViewBag.ScheduleAccessTokens = schedules.ToDictionary(
+                s => s.Id,
+                s => _examAccessTokenService.Generate(userId, s.TestId, s.Id, s.EndTime));
+
             return View(schedules);
         }
 
@@ -43,6 +53,31 @@ namespace UniTestSystem.Controllers
         {
             var schedules = await _scheduleService.GetAllSchedulesAsync();
             return View(schedules);
+        }
+
+        [HttpGet]
+        [Authorize(Policy = "RequireStaffOrAdmin")]
+        public async Task<IActionResult> ExportCsv()
+        {
+            var schedules = await _scheduleService.GetAllSchedulesAsync();
+            var sb = new StringBuilder();
+            sb.AppendLine("CourseCode,CourseName,TestTitle,Room,StartTimeUtc,EndTimeUtc,ExamType");
+
+            foreach (var s in schedules.OrderBy(x => x.StartTime))
+            {
+                sb.AppendLine(
+                    $"{EscapeCsv(s.Course?.Code)}," +
+                    $"{EscapeCsv(s.Course?.Name)}," +
+                    $"{EscapeCsv(s.Test?.Title)}," +
+                    $"{EscapeCsv(s.Room)}," +
+                    $"{s.StartTime:O}," +
+                    $"{s.EndTime:O}," +
+                    $"{EscapeCsv(s.ExamType)}");
+            }
+
+            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var fileName = $"exam-schedules-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv";
+            return File(bytes, "text/csv; charset=utf-8", fileName);
         }
 
         // Admin/Staff: Create schedule
@@ -122,6 +157,12 @@ namespace UniTestSystem.Controllers
         {
             await _scheduleService.DeleteScheduleAsync(id);
             return RedirectToAction(nameof(Index));
+        }
+
+        private static string EscapeCsv(string? value)
+        {
+            var safe = (value ?? string.Empty).Replace("\"", "\"\"");
+            return $"\"{safe}\"";
         }
     }
 }

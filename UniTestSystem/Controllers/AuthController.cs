@@ -66,6 +66,19 @@ namespace UniTestSystem.Controllers
             public string RefreshToken { get; set; } = "";
         }
 
+        [HttpPost("/api/auth/logout")]
+        public async Task<IActionResult> LogoutApi([FromBody] RefreshRequest request)
+        {
+            if (!string.IsNullOrWhiteSpace(request.RefreshToken))
+            {
+                await _auth.RevokeRefreshTokenAsync(
+                    request.RefreshToken,
+                    HttpContext.Connection.RemoteIpAddress?.ToString() ?? "");
+            }
+
+            return Ok(new { message = "Logged out and refresh token revoked." });
+        }
+
         [HttpPost("/auth/register")]
         public async Task<IActionResult> RegisterPost(string name, string email, string role, string password, string confirmPassword)
         {

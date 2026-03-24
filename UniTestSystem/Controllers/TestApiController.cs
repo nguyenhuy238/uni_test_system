@@ -18,9 +18,25 @@ namespace UniTestSystem.Controllers
         private readonly IRepository<Session> _sRepo;
         private readonly IRepository<Question> _qRepo;
         private readonly IRepository<SessionLog> _slRepo;
+        private readonly SessionDeviceGuardService _sessionDeviceGuard;
 
-        public TestsApiController(TestService svc, AssessmentService assessSvc, IRepository<Test> tRepo, IRepository<Session> sRepo, IRepository<Question> qRepo, IRepository<SessionLog> slRepo)
-        { _svc = svc; _assessSvc = assessSvc; _tRepo = tRepo; _sRepo = sRepo; _qRepo = qRepo; _slRepo = slRepo; }
+        public TestsApiController(
+            TestService svc,
+            AssessmentService assessSvc,
+            IRepository<Test> tRepo,
+            IRepository<Session> sRepo,
+            IRepository<Question> qRepo,
+            IRepository<SessionLog> slRepo,
+            SessionDeviceGuardService sessionDeviceGuard)
+        {
+            _svc = svc;
+            _assessSvc = assessSvc;
+            _tRepo = tRepo;
+            _sRepo = sRepo;
+            _qRepo = qRepo;
+            _slRepo = slRepo;
+            _sessionDeviceGuard = sessionDeviceGuard;
+        }
 
         // ====================== START ======================
         [HttpPost("{id}/start")]
@@ -30,8 +46,24 @@ namespace UniTestSystem.Controllers
             var allowed = await _assessSvc.GetAvailableTestIdsAsync(uid, DateTime.UtcNow);
             if (!allowed.Contains(id)) return Forbid();
 
+            var requestFp = _sessionDeviceGuard.GetRequestFingerprint(Request, HttpContext.Connection.RemoteIpAddress?.ToString());
+            var hasOtherDeviceSession = await _sessionDeviceGuard.HasActiveSessionOnOtherDeviceAsync(uid, requestFp);
+            if (hasOtherDeviceSession)
+            {
+                return Conflict(new { message = "An in-progress session is active on another device." });
+            }
+
             // Tạo mới hoặc trả về session đang làm (service của bạn)
             var s = await _svc.StartAsync(id, uid);
+            var bound = await _sessionDeviceGuard.EnsureSessionDeviceAsync(
+                s.Id,
+                requestFp,
+                Request.Headers["User-Agent"].ToString(),
+                HttpContext.Connection.RemoteIpAddress?.ToString());
+            if (!bound)
+            {
+                return Conflict(new { message = "Session is bound to another device." });
+            }
 
             var test = await _tRepo.FirstOrDefaultAsync(t => t.Id == id);
             var duration = test?.DurationMinutes ?? 30;
@@ -67,6 +99,7 @@ namespace UniTestSystem.Controllers
             var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sid);
             if (s == null) return NotFound();
             if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
+            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
             if (s.Status != SessionStatus.InProgress)
                 return BadRequest(new { message = "Session is not active" });
 
@@ -117,6 +150,7 @@ namespace UniTestSystem.Controllers
             var s0 = await _sRepo.FirstOrDefaultAsync(x => x.Id == sid);
             if (s0 == null) return NotFound();
             if (!string.Equals(s0.UserId, uid, StringComparison.Ordinal)) return Forbid();
+            if (!await EnsureSessionDeviceAsync(s0)) return Conflict(new { message = "Session is bound to another device." });
 
             var s = await _svc.SubmitAsync(sid, p.Answers);
 
@@ -139,6 +173,7 @@ namespace UniTestSystem.Controllers
             var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sid);
             if (s == null) return NotFound();
             if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
+            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
 
             var t = await _tRepo.FirstOrDefaultAsync(x => x.Id == s.TestId);
             if (t == null) return NotFound();
@@ -164,6 +199,7 @@ namespace UniTestSystem.Controllers
             var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sid);
             if (s == null) return NotFound();
             if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
+            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
 
             var t = await _tRepo.FirstOrDefaultAsync(x => x.Id == s.TestId);
             if (t == null) return NotFound();
@@ -191,6 +227,7 @@ namespace UniTestSystem.Controllers
             var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sid);
             if (s == null) return NotFound();
             if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
+            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
 
             var log = new SessionLog
             {
@@ -221,6 +258,16 @@ namespace UniTestSystem.Controllers
                 : 0;
             var consumed = Math.Max(0, s.ConsumedSeconds + Math.Max(0, runningDelta));
             return Math.Max(0, total - consumed);
+        }
+
+        private async Task<bool> EnsureSessionDeviceAsync(Session session)
+        {
+            var requestFp = _sessionDeviceGuard.GetRequestFingerprint(Request, HttpContext.Connection.RemoteIpAddress?.ToString());
+            return await _sessionDeviceGuard.EnsureSessionDeviceAsync(
+                session.Id,
+                requestFp,
+                Request.Headers["User-Agent"].ToString(),
+                HttpContext.Connection.RemoteIpAddress?.ToString());
         }
     }
 }

@@ -12,7 +12,9 @@ public interface IExamScheduleService
     
     // Conflict detection
     Task<bool> HasConflictAsync(string room, DateTime start, DateTime end, string? excludeId = null);
-    Task<List<string>> GetConflictingStudentsAsync(string courseId, DateTime start, DateTime end);
+    Task<List<string>> GetConflictingStudentsAsync(string courseId, DateTime start, DateTime end, string? excludeScheduleId = null);
+    Task<List<string>> GetConflictingLecturersAsync(string courseId, DateTime start, DateTime end, string? excludeScheduleId = null);
+    Task<(bool IsOverCapacity, int EnrolledCount, int? Capacity)> CheckRoomCapacityAsync(string room, string courseId);
     
     // Student specific
     Task<List<ExamSchedule>> GetSchedulesForStudentAsync(string studentId);

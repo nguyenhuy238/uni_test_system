@@ -1,4 +1,5 @@
 using UniTestSystem.Application.Interfaces;
+using UniTestSystem.Application;
 using System.Security.Claims;
 using UniTestSystem.Domain;
 using Microsoft.AspNetCore.Authorization;
@@ -8,15 +9,18 @@ namespace UniTestSystem.Controllers.Api
 {
     [ApiController]
     [Authorize]
-    [Route("api/tests/sessions")]
+    [Route("api/internal/sessions")]
     public class SessionsApiController : ControllerBase
     {
         private readonly IRepository<Session> _sRepo;
         private readonly IRepository<Test> _tRepo;
+        private readonly SessionDeviceGuardService _sessionDeviceGuard;
 
-        public SessionsApiController(IRepository<Session> sRepo, IRepository<Test> tRepo)
+        public SessionsApiController(IRepository<Session> sRepo, IRepository<Test> tRepo, SessionDeviceGuardService sessionDeviceGuard)
         {
-            _sRepo = sRepo; _tRepo = tRepo;
+            _sRepo = sRepo;
+            _tRepo = tRepo;
+            _sessionDeviceGuard = sessionDeviceGuard;
         }
 
         // Helper: tính remaining giây theo Session + Test
@@ -42,6 +46,7 @@ namespace UniTestSystem.Controllers.Api
             var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == id);
             if (s == null) return NotFound();
             if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
+            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
 
             s.LastActivityAt = DateTime.UtcNow;
             await _sRepo.UpsertAsync(x => x.Id == id, s);
@@ -57,6 +62,7 @@ namespace UniTestSystem.Controllers.Api
             var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == id);
             if (s == null) return NotFound();
             if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
+            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
 
             if (!s.TimerStartedAt.HasValue)
             {
@@ -77,6 +83,7 @@ namespace UniTestSystem.Controllers.Api
             var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == id);
             if (s == null) return NotFound();
             if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
+            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
 
             if (s.TimerStartedAt.HasValue)
             {
@@ -89,6 +96,16 @@ namespace UniTestSystem.Controllers.Api
             await _sRepo.UpsertAsync(x => x.Id == id, s);
             var remaining = await GetRemainingSecondsAsync(s);
             return Ok(new { ok = true, remainingSeconds = remaining, running = false });
+        }
+
+        private async Task<bool> EnsureSessionDeviceAsync(Session session)
+        {
+            var requestFp = _sessionDeviceGuard.GetRequestFingerprint(Request, HttpContext.Connection.RemoteIpAddress?.ToString());
+            return await _sessionDeviceGuard.EnsureSessionDeviceAsync(
+                session.Id,
+                requestFp,
+                Request.Headers["User-Agent"].ToString(),
+                HttpContext.Connection.RemoteIpAddress?.ToString());
         }
     }
 }
