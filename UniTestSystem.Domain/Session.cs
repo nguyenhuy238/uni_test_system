@@ -28,6 +28,7 @@ namespace UniTestSystem.Domain
         public decimal MaxScore { get; set; } = 0;
         public decimal Percent { get; set; } = 0;
         public bool IsPassed { get; set; } = false;
+        public DateTime? GradedAt { get; set; }
 
         public virtual ICollection<StudentAnswer> StudentAnswers { get; set; } = new List<StudentAnswer>();
         public virtual ICollection<SessionLog> Logs { get; set; } = new List<SessionLog>();

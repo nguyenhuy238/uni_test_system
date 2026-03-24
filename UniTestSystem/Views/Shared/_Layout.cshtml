@@ -64,6 +64,8 @@
                         @if (isAuth && role == Role.Student.ToString())
                         {
                             <li class="nav-item"><a class="nav-link" asp-controller="MyTests" asp-action="Index">My Tests</a></li>
+                            <li class="nav-item"><a class="nav-link fw-bold text-primary" asp-controller="Exams" asp-action="MyExams">My Exams</a></li>
+                            <li class="nav-item"><a class="nav-link fw-bold text-success" asp-controller="Transcripts" asp-action="MyTranscript">My Transcript</a></li>
                         }
                             @if (role == "Admin" || role == "Lecturer" || canViewOrg || canViewReports || canEditSettings || canManagePerms)
                             {
@@ -76,12 +78,17 @@
                                         {
                                             <li><a class="dropdown-item" asp-controller="Admin" asp-action="Dashboard">Admin Dashboard</a></li>
                                             <li><a class="dropdown-item" asp-controller="Users" asp-action="Index">User Management</a></li>
+                                            <li><a class="dropdown-item fw-bold text-primary" asp-controller="Transcripts" asp-action="Index">Student Transcripts</a></li>
                                         }
                                         @if (role == "Lecturer")
                                         {
                                             <li><a class="dropdown-item" asp-controller="Lecturer" asp-action="Dashboard">Lecturer Dashboard</a></li>
                                             <li><a class="dropdown-item" asp-controller="Questions" asp-action="Index">Question Bank</a></li>
                                             <li><a class="dropdown-item" asp-controller="Tests" asp-action="Index">Test Management</a></li>
+                                        }
+                                        @if (role == "Admin" || role == "Staff")
+                                        {
+                                            <li><a class="dropdown-item fw-bold" asp-controller="Exams" asp-action="Index">Exam Scheduling</a></li>
                                         }
                                         @if (canViewOrg)
                                         {

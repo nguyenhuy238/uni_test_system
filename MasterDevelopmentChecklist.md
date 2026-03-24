@@ -149,19 +149,19 @@ Mô tả: Giao diện và logic cho sinh viên làm bài trực tuyến.
 - **Ứng dụng:** Web App.
 - **Vai trò:** Student.
 
-- [ ] **Quá trình Làm bài** [Web App] [Student]
+- [/] **Quá trình Làm bài** [Web App] [Student]
     - [ ] Truy cập bài thi bằng Token bảo mật.
-    - [ ] Đồng hồ đếm ngược (Timer) chính xác từng giây.
-    - [ ] Tự động lưu bài thi (Auto-save) sau mỗi X giây hoặc khi chuyển câu hỏi.
-    - [ ] Hỗ trợ xem lại danh sách câu hỏi và đánh dấu câu chưa làm.
-- [ ] **Bảo mật & Chống gian lận (Anti-cheat)** [Web App] [Student]
-    - [ ] Phát hiện chuyển Tab/Cửa sổ (Window Blur event).
-    - [ ] Ngăn chặn phím tắt (F12, Ctr+C, Ctrl+V, v.v.).
+    - [x] Đồng hồ đếm ngược (Timer) chính xác từng giây.
+    - [x] Tự động lưu bài thi (Auto-save) sau mỗi X giây hoặc khi chuyển câu hỏi.
+    - [x] Hỗ trợ xem lại danh sách câu hỏi và đánh dấu câu chưa làm.
+- [/] **Bảo mật & Chống gian lận (Anti-cheat)** [Web App] [Student]
+    - [x] Phát hiện chuyển Tab/Cửa sổ (Window Blur event).
+    - [x] Ngăn chặn phím tắt (F12, Ctr+C, Ctrl+V, v.v.).
     - [ ] Giới hạn mỗi tài khoản chỉ được thực hiện trên 1 thiết bị/phiên duy nhất.
-- [ ] **Nộp bài (Submission)** [Web App] [Student]
-    - [ ] Xác nhận trước khi nộp.
-    - [ ] Tự động nộp bài khi hết giờ (Timeout auto-submit).
-    - [ ] Xử lý mất kết nối: Lưu trạng thái bài thi locally và đồng bộ lại khi có mạng.
+- [/] **Nộp bài (Submission)** [Web App] [Student]
+    - [x] Xác nhận trước khi nộp.
+    - [x] Tự động nộp bài khi hết giờ (Timeout auto-submit).
+    - [/] Xử lý mất kết nối: Lưu trạng thái bài thi locally và đồng bộ lại khi có mạng (đã có local + auto-save server; chưa có cơ chế retry queue offline đầy đủ).
 
 ---
 

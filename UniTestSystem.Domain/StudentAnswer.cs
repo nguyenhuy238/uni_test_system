@@ -11,7 +11,9 @@ namespace UniTestSystem.Domain
         
         public string? SelectedOptionId { get; set; }
         public string? EssayAnswer { get; set; }
+        public string? Comment { get; set; }
         public decimal Score { get; set; } = 0;
+        public DateTime? GradedAt { get; set; }
         
         public DateTime AnsweredAt { get; set; } = DateTime.UtcNow;
     }

@@ -17,9 +17,10 @@ namespace UniTestSystem.Controllers
         private readonly IRepository<Test> _tRepo;
         private readonly IRepository<Session> _sRepo;
         private readonly IRepository<Question> _qRepo;
+        private readonly IRepository<SessionLog> _slRepo;
 
-        public TestsApiController(TestService svc, AssessmentService assessSvc, IRepository<Test> tRepo, IRepository<Session> sRepo, IRepository<Question> qRepo)
-        { _svc = svc; _assessSvc = assessSvc; _tRepo = tRepo; _sRepo = sRepo; _qRepo = qRepo; }
+        public TestsApiController(TestService svc, AssessmentService assessSvc, IRepository<Test> tRepo, IRepository<Session> sRepo, IRepository<Question> qRepo, IRepository<SessionLog> slRepo)
+        { _svc = svc; _assessSvc = assessSvc; _tRepo = tRepo; _sRepo = sRepo; _qRepo = qRepo; _slRepo = slRepo; }
 
         // ====================== START ======================
         [HttpPost("{id}/start")]
@@ -56,6 +57,58 @@ namespace UniTestSystem.Controllers
 
         // ====================== SUBMIT ======================
         public class SubmitPayload { public Dictionary<string, string?> Answers { get; set; } = new(); }
+
+        public class SaveDraftPayload { public Dictionary<string, string?> Answers { get; set; } = new(); }
+
+        [HttpPost("sessions/{sid}/save-draft")]
+        public async Task<IActionResult> SaveDraft(string sid, [FromBody] SaveDraftPayload p)
+        {
+            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sid);
+            if (s == null) return NotFound();
+            if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
+            if (s.Status != SessionStatus.InProgress)
+                return BadRequest(new { message = "Session is not active" });
+
+            var allQuestions = await _qRepo.GetAllAsync();
+            var qMap = allQuestions.ToDictionary(x => x.Id, x => x);
+
+            var updated = 0;
+            var now = DateTime.UtcNow;
+
+            foreach (var sa in s.StudentAnswers)
+            {
+                if (!p.Answers.TryGetValue(sa.QuestionId, out var raw)) continue;
+                if (!qMap.TryGetValue(sa.QuestionId, out var q)) continue;
+
+                var value = (raw ?? string.Empty).Trim();
+                switch (q.Type)
+                {
+                    case QType.MCQ:
+                        sa.SelectedOptionId = string.IsNullOrEmpty(value) ? null : value;
+                        break;
+                    case QType.TrueFalse:
+                        if (string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)) value = "True";
+                        if (string.Equals(value, "false", StringComparison.OrdinalIgnoreCase)) value = "False";
+                        sa.SelectedOptionId = string.IsNullOrEmpty(value) ? null : value;
+                        break;
+                    case QType.Essay:
+                        sa.EssayAnswer = value;
+                        break;
+                    default:
+                        sa.EssayAnswer = value;
+                        break;
+                }
+
+                sa.AnsweredAt = now;
+                updated++;
+            }
+
+            s.LastActivityAt = now;
+            await _sRepo.UpsertAsync(x => x.Id == s.Id, s);
+
+            return Ok(new { ok = true, updatedCount = updated, at = now });
+        }
 
         [HttpPost("sessions/{sid}/submit")]
         public async Task<IActionResult> Submit(string sid, [FromBody] SubmitPayload p)
@@ -128,6 +181,35 @@ namespace UniTestSystem.Controllers
 
             remaining = ComputeRemainingSeconds(s, t.DurationMinutes);
             return Ok(new { remainingSeconds = remaining, running = true });
+        }
+
+        // ====================== ANTI-CHEAT LOGS ======================
+        [HttpPost("sessions/{sid}/log")]
+        public async Task<IActionResult> LogEvent(string sid, [FromBody] SessionLogEvent model)
+        {
+            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sid);
+            if (s == null) return NotFound();
+            if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
+
+            var log = new SessionLog
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                SessionId = sid,
+                ActionType = model.ActionType,
+                Detail = model.Detail,
+                Timestamp = DateTime.UtcNow,
+                IPAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
+            };
+
+            await _slRepo.InsertAsync(log);
+            return Ok();
+        }
+
+        public class SessionLogEvent
+        {
+            public string ActionType { get; set; } = "";
+            public string? Detail { get; set; }
         }
 
         // ====================== Helpers ======================

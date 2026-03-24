@@ -407,7 +407,7 @@
             <button type="button" class="btn btn-primary" id="submitBtn2">Submit & Finish</button>
         </div>
 
-        <p class="hint">Your answers are <b>not</b> sent to server until you press <i>Submit &amp; Finish</i>. Draft saves only on this device.</p>
+        <p class="hint">Answers are auto-saved to server and this device. You can still press <i>Submit &amp; Finish</i> to finalize grading.</p>
     </main>
 </div>
 
@@ -467,9 +467,31 @@
         }catch(e){}
     }
 
-    renderTime(); startTimer(); callResume();
-    document.addEventListener('visibilitychange', ()=>{ if(document.hidden){ callPause(); } else { callResume(); } });
-    window.addEventListener('beforeunload', ()=>{ navigator.sendBeacon?.(`/api/tests/sessions/${sid}/pause`); });
+        function logSessionEvent(actionType, detail){
+            fetch(`/api/tests/sessions/${sid}/log`, {
+                method: 'POST',
+                headers: { 'Content-Type':'application/json' },
+                body: JSON.stringify({ actionType, detail })
+            }).catch(()=>{});
+        }
+
+        renderTime(); startTimer(); callResume();
+        document.addEventListener('visibilitychange', ()=>{
+            if(document.hidden){
+                callPause();
+                logSessionEvent('Blur', 'Document hidden');
+            } else {
+                callResume();
+                logSessionEvent('Focus', 'Document visible');
+            }
+        });
+        window.addEventListener('beforeunload', ()=>{
+            try{
+                const payload = JSON.stringify({ answers: collect() });
+                navigator.sendBeacon?.(`/api/tests/sessions/${sid}/save-draft`, new Blob([payload], { type: 'application/json' }));
+            }catch(e){}
+            navigator.sendBeacon?.(`/api/tests/sessions/${sid}/pause`);
+        });
 
     /* ===== Draft / Flags / Navigator ===== */
     const KEY = `runner_${sid}`;
@@ -502,11 +524,47 @@
         }
       });
     }
-    function saveDraft(silent=false){
+        function saveDraft(silent=false){
       localStorage.setItem(KEY, JSON.stringify(collect()));
       if(!silent) toast("Draft saved on this device.");
     }
     function clearDraft(){ localStorage.removeItem(KEY); toast("Local draft cleared."); }
+
+        let saveServerTO = null;
+        let savingServer = false;
+        let pendingServerSave = false;
+
+        async function saveDraftToServer(silent=true){
+            if(savingServer){
+                pendingServerSave = true;
+                return;
+            }
+            savingServer = true;
+
+            try{
+                const r = await fetch(`/api/tests/sessions/${sid}/save-draft`, {
+                    method: 'POST',
+                    headers: { 'Content-Type':'application/json' },
+                    body: JSON.stringify({ answers: collect() })
+                });
+                if(!r.ok && !silent){
+                    toast('Cannot save draft to server right now.', 'warn');
+                }
+            }catch(e){
+                if(!silent) toast('Network issue while saving draft.', 'warn');
+            }finally{
+                savingServer = false;
+                if(pendingServerSave){
+                    pendingServerSave = false;
+                    setTimeout(()=>saveDraftToServer(true), 250);
+                }
+            }
+        }
+
+        function queueServerSave(){
+            if(saveServerTO) clearTimeout(saveServerTO);
+            saveServerTO = setTimeout(()=> saveDraftToServer(true), 1200);
+        }
 
     function loadFlags(){ try{ return JSON.parse(localStorage.getItem(KEY_FLAGS) || '{}'); }catch(e){ return {}; } }
     function saveFlags(flags){ localStorage.setItem(KEY_FLAGS, JSON.stringify(flags||{})); }
@@ -569,13 +627,21 @@
     }
 
     /* Sự kiện input/change -> cập nhật tức thì */
-    formEl.addEventListener('change', (e)=>{
+        formEl.addEventListener('change', (e)=>{
       const t = e.target;
-      if(t && t.name){ updateOneQuestion(t.name); }
+            if(t && t.name){
+                updateOneQuestion(t.name);
+                saveDraft(true);
+                queueServerSave();
+            }
     });
     formEl.addEventListener('input', (e)=>{
       const t = e.target;
-      if(t && t.name){ updateOneQuestion(t.name); }
+            if(t && t.name){
+                updateOneQuestion(t.name);
+                saveDraft(true);
+                queueServerSave();
+            }
     });
 
     /* Bật filter chỉ flagged */
@@ -643,8 +709,16 @@
     const saveLocalBtn2 = document.getElementById('saveLocalBtn2');
     const clearLocalBtn = document.getElementById('clearLocalBtn');
 
-    saveLocalBtn.addEventListener('click', ()=> saveDraft(false));
-    saveLocalBtn2.addEventListener('click', ()=> saveDraft(false));
+        saveLocalBtn.addEventListener('click', async ()=>{
+            saveDraft(true);
+            await saveDraftToServer(false);
+            toast('Draft saved to device and server.');
+        });
+        saveLocalBtn2.addEventListener('click', async ()=>{
+            saveDraft(true);
+            await saveDraftToServer(false);
+            toast('Draft saved to device and server.');
+        });
     clearLocalBtn.addEventListener('click', ()=>{ if(confirm("Clear local draft on this device?")) clearDraft(); });
 
     submitBtn.addEventListener('click', ()=> trySubmit(false));
@@ -683,6 +757,7 @@
       submitting = true;
       submitBtn.disabled = true; submitBtn2.disabled = true;
 
+            await saveDraftToServer(true);
       stopTimer(); await callPause();
 
       const payload = { answers: collect() };
@@ -721,6 +796,7 @@
 
     /* Initial */
     try{ const raw = localStorage.getItem(KEY); if(raw){ applyDraft(JSON.parse(raw)); } }catch(e){}
+        saveDraftToServer(true);
     (function syncFlagButtons(){
       const flags = loadFlags();
       document.querySelectorAll('.flag-btn').forEach(btn=>{
@@ -734,5 +810,61 @@
     setActiveChip(0);
 
     // Auto save
-    setInterval(()=>{ try{ saveDraft(true); }catch(e){} }, 20000);
+        setInterval(()=>{
+            try{
+                saveDraft(true);
+                saveDraftToServer(true);
+            }catch(e){}
+        }, 20000);
+
+        // Anti-cheat event logging and key blocking
+        let antiCheatNoticeAt = 0;
+        function warnAntiCheat(msg){
+            const now = Date.now();
+            if(now - antiCheatNoticeAt > 2500){
+                antiCheatNoticeAt = now;
+                toast(msg, 'warn');
+            }
+        }
+
+        document.addEventListener('copy', (e)=>{
+            e.preventDefault();
+            logSessionEvent('CopyBlocked', 'Copy action blocked');
+            warnAntiCheat('Copy is disabled during exam session.');
+        });
+
+        document.addEventListener('cut', (e)=>{
+            e.preventDefault();
+            logSessionEvent('CutBlocked', 'Cut action blocked');
+            warnAntiCheat('Cut is disabled during exam session.');
+        });
+
+        document.addEventListener('paste', (e)=>{
+            const t = e.target;
+            const isEssay = t && t.tagName === 'TEXTAREA';
+            if(isEssay) return;
+            e.preventDefault();
+            logSessionEvent('PasteBlocked', 'Paste action blocked outside essay area');
+            warnAntiCheat('Paste is disabled for objective questions.');
+        });
+
+        document.addEventListener('contextmenu', (e)=>{
+            e.preventDefault();
+            logSessionEvent('ContextMenuBlocked', 'Context menu blocked');
+        });
+
+        document.addEventListener('keydown', (e)=>{
+            const key = (e.key || '').toLowerCase();
+            const ctrl = e.ctrlKey || e.metaKey;
+            const blocked =
+                e.key === 'F12' ||
+                (ctrl && ['c', 'x', 'v', 'u', 's', 'p'].includes(key)) ||
+                (ctrl && e.shiftKey && ['i', 'j', 'c'].includes(key));
+
+            if(!blocked) return;
+
+            e.preventDefault();
+            logSessionEvent('ShortcutBlocked', `Blocked shortcut: ${e.key} (ctrl=${ctrl}, shift=${e.shiftKey})`);
+            warnAntiCheat('Shortcut is blocked during exam session.');
+        });
 </script>

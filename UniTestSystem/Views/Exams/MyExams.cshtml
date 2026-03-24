@@ -1,0 +1,86 @@
+@model List<UniTestSystem.Domain.ExamSchedule>
+@{
+    ViewData["Title"] = "My Exam Schedule";
+}
+
+<div class="container py-4">
+    <div class="d-flex align-items-center mb-4">
+        <i class="bi bi-calendar-event fs-2 text-primary me-3"></i>
+        <h2 class="mb-0">My Exam Schedule</h2>
+    </div>
+
+    @if (!Model.Any())
+    {
+        <div class="alert alert-info border-0 shadow-sm d-flex align-items-center" role="alert">
+            <i class="bi bi-info-circle-fill fs-4 me-3"></i>
+            <div>
+                You have no upcoming exams scheduled at this time.
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+            @foreach (var item in Model)
+            {
+                <div class="col">
+                    <div class="card h-100 shadow-sm border-0 border-top border-4 border-primary">
+                        <div class="card-body p-4">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3">
+                                    @item.ExamType
+                                </span>
+                                <span class="text-muted small fw-bold">
+                                    <i class="bi bi-geo-alt me-1"></i> @item.Room
+                                </span>
+                            </div>
+                            
+                            <h5 class="card-title fw-bold mb-1">@item.Course?.Name</h5>
+                            <p class="text-muted small mb-3">@item.Course?.Code</p>
+                            
+                            <hr class="my-3 opacity-10">
+                            
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-file-earmark-text text-muted me-2"></i>
+                                <span class="text-dark">@item.Test?.Title</span>
+                            </div>
+                            
+                            <div class="d-flex align-items-center mb-2">
+                                <i class="bi bi-calendar3 text-muted me-2"></i>
+                                <span class="text-dark">@item.StartTime.ToString("dddd, MMM dd, yyyy")</span>
+                            </div>
+                            
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-clock text-muted me-2"></i>
+                                <span class="text-dark">@item.StartTime.ToString("HH:mm") - @item.EndTime.ToString("HH:mm")</span>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-transparent border-0 p-4 pt-0">
+                            @{
+                                var isNow = DateTime.UtcNow >= item.StartTime && DateTime.UtcNow <= item.EndTime;
+                            }
+                            @if (isNow)
+                            {
+                                <a href="/Student/TakeTest/@item.TestId" class="btn btn-success w-100 shadow-sm">
+                                    <i class="bi bi-play-fill me-1"></i> Start Exam Now
+                                </a>
+                            }
+                            else if (DateTime.UtcNow < item.StartTime)
+                            {
+                                <button class="btn btn-outline-secondary w-100" disabled>
+                                    <i class="bi bi-hourglass-split me-1"></i> Not Started
+                                </button>
+                            }
+                            else
+                            {
+                                <button class="btn btn-light w-100" disabled>
+                                    Finished
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

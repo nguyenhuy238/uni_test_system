@@ -1,0 +1,72 @@
+@model UniTestSystem.Domain.ExamSchedule
+@{
+    ViewData["Title"] = "Edit Exam Schedule";
+}
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow border-0">
+                <div class="card-header bg-warning py-3">
+                    <h5 class="mb-0 text-dark">Edit Exam Schedule</h5>
+                </div>
+                <div class="card-body p-4">
+                    <form asp-action="Edit" method="post">
+                        <div asp-validation-summary="ModelOnly" class="text-danger mb-3 small"></div>
+                        <input type="hidden" asp-for="Id" />
+                        <input type="hidden" asp-for="CreatedAt" />
+
+                        <div class="mb-3">
+                            <label asp-for="CourseId" class="form-label fw-semibold">Course</label>
+                            <select asp-for="CourseId" class="form-select shadow-sm border-secondary-subtle" asp-items="ViewBag.Courses" required></select>
+                            <span asp-validation-for="CourseId" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="TestId" class="form-label fw-semibold">Test</label>
+                            <select asp-for="TestId" class="form-select shadow-sm border-secondary-subtle" asp-items="ViewBag.Tests" required></select>
+                            <span asp-validation-for="TestId" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label asp-for="Room" class="form-label fw-semibold">Room / Venue</label>
+                            <input asp-for="Room" class="form-control shadow-sm border-secondary-subtle" required />
+                            <span asp-validation-for="Room" class="text-danger small"></span>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6 mb-3 mb-md-0">
+                                <label asp-for="StartTime" class="form-label fw-semibold">Start Time</label>
+                                <input asp-for="StartTime" type="datetime-local" class="form-control shadow-sm border-secondary-subtle" value="@Model.StartTime.ToString("yyyy-MM-ddTHH:mm")" required />
+                                <span asp-validation-for="StartTime" class="text-danger small"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="EndTime" class="form-label fw-semibold">End Time</label>
+                                <input asp-for="EndTime" type="datetime-local" class="form-control shadow-sm border-secondary-subtle" value="@Model.EndTime.ToString("yyyy-MM-ddTHH:mm")" required />
+                                <span asp-validation-for="EndTime" class="text-danger small"></span>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label asp-for="ExamType" class="form-label fw-semibold">Exam Type</label>
+                            <select asp-for="ExamType" class="form-select shadow-sm border-secondary-subtle">
+                                <option value="Midterm">Midterm</option>
+                                <option value="Final">Final</option>
+                                <option value="Quiz">Quiz</option>
+                                <option value="Other">Other</option>
+                            </select>
+                            <span asp-validation-for="ExamType" class="text-danger small"></span>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end border-top pt-3">
+                            <a asp-action="Index" class="btn btn-outline-secondary px-4 me-md-2">Cancel</a>
+                            <button type="submit" class="btn btn-warning px-5 shadow-sm text-dark fw-semibold">
+                                <i class="bi bi-save me-1"></i> Update Schedule
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -14,6 +14,10 @@ namespace UniTestSystem.Application
 
         public async Task<Session> StartAsync(string testId, string userId)
         {
+            // CHECK: Existing InProgress session
+            var existing = await _sRepo.FirstOrDefaultAsync(x => x.TestId == testId && x.UserId == userId && x.Status == SessionStatus.InProgress && !x.IsDeleted);
+            if (existing != null) return existing;
+
             var test = await _tRepo.FirstOrDefaultAsync(t => t.Id == testId) ?? throw new Exception("Test not found");
             var all = await _qRepo.GetAllAsync();
 
