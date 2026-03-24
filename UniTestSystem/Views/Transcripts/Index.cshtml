@@ -1,11 +1,43 @@
-@model List<UniTestSystem.Domain.Transcript>
+@model List<UniTestSystem.Application.Models.TranscriptAdminRowVm>
 @{
     ViewData["Title"] = "Student Transcripts Management";
+    var selectedFacultyId = (string?)ViewBag.SelectedFacultyId;
+    var selectedClassId = (string?)ViewBag.SelectedClassId;
+    var selectedSemester = (string?)ViewBag.SelectedSemester;
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2 class="mb-0"><i class="bi bi-people me-2"></i>Student Transcripts</h2>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-success" href="/transcripts/export/xlsx?facultyId=@selectedFacultyId&classId=@selectedClassId&semester=@selectedSemester">Export Excel</a>
+        <a class="btn btn-outline-danger" href="/transcripts/export/pdf?facultyId=@selectedFacultyId&classId=@selectedClassId&semester=@selectedSemester">Export PDF</a>
+    </div>
 </div>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-3">
+        <label class="form-label">Faculty</label>
+        <select name="facultyId" class="form-select" asp-items="ViewBag.Faculties">
+            <option value="">All</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label class="form-label">Class</label>
+        <select name="classId" class="form-select" asp-items="ViewBag.Classes">
+            <option value="">All</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label class="form-label">Semester</label>
+        <select name="semester" class="form-select" asp-items="ViewBag.Semesters">
+            <option value="">All</option>
+        </select>
+    </div>
+    <div class="col-md-3 d-flex align-items-end gap-2">
+        <button class="btn btn-primary">Filter</button>
+        <a class="btn btn-outline-secondary" href="/Transcripts/Index">Reset</a>
+    </div>
+</form>
 
 <div class="card shadow-sm border-0">
     <div class="card-body p-0">
@@ -15,6 +47,8 @@
                     <tr>
                         <th class="ps-4">Student Name</th>
                         <th>Student ID</th>
+                        <th>Faculty</th>
+                        <th>Class</th>
                         <th class="text-center">Total Credits</th>
                         <th class="text-center">Cumulative GPA (4.0)</th>
                         <th class="text-center">Last Calculated</th>
@@ -25,17 +59,19 @@
                     @if (!Model.Any())
                     {
                         <tr>
-                            <td colspan="6" class="text-center py-5 text-muted">
+                            <td colspan="8" class="text-center py-5 text-muted">
                                 <i class="bi bi-file-earmark-text fs-2 d-block mb-2"></i>
-                                No calculated transcripts found.
+                                No calculated transcripts found for current filter.
                             </td>
                         </tr>
                     }
                     @foreach (var t in Model)
                     {
                         <tr>
-                            <td class="ps-4 fw-bold">@t.Student?.Name</td>
+                            <td class="ps-4 fw-bold">@t.StudentName</td>
                             <td>@t.StudentId</td>
+                            <td>@t.FacultyName</td>
+                            <td>@t.ClassName</td>
                             <td class="text-center">@t.TotalCredits</td>
                             <td class="text-center">
                                 <span class="fs-5 fw-bold @(t.GPA >= 3.5m ? "text-success" : t.GPA < 2.0m ? "text-danger" : "text-primary")">
@@ -44,7 +80,7 @@
                             </td>
                             <td class="text-center">@t.CalculatedAt.ToString("MMM dd, yyyy")</td>
                             <td class="text-end pe-4">
-                                <a asp-action="Details" asp-route-id="@t.StudentId" class="btn btn-sm btn-outline-primary px-3">
+                                <a asp-action="Details" asp-route-id="@t.StudentId" asp-route-semester="@selectedSemester" class="btn btn-sm btn-outline-primary px-3">
                                     <i class="bi bi-eye me-1"></i> View Details
                                 </a>
                             </td>

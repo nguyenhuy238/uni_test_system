@@ -11,8 +11,12 @@ namespace UniTestSystem.Application
     {
         byte[] ExportFacultyYearExcel(FacultyReportVm facultyVm, AcademicYearReportVm yearVm, DateTime from, DateTime to);
         byte[] ExportStudentSubjectExcel(StudentSubjectReportVm vm, string userName, DateTime from, DateTime to);
+        byte[] ExportTranscriptOverviewExcel(IEnumerable<TranscriptAdminRowVm> rows, string? facultyName, string? className, string? semester);
+        byte[] ExportStudentTranscriptExcel(IEnumerable<Enrollment> grades, Transcript? summary, string studentName, string studentId);
         byte[] ExportFacultyYearPdf(FacultyReportVm facultyVm, AcademicYearReportVm yearVm, SystemSettings settings, DateTime from, DateTime to);
         byte[] ExportStudentSubjectPdf(StudentSubjectReportVm vm, string userName, SystemSettings settings, DateTime from, DateTime to);
+        byte[] ExportTranscriptOverviewPdf(IEnumerable<TranscriptAdminRowVm> rows, SystemSettings settings, string? facultyName, string? className, string? semester);
+        byte[] ExportStudentTranscriptPdf(IEnumerable<Enrollment> grades, Transcript? summary, string studentName, string studentId, SystemSettings settings);
     }
 
     public class ExportService : IExportService
@@ -99,6 +103,84 @@ namespace UniTestSystem.Application
             }
             ws.Columns().AdjustToContents();
 
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            return ms.ToArray();
+        }
+
+        public byte[] ExportTranscriptOverviewExcel(IEnumerable<TranscriptAdminRowVm> rows, string? facultyName, string? className, string? semester)
+        {
+            using var wb = new XLWorkbook();
+            var ws = wb.AddWorksheet("Transcripts");
+
+            ws.Cell(1, 1).Value = "Transcript Overview";
+            ws.Range(1, 1, 1, 8).Merge().Style.Font.SetBold().Font.FontSize = 14;
+
+            ws.Cell(2, 1).Value = $"Faculty: {facultyName ?? "All"}";
+            ws.Cell(2, 3).Value = $"Class: {className ?? "All"}";
+            ws.Cell(2, 5).Value = $"Semester: {semester ?? "All"}";
+
+            ws.Cell(4, 1).Value = "Student ID";
+            ws.Cell(4, 2).Value = "Student Name";
+            ws.Cell(4, 3).Value = "Faculty";
+            ws.Cell(4, 4).Value = "Class";
+            ws.Cell(4, 5).Value = "GPA";
+            ws.Cell(4, 6).Value = "Total Credits";
+            ws.Cell(4, 7).Value = "Calculated At (UTC)";
+
+            int r = 5;
+            foreach (var row in rows)
+            {
+                ws.Cell(r, 1).Value = row.StudentId;
+                ws.Cell(r, 2).Value = row.StudentName;
+                ws.Cell(r, 3).Value = row.FacultyName;
+                ws.Cell(r, 4).Value = row.ClassName;
+                ws.Cell(r, 5).Value = row.GPA;
+                ws.Cell(r, 6).Value = row.TotalCredits;
+                ws.Cell(r, 7).Value = row.CalculatedAt;
+                r++;
+            }
+
+            ws.Columns().AdjustToContents();
+            using var ms = new MemoryStream();
+            wb.SaveAs(ms);
+            return ms.ToArray();
+        }
+
+        public byte[] ExportStudentTranscriptExcel(IEnumerable<Enrollment> grades, Transcript? summary, string studentName, string studentId)
+        {
+            using var wb = new XLWorkbook();
+            var ws = wb.AddWorksheet("Student Transcript");
+            ws.Cell(1, 1).Value = $"Student Transcript - {studentName} ({studentId})";
+            ws.Range(1, 1, 1, 7).Merge().Style.Font.SetBold().Font.FontSize = 14;
+
+            ws.Cell(2, 1).Value = "Cumulative GPA";
+            ws.Cell(2, 2).Value = summary?.GPA ?? 0m;
+            ws.Cell(2, 4).Value = "Total Credits";
+            ws.Cell(2, 5).Value = summary?.TotalCredits ?? 0;
+
+            ws.Cell(4, 1).Value = "Semester";
+            ws.Cell(4, 2).Value = "Course Code";
+            ws.Cell(4, 3).Value = "Course Name";
+            ws.Cell(4, 4).Value = "Credits";
+            ws.Cell(4, 5).Value = "Final Score";
+            ws.Cell(4, 6).Value = "Grade";
+            ws.Cell(4, 7).Value = "Grade Point";
+
+            int r = 5;
+            foreach (var g in grades.OrderBy(x => x.Semester).ThenBy(x => x.Course?.Code))
+            {
+                ws.Cell(r, 1).Value = g.Semester;
+                ws.Cell(r, 2).Value = g.Course?.Code ?? "";
+                ws.Cell(r, 3).Value = g.Course?.Name ?? "";
+                ws.Cell(r, 4).Value = g.Course?.Credits ?? 0;
+                ws.Cell(r, 5).Value = g.FinalScore;
+                ws.Cell(r, 6).Value = g.Grade ?? "";
+                ws.Cell(r, 7).Value = g.GradePoint;
+                r++;
+            }
+
+            ws.Columns().AdjustToContents();
             using var ms = new MemoryStream();
             wb.SaveAs(ms);
             return ms.ToArray();
@@ -191,6 +273,85 @@ namespace UniTestSystem.Application
                                     row.TotalScore.ToString("0.##"),
                                     row.AvgPerQuestion.ToString("0.##"),
                                     row.LastSubmissionAt?.ToString("yyyy-MM-dd") ?? "-");
+                        });
+                    });
+
+                    page.Footer().AlignCenter().Text($"Generated at {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC");
+                });
+            });
+
+            return doc.GeneratePdf();
+        }
+
+        public byte[] ExportTranscriptOverviewPdf(IEnumerable<TranscriptAdminRowVm> rows, SystemSettings settings, string? facultyName, string? className, string? semester)
+        {
+            var title = settings.SystemName ?? "UniTestSystem";
+            var list = rows.ToList();
+            var doc = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(30);
+                    page.Header().Text(title).FontSize(16).SemiBold();
+
+                    page.Content().Column(col =>
+                    {
+                        col.Item().Text("Transcript Overview").Bold();
+                        col.Item().Text($"Faculty: {facultyName ?? "All"} | Class: {className ?? "All"} | Semester: {semester ?? "All"}");
+
+                        col.Item().PaddingTop(10).Element(c =>
+                        {
+                            TableHeader(c, "Student", "Faculty", "Class", "GPA", "Credits", "Calculated");
+                            foreach (var row in list)
+                                TableRow(
+                                    c,
+                                    $"{row.StudentName} ({row.StudentId})",
+                                    row.FacultyName,
+                                    row.ClassName,
+                                    row.GPA.ToString("0.00"),
+                                    row.TotalCredits.ToString(),
+                                    row.CalculatedAt.ToString("yyyy-MM-dd"));
+                        });
+                    });
+
+                    page.Footer().AlignCenter().Text($"Generated at {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC");
+                });
+            });
+
+            return doc.GeneratePdf();
+        }
+
+        public byte[] ExportStudentTranscriptPdf(IEnumerable<Enrollment> grades, Transcript? summary, string studentName, string studentId, SystemSettings settings)
+        {
+            var title = settings.SystemName ?? "UniTestSystem";
+            var gradeList = grades.OrderBy(g => g.Semester).ThenBy(g => g.Course?.Code).ToList();
+
+            var doc = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(30);
+                    page.Header().Text(title).FontSize(16).SemiBold();
+
+                    page.Content().Column(col =>
+                    {
+                        col.Item().Text($"Student Transcript - {studentName} ({studentId})").Bold();
+                        col.Item().Text($"Cumulative GPA: {(summary?.GPA ?? 0m):0.00} | Total Credits: {summary?.TotalCredits ?? 0}");
+
+                        col.Item().PaddingTop(10).Element(c =>
+                        {
+                            TableHeader(c, "Semester", "Course", "Credits", "Score", "Grade", "Point");
+                            foreach (var g in gradeList)
+                                TableRow(
+                                    c,
+                                    g.Semester,
+                                    $"{g.Course?.Code} - {g.Course?.Name}",
+                                    (g.Course?.Credits ?? 0).ToString(),
+                                    g.FinalScore?.ToString("0.0") ?? "-",
+                                    g.Grade ?? "-",
+                                    g.GradePoint?.ToString("0.0") ?? "-");
                         });
                     });
 

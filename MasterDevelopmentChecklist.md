@@ -9,6 +9,7 @@ Tài liệu này đóng vai trò là danh sách kiểm tra chủ chốt cho toà
 - Sửa tổng hợp báo cáo khoa/năm học để trả đúng `StudentCount` và `PassRatePercent`.
 - Bổ sung khôi phục phiên bản câu hỏi từ Audit Log (UI + service).
 - Bổ sung kiểm tra trùng lặp nâng cao bằng độ tương đồng nội dung (Jaccard).
+- Bổ sung quản lý bảng điểm có lọc theo khoa/lớp/kỳ trên web và export transcript Excel/PDF (QuestPDF).
 
 ---
 
@@ -199,11 +200,11 @@ Mô tả: Tổng hợp kết quả học tập.
 - [/] **Tính toán Điểm** [Server-side/WPF AdminApp] [Staff]
     - [/] Tính điểm trung bình (GPA) theo học kỳ và năm học (đã có GPA tích lũy + hiển thị GPA theo kỳ; chưa tách pipeline year-end hoàn chỉnh).
     - [ ] Xử lý công thức tính điểm phức tạp (trọng số thi, trọng số bài tập).
-- [ ] **Quản lý Bảng điểm** [WPF AdminApp] [Staff/Admin]
+- [/] **Quản lý Bảng điểm** [WPF AdminApp] [Staff/Admin]
     - [ ] Khóa/Mở bảng điểm cấp khoa/trường.
-    - [ ] Lọc bảng điểm theo khoa, lớp, kỳ học.
-- [ ] **Xuất Bảng điểm** [Web App/WPF AdminApp] [Student/Staff]
-    - [ ] Xuất PDF chuyên nghiệp bằng QuestPDF.
+    - [x] Lọc bảng điểm theo khoa, lớp, kỳ học.
+- [x] **Xuất Bảng điểm** [Web App/WPF AdminApp] [Student/Staff]
+    - [x] Xuất PDF chuyên nghiệp bằng QuestPDF.
 
 ---
 
