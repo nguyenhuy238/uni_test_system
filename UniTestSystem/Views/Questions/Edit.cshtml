@@ -1,4 +1,8 @@
 @model UniTestSystem.Domain.Question
+@using UniTestSystem.Domain
+@{
+    var versions = ViewBag.QuestionVersions as List<AuditEntry> ?? new List<AuditEntry>();
+}
 <h2>Edit Question</h2>
 
 @if (TempData["Msg"] != null)
@@ -49,6 +53,47 @@
         <button class="btn btn-danger">Confirm Reject</button>
     </form>
 </div>
+
+@if (versions.Any())
+{
+    <div class="card mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-bold">Version History (Audit)</span>
+            <span class="text-muted small">Last @versions.Count entries</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-3">At (UTC)</th>
+                        <th>Actor</th>
+                        <th>Action</th>
+                        <th class="text-end pe-3">Restore</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var v in versions)
+                    {
+                        <tr>
+                            <td class="ps-3">@v.At.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td>@v.Actor</td>
+                            <td>@v.Action</td>
+                            <td class="text-end pe-3">
+                                <form asp-action="RestoreVersion" asp-route-id="@Model.Id" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="auditId" value="@v.Id" />
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" onclick="return confirm('Restore this version? Current content will be replaced.')">
+                                        Restore
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
 
 @if (Model.Media?.Any() ?? false)
 {

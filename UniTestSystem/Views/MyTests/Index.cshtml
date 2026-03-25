@@ -128,9 +128,30 @@ else
 }
 
 <script>
+    function getDeviceFingerprint(){
+      const key = 'unitest_device_fp';
+      let v = localStorage.getItem(key);
+      if(!v){
+        v = (crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random()}`).toString();
+        localStorage.setItem(key, v);
+      }
+      return v;
+    }
+
     async function startTest(tid){
-      const r = await fetch(`/api/tests/${tid}/start`, {method:'POST'});
-      const data = await r.json();
+      const r = await fetch(`/api/tests/${tid}/start`, {
+        method:'POST',
+        headers: { 'X-Device-Fingerprint': getDeviceFingerprint() }
+      });
+
+      let data = {};
+      try { data = await r.json(); } catch(e) {}
+
+      if(!r.ok){
+        alert(data?.message || 'Cannot start test on this device right now.');
+        return;
+      }
+
       window.location = `/mytests/session/${data.sessionId}`;
     }
 </script>

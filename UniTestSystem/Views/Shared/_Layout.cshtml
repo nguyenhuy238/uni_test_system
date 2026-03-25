@@ -10,6 +10,31 @@
     var isAuth = User?.Identity?.IsAuthenticated ?? false;
     var role = User?.FindFirst(ClaimTypes.Role)?.Value;
     var name = User?.Identity?.Name ?? "Guest";
+    var brandController = "Home";
+    var brandAction = "Index";
+
+    if (isAuth)
+    {
+        switch (role)
+        {
+            case nameof(Role.Admin):
+                brandController = "Admin";
+                brandAction = "Dashboard";
+                break;
+            case nameof(Role.Staff):
+                brandController = "Staff";
+                brandAction = "Dashboard";
+                break;
+            case nameof(Role.Lecturer):
+                brandController = "Lecturer";
+                brandAction = "Dashboard";
+                break;
+            case nameof(Role.Student):
+                brandController = "MyTests";
+                brandAction = "Index";
+                break;
+        }
+    }
 
     // Settings
     var settings = SettingsService.GetAsync().GetAwaiter().GetResult();
@@ -40,9 +65,9 @@
 </head>
 <body>
     <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
+        <nav class="navbar navbar-expand-lg navbar-dark uts-app-navbar shadow-sm mb-3">
             <div class="container-fluid">
-                <a class="navbar-brand d-flex align-items-center gap-2" asp-area="" asp-controller="Home" asp-action="Index" title="@systemName">
+                <a class="navbar-brand d-flex align-items-center gap-2" asp-area="" asp-controller="@brandController" asp-action="@brandAction" title="@systemName">
                     @if (!string.IsNullOrWhiteSpace(logoUrl))
                     {
                         <img src="@logoUrl" alt="Logo" style="height:28px" />
@@ -55,60 +80,93 @@
                     <span class="navbar-toggler-icon"></span>
                 </button>
 
-                <div id="mainNav" class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
+                <div id="mainNav" class="navbar-collapse collapse justify-content-between">
                     <!-- LEFT -->
-                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                        <li class="nav-item"><a class="nav-link" asp-controller="Home" asp-action="Index">Home</a></li>
-                        <li class="nav-item"><a class="nav-link" asp-controller="Home" asp-action="Privacy">Privacy</a></li>
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                        <li class="nav-item"><a class="nav-link" asp-controller="Home" asp-action="Index">Trang chủ</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-controller="Home" asp-action="Privacy">Chính sách</a></li>
 
                         @if (isAuth && role == Role.Student.ToString())
                         {
-                            <li class="nav-item"><a class="nav-link" asp-controller="MyTests" asp-action="Index">My Tests</a></li>
+                            <li class="nav-item"><a class="nav-link" asp-controller="MyTests" asp-action="Index">Bài thi của tôi</a></li>
+                            <li class="nav-item"><a class="nav-link fw-semibold" asp-controller="Exams" asp-action="MyExams">Lịch thi</a></li>
+                            <li class="nav-item"><a class="nav-link fw-semibold" asp-controller="Transcripts" asp-action="MyTranscript">Bảng điểm</a></li>
                         }
-                            @if (role == "Admin" || role == "Lecturer" || canViewOrg || canViewReports || canEditSettings || canManagePerms)
-                            {
-                                <li class="nav-item dropdown">
-                                    <a class="nav-link dropdown-toggle" href="#" id="manageMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                        Management
-                                    </a>
-                                    <ul class="dropdown-menu" aria-labelledby="manageMenu">
-                                        @if (role == "Admin")
+
+                        @if (role == "Admin" || role == "Lecturer" || (role != "Staff" && (canViewOrg || canViewReports || canEditSettings || canManagePerms)))
+                        {
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" id="manageMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    Quản trị
+                                </a>
+                                <ul class="dropdown-menu" aria-labelledby="manageMenu">
+                                    @if (role == "Admin")
+                                    {
+                                        <li><a class="dropdown-item" asp-controller="Admin" asp-action="Dashboard">Admin Dashboard</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Users" asp-action="Index">Người dùng</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Transcripts" asp-action="Index">Bảng điểm sinh viên</a></li>
+                                    }
+                                    @if (role == "Lecturer")
+                                    {
+                                        <li><a class="dropdown-item" asp-controller="Lecturer" asp-action="Dashboard">Lecturer Dashboard</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Questions" asp-action="Index">Ngân hàng câu hỏi</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Tests" asp-action="Index">Quản lý bài thi</a></li>
+                                    }
+                                    @if (role == "Admin" || role == "Staff")
+                                    {
+                                        <li><a class="dropdown-item" asp-controller="Exams" asp-action="Index">Lập lịch thi</a></li>
+                                    }
+                                    @if (canViewOrg)
+                                    {
+                                        <li><hr class="dropdown-divider" /></li>
+                                        <li><a class="dropdown-item" asp-controller="Faculties" asp-action="Index">Khoa</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Classes" asp-action="Index">Lớp</a></li>
+                                    }
+                                    @if (canViewReports)
+                                    {
+                                        <li><hr class="dropdown-divider" /></li>
+                                        <li><a class="dropdown-item" asp-controller="Reports" asp-action="Index">Báo cáo</a></li>
+                                    }
+                                    @if (canEditSettings || canManagePerms)
+                                    {
+                                        <li><hr class="dropdown-divider" /></li>
+                                        @if (canEditSettings)
                                         {
-                                            <li><a class="dropdown-item" asp-controller="Admin" asp-action="Dashboard">Admin Dashboard</a></li>
-                                            <li><a class="dropdown-item" asp-controller="Users" asp-action="Index">User Management</a></li>
+                                            <li><a class="dropdown-item" asp-controller="Settings" asp-action="Index">Cài đặt</a></li>
                                         }
-                                        @if (role == "Lecturer")
+                                        @if (canManagePerms)
                                         {
-                                            <li><a class="dropdown-item" asp-controller="Lecturer" asp-action="Dashboard">Lecturer Dashboard</a></li>
-                                            <li><a class="dropdown-item" asp-controller="Questions" asp-action="Index">Question Bank</a></li>
-                                            <li><a class="dropdown-item" asp-controller="Tests" asp-action="Index">Test Management</a></li>
+                                            <li><a class="dropdown-item" asp-controller="Roles" asp-action="Index">Phân quyền</a></li>
                                         }
-                                        @if (canViewOrg)
-                                        {
-                                            <li><hr class="dropdown-divider" /></li>
-                                            <li><a class="dropdown-item" asp-controller="Faculties" asp-action="Index">Faculties</a></li>
-                                            <li><a class="dropdown-item" asp-controller="Classes" asp-action="Index">Classes</a></li>
-                                        }
-                                        @if (canViewReports)
-                                        {
-                                            <li><hr class="dropdown-divider" /></li>
-                                            <li><a class="dropdown-item" asp-controller="Reports" asp-action="Index">Reports</a></li>
-                                        }
-                                        @if (canEditSettings || canManagePerms)
-                                        {
-                                            <li><hr class="dropdown-divider" /></li>
-                                            @if (canEditSettings)
-                                            {
-                                                <li><a class="dropdown-item" asp-controller="Settings" asp-action="Index">Settings</a></li>
-                                            }
-                                            @if (canManagePerms)
-                                            {
-                                                <li><a class="dropdown-item" asp-controller="Roles" asp-action="Index">Permissions</a></li>
-                                            }
-                                        }
-                                    </ul>
-                                </li>
-                            }
+                                    }
+                                </ul>
+                            </li>
+                        }
+
+                        @if (isAuth && role == "Staff")
+                        {
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" id="staffMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    Staff
+                                </a>
+                                <ul class="dropdown-menu" aria-labelledby="staffMenu">
+                                    <li><a class="dropdown-item" asp-controller="Staff" asp-action="Dashboard">Staff Dashboard</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Users" asp-action="Index">Người dùng</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Transcripts" asp-action="Index">Bảng điểm sinh viên</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Exams" asp-action="Index">Lập lịch thi</a></li>
+                                    @if (canViewOrg)
+                                    {
+                                        <li><hr class="dropdown-divider" /></li>
+                                        <li><a class="dropdown-item" asp-controller="Faculties" asp-action="Index">Khoa</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Classes" asp-action="Index">Lớp</a></li>
+                                    }
+                                    @if (canViewReports)
+                                    {
+                                        <li><hr class="dropdown-divider" /></li>
+                                        <li><a class="dropdown-item" asp-controller="Reports" asp-action="Index">Báo cáo</a></li>
+                                    }
+                                </ul>
+                            </li>
                         }
                     </ul>
 
@@ -117,7 +175,7 @@
 
                         @if (!isAuth)
                         {
-                            <li class="nav-item"><a class="nav-link" asp-controller="Auth" asp-action="Login">Login</a></li>
+                            <li class="nav-item"><a class="nav-link" asp-controller="Auth" asp-action="Login">Đăng nhập</a></li>
                         }
                         else
                         {
@@ -126,12 +184,12 @@
                                     @name (@role)
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenu">
-                                    <li><a class="dropdown-item" asp-controller="Profile" asp-action="Edit">Profile</a></li>
-                                    <li><a class="dropdown-item" asp-controller="Profile" asp-action="ChangePassword">Change password</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Profile" asp-action="Edit">Hồ sơ</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Profile" asp-action="ChangePassword">Đổi mật khẩu</a></li>
                                     <li><hr class="dropdown-divider" /></li>
                                     <li>
                                         <form method="post" action="/auth/logout" class="px-3">
-                                            <button type="submit" class="btn btn-link p-0">Logout</button>
+                                            <button type="submit" class="btn btn-link p-0">Đăng xuất</button>
                                         </form>
                                     </li>
                                 </ul>
@@ -143,7 +201,7 @@
         </nav>
     </header>
 
-    <div class="container">
+    <div class="container uts-page-wrap">
         @if (TempData["Msg"] is string msg)
         {
             <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -169,7 +227,7 @@
     </div>
 
     <footer class="border-top footer text-muted">
-        <div class="container py-3">
+        <div class="container py-3 uts-footer">
             &copy; @DateTime.Now.Year - @systemName -
             <a asp-controller="Home" asp-action="Privacy">Privacy</a>
         </div>

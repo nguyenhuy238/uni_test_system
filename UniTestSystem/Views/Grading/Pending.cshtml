@@ -1,46 +1,83 @@
 @model IEnumerable<UniTestSystem.Domain.Session>
 @{
-    ViewData["Title"] = "Pending Essay Grading";
+    ViewData["Title"] = "Essay Grading Queue";
+    var lockMap = ViewBag.LockMap as Dictionary<string, bool> ?? new Dictionary<string, bool>();
+    var regradeMap = ViewBag.RegradeMap as Dictionary<string, bool> ?? new Dictionary<string, bool>();
 }
-<partial name="~/Views/Shared/_Flash.cshtml" />
 
-<h2>Essay Grading Queue</h2>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-pen me-2"></i>Essay Grading Queue</h2>
+    <a href="/grading/regrade/requests" class="btn btn-outline-warning">
+        <i class="bi bi-flag me-1"></i> Regrade Requests
+    </a>
+</div>
 
-@if (!Model.Any())
-{
-    <div class="alert alert-info">Không có bài cần chấm.</div>
-}
-else
-{
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Session</th>
-                <th>User</th>
-                <th>Test</th>
-                <th>Status</th>
-                <th>Auto</th>
-                <th>Manual</th>
-                <th>Total</th>
-                <th>Ended</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var s in Model)
-            {
-                <tr>
-                    <td>@s.Id</td>
-                    <td>@s.UserId</td>
-                    <td>@s.TestId</td>
-                    <td>@s.Status</td>
-                    <td>@s.AutoScore</td>
-                    <td>@s.ManualScore</td>
-                    <td>@s.TotalScore</td>
-                    <td>@(s.EndAt?.ToString("u"))</td>
-                    <td><a class="btn btn-sm btn-primary" href="/grading/@s.Id">Grade</a></td>
-                </tr>
-            }
-        </tbody>
-    </table>
-}
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="ps-4">Student</th>
+                        <th>Test Title</th>
+                        <th>Ended At</th>
+                        <th>Score (Auto/Manual)</th>
+                        <th>Total</th>
+                        <th>Status</th>
+                        <th class="text-end pe-4">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <i class="bi bi-clipboard-check fs-2 mb-2 d-block"></i>
+                                No sessions pending grading.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var s in Model)
+                    {
+                        <tr>
+                            <td class="ps-4">
+                                <div class="fw-bold">@s.User?.Name</div>
+                                <small class="text-muted">ID: @s.UserId</small>
+                            </td>
+                            <td>
+                                <div class="fw-semibold">@s.Test?.Title</div>
+                                <small class="text-muted">@s.TestId</small>
+                            </td>
+                            <td>@s.EndAt?.ToString("MMM dd, yyyy HH:mm")</td>
+                            <td>
+                                <span class="badge bg-secondary">Auto: @s.AutoScore</span>
+                                <span class="badge bg-info text-dark">Man: @s.ManualScore</span>
+                            </td>
+                            <td>
+                                <div class="fw-bold fs-5">@s.TotalScore <small class="text-muted fs-6">/ @s.MaxScore</small></div>
+                            </td>
+                            <td>
+                                <span class="badge @(s.Status == SessionStatus.Graded ? "bg-success" : "bg-warning text-dark")">
+                                    @s.Status
+                                </span>
+                                @if (lockMap.TryGetValue(s.Id, out var isLocked) && isLocked)
+                                {
+                                    <span class="badge bg-dark ms-1">Locked</span>
+                                }
+                                @if (regradeMap.TryGetValue(s.Id, out var hasRegrade) && hasRegrade)
+                                {
+                                    <span class="badge bg-warning text-dark ms-1">Regrade Requested</span>
+                                }
+                            </td>
+                            <td class="text-end pe-4">
+                                <a class="btn btn-sm @(s.Status == SessionStatus.Graded ? "btn-outline-primary" : "btn-primary") px-3" href="/grading/@s.Id">
+                                    <i class="bi bi-pencil-square me-1"></i> @(s.Status == SessionStatus.Graded ? "Edit Grades" : "Grade Now")
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

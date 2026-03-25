@@ -1,0 +1,104 @@
+@model List<UniTestSystem.Domain.Enrollment>
+@{
+    ViewData["Title"] = "My Academic Transcript";
+    var summary = ViewBag.Summary as UniTestSystem.Domain.Transcript;
+}
+
+<div class="container py-4">
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-7">
+            <h2 class="mb-1"><i class="bi bi-journal-text me-2 text-primary"></i>Academic Transcript</h2>
+            <p class="text-muted">Detailed record of your academic performance and grades.</p>
+        </div>
+        <div class="col-md-5">
+            <div class="card bg-primary text-white shadow-sm border-0">
+                <div class="card-body py-3 d-flex justify-content-around text-center">
+                    <div>
+                        <div class="small opacity-75">Cumulative GPA</div>
+                        <div class="fs-3 fw-bold">@(summary?.GPA.ToString("0.00") ?? "0.00")</div>
+                    </div>
+                    <div class="vr opacity-25"></div>
+                    <div>
+                        <div class="small opacity-75">Total Credits</div>
+                        <div class="fs-3 fw-bold">@(summary?.TotalCredits ?? 0)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="mb-3 d-flex gap-2">
+        <a class="btn btn-outline-success" href="/transcripts/my/export/xlsx">Export Excel</a>
+        <a class="btn btn-outline-danger" href="/transcripts/my/export/pdf">Export PDF</a>
+    </div>
+
+    @if (!Model.Any())
+    {
+        <div class="alert alert-info border-0 shadow-sm">
+            No academic records found for your account.
+        </div>
+    }
+    else
+    {
+        var grouped = Model.GroupBy(e => e.Semester).OrderBy(g => g.Key);
+        
+        foreach (var semester in grouped)
+        {
+            <div class="card shadow-sm border-0 mb-4 overflow-hidden">
+                <div class="card-header bg-light py-3 border-bottom">
+                    <h5 class="mb-0 fw-bold">Semester: @semester.Key</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Course Code</th>
+                                <th>Course Name</th>
+                                <th class="text-center">Credits</th>
+                                <th class="text-center">Final Score</th>
+                                <th class="text-center">Grade</th>
+                                <th class="text-center pe-4">Grade Point</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in semester)
+                            {
+                                <tr>
+                                    <td class="ps-4 fw-semibold">@item.Course?.Code</td>
+                                    <td>@item.Course?.Name</td>
+                                    <td class="text-center">@item.Course?.Credits</td>
+                                    <td class="text-center">
+                                        <span class="fw-bold">@(item.FinalScore?.ToString("0.0") ?? "-")</span>
+                                    </td>
+                                    <td class="text-center">
+                                        @if (item.Grade != null)
+                                        {
+                                            <span class="badge @(item.Grade == "F" ? "bg-danger" : "bg-success") px-3">@item.Grade</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">-</span>
+                                        }
+                                    </td>
+                                    <td class="text-center pe-4 fw-bold">@(item.GradePoint?.ToString("0.0") ?? "-")</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot class="bg-light-subtle">
+                            @{
+                                var semCredits = semester.Sum(e => e.Course?.Credits ?? 0);
+                                var semPoints = semester.Where(e => e.GradePoint.HasValue).Sum(e => e.GradePoint.GetValueOrDefault() * (e.Course?.Credits ?? 0));
+                                var semGpa = semCredits > 0 ? semPoints / semCredits : 0;
+                            }
+                            <tr class="fw-bold">
+                                <td colspan="2" class="text-end ps-4">Semester Summary:</td>
+                                <td class="text-center">@semCredits</td>
+                                <td colspan="2" class="text-end">Semester GPA:</td>
+                                <td class="text-center pe-4 text-primary">@semGpa.ToString("0.00")</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        }
+    }
+</div>

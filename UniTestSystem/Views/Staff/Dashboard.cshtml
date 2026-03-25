@@ -1,0 +1,169 @@
+@using System.Security.Claims
+@using UniTestSystem.Application
+@using UniTestSystem.Domain
+@inject UniTestSystem.Application.IPermissionService PermissionService
+
+@{
+	ViewData["Title"] = "Staff Dashboard";
+	var name = User?.Identity?.Name ?? "Staff";
+	var role = User?.FindFirst(ClaimTypes.Role)?.Value ?? "Staff";
+
+	bool canManageOrg = PermissionService.HasAsync(User!, PermissionCodes.Org_Manage).GetAwaiter().GetResult();
+	bool canViewReports = PermissionService.HasAsync(User!, PermissionCodes.Reports_View).GetAwaiter().GetResult();
+	bool canManageUsers = PermissionService.HasAsync(User!, PermissionCodes.Users_Manage).GetAwaiter().GetResult();
+	bool canManageQuestions = PermissionService.HasAsync(User!, PermissionCodes.Question_View).GetAwaiter().GetResult();
+	bool canPublishTests = PermissionService.HasAsync(User!, PermissionCodes.Tests_Publish).GetAwaiter().GetResult();
+	bool canManageTranscripts = PermissionService.HasAsync(User!, PermissionCodes.Transcript_Manage).GetAwaiter().GetResult();
+	bool canScheduleExams = PermissionService.HasAsync(User!, PermissionCodes.Exam_Schedule).GetAwaiter().GetResult();
+	bool canReviewGrading = PermissionService.HasAsync(User!, PermissionCodes.Grading_Review).GetAwaiter().GetResult();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+	<div>
+		<h2 class="mb-1">Welcome @name!</h2>
+		<p class="text-muted mb-0">UniTestSystem Staff Operations Dashboard</p>
+	</div>
+	<span class="badge bg-info text-dark">@role</span>
+</div>
+
+<div class="row g-3 mb-4">
+	<div class="col-md-4">
+		<div class="card border-0 shadow-sm h-100">
+			<div class="card-body">
+				<div class="text-muted small">Số lịch thi</div>
+				<div class="display-6 fw-semibold">@((int)(ViewBag.TotalExamSchedules ?? 0))</div>
+			</div>
+		</div>
+	</div>
+	<div class="col-md-4">
+		<div class="card border-0 shadow-sm h-100">
+			<div class="card-body">
+				<div class="text-muted small">Số bảng điểm khóa</div>
+				<div class="display-6 fw-semibold">@((int)(ViewBag.LockedTranscriptCount ?? 0))</div>
+				<div class="small text-muted mt-1">
+					School: @((bool)(ViewBag.IsSchoolTranscriptLocked ?? false) ? "Locked" : "Open") | Faculties locked: @((int)(ViewBag.LockedFacultiesCount ?? 0))
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="col-md-4">
+		<div class="card border-0 shadow-sm h-100">
+			<div class="card-body">
+				<div class="text-muted small">Số yêu cầu chấm lại</div>
+				<div class="display-6 fw-semibold">@((int)(ViewBag.PendingRegradeCount ?? 0))</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="row g-4">
+	@if (canManageUsers)
+	{
+		<div class="col-md-6 col-lg-4">
+			<div class="card h-100 shadow-sm border-0">
+				<div class="card-body">
+					<h5 class="card-title">Users</h5>
+					<p class="card-text text-muted small">Quản lý tài khoản người dùng và thông tin cơ bản.</p>
+					<a class="btn btn-sm btn-success" href="/users">Manage Users</a>
+				</div>
+			</div>
+		</div>
+	}
+
+	@if (canScheduleExams)
+	{
+		<div class="col-md-6 col-lg-4">
+			<div class="card h-100 shadow-sm border-0">
+				<div class="card-body">
+					<h5 class="card-title">Exam Scheduling</h5>
+					<p class="card-text text-muted small">Lập lịch thi, sửa lịch thi và xuất lịch thi.</p>
+					<div class="d-flex gap-2 flex-wrap">
+						<a class="btn btn-sm btn-primary" href="/exams">Lịch thi</a>
+						<a class="btn btn-sm btn-outline-primary" href="/tests">Test & Assign</a>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+
+	@if (canManageTranscripts)
+	{
+		<div class="col-md-6 col-lg-4">
+			<div class="card h-100 shadow-sm border-0">
+				<div class="card-body">
+					<h5 class="card-title">Transcripts</h5>
+					<p class="card-text text-muted small">Xem, xuất và khóa/mở khóa bảng điểm theo trường hoặc khoa.</p>
+					<a class="btn btn-sm btn-warning text-white" href="/transcripts">Manage Transcripts</a>
+				</div>
+			</div>
+		</div>
+	}
+
+	@if (canManageOrg)
+	{
+		<div class="col-md-6 col-lg-4">
+			<div class="card h-100 shadow-sm border-0">
+				<div class="card-body">
+					<h5 class="card-title">Academic Structure</h5>
+					<p class="card-text text-muted small">Quản lý khoa, lớp và dữ liệu học vụ liên quan.</p>
+					<div class="d-flex gap-2 flex-wrap">
+						<a class="btn btn-sm btn-outline-dark" href="/faculties">Faculties</a>
+						<a class="btn btn-sm btn-outline-dark" href="/classes">Classes</a>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+
+	@if (canManageQuestions)
+	{
+		<div class="col-md-6 col-lg-4">
+			<div class="card h-100 shadow-sm border-0">
+				<div class="card-body">
+					<h5 class="card-title">Question Bank</h5>
+					<p class="card-text text-muted small">Xem và duyệt câu hỏi trong ngân hàng đề.</p>
+					<a class="btn btn-sm btn-secondary" href="/questions">Question Bank</a>
+				</div>
+			</div>
+		</div>
+	}
+
+	@if (canPublishTests)
+	{
+		<div class="col-md-6 col-lg-4">
+			<div class="card h-100 shadow-sm border-0">
+				<div class="card-body">
+					<h5 class="card-title">Tests</h5>
+					<p class="card-text text-muted small">Theo dõi danh sách bài thi và publish trạng thái đề thi.</p>
+					<a class="btn btn-sm btn-dark" href="/tests">Manage Tests</a>
+				</div>
+			</div>
+		</div>
+	}
+
+	@if (canReviewGrading)
+	{
+		<div class="col-md-6 col-lg-4">
+			<div class="card h-100 shadow-sm border-0">
+				<div class="card-body">
+					<h5 class="card-title">Grading Review</h5>
+					<p class="card-text text-muted small">Rà soát chấm điểm, khóa/mở khóa kết quả và xử lý regrade.</p>
+					<a class="btn btn-sm btn-outline-success" href="/grading/pending">Open Grading</a>
+				</div>
+			</div>
+		</div>
+	}
+
+	@if (canViewReports)
+	{
+		<div class="col-md-6 col-lg-4">
+			<div class="card h-100 shadow-sm border-0">
+				<div class="card-body">
+					<h5 class="card-title">Reports</h5>
+					<p class="card-text text-muted small">Báo cáo tổng hợp và xuất dữ liệu Excel/PDF.</p>
+					<a class="btn btn-sm btn-info text-white" href="/reports">Open Reports</a>
+				</div>
+			</div>
+		</div>
+	}
+</div>

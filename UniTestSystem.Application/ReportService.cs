@@ -13,6 +13,7 @@ namespace UniTestSystem.Application
         private readonly IRepository<Assessment> _asRepo;
         private readonly IRepository<Session> _sesRepo;
         private readonly IRepository<Question> _qRepo;
+        private readonly IRepository<Enrollment> _enrollmentRepo;
 
         public ReportService(
             IRepository<User> u, 
@@ -20,9 +21,10 @@ namespace UniTestSystem.Application
             IRepository<Test> t, 
             IRepository<Assessment> a, 
             IRepository<Session> s,
-            IRepository<Question> q)
+            IRepository<Question> q,
+            IRepository<Enrollment> enrollmentRepo)
         {
-            _userRepo = u; _studentRepo = st; _testRepo = t; _asRepo = a; _sesRepo = s; _qRepo = q;
+            _userRepo = u; _studentRepo = st; _testRepo = t; _asRepo = a; _sesRepo = s; _qRepo = q; _enrollmentRepo = enrollmentRepo;
         }
 
         // ==== Dashboard Admin ====
@@ -76,25 +78,43 @@ namespace UniTestSystem.Application
         // ==== Báo cáo theo Khoa (Faculty) ====
         public async Task<FacultyReportVm> GetFacultyReportAsync(DateTime fromUtc, DateTime toUtc)
         {
-            // Use Query() to perform joins and grouping at the Database level
-            var query = from s in _sesRepo.Query()
-                        join st in _studentRepo.Query() on s.UserId equals st.Id
-                        where s.EndAt.HasValue && s.EndAt.Value >= fromUtc && s.EndAt.Value <= toUtc && s.Status != SessionStatus.NotStarted
-                        group s by st.StudentClassId into g
-                        select new {
-                            FacultyName = g.Key ?? "(Unknown)",
-                            SubmissionCount = g.Count(),
-                            AvgScore = g.Average(x => x.TotalScore),
-                            LastSubmissionAt = g.Max(x => x.EndAt)
-                        };
+            var passMap = await _testRepo.Query()
+                .Select(t => new { t.Id, t.PassScore })
+                .ToDictionaryAsync(x => x.Id, x => (decimal)x.PassScore);
 
-            var data = await query.ToListAsync();
-            var rows = data.Select(d => new FacultyReportRow {
-                FacultyName = d.FacultyName,
-                SubmissionCount = d.SubmissionCount,
-                AvgScore = Math.Round(d.AvgScore, 2),
-                LastSubmissionAt = d.LastSubmissionAt
-            }).ToList();
+            var data = await (from s in _sesRepo.Query()
+                              join st in _studentRepo.Query() on s.UserId equals st.Id
+                              where s.EndAt.HasValue
+                                    && s.EndAt.Value >= fromUtc
+                                    && s.EndAt.Value <= toUtc
+                                    && s.Status != SessionStatus.NotStarted
+                              select new
+                              {
+                                  FacultyName = st.StudentClassId ?? "(Unknown)",
+                                  StudentId = s.UserId,
+                                  s.TestId,
+                                  s.TotalScore,
+                                  s.EndAt
+                              }).ToListAsync();
+
+            var rows = data
+                .GroupBy(x => x.FacultyName)
+                .Select(g =>
+                {
+                    var passCount = g.Count(x => passMap.TryGetValue(x.TestId, out var pass) && x.TotalScore >= pass);
+                    var submitCount = g.Count();
+                    return new FacultyReportRow
+                    {
+                        FacultyName = g.Key,
+                        StudentCount = g.Select(x => x.StudentId).Distinct().Count(),
+                        SubmissionCount = submitCount,
+                        AvgScore = submitCount > 0 ? Math.Round(g.Average(x => x.TotalScore), 2) : 0m,
+                        PassRatePercent = submitCount > 0 ? Math.Round((passCount * 100m) / submitCount, 2) : 0m,
+                        LastSubmissionAt = g.Max(x => x.EndAt)
+                    };
+                })
+                .OrderBy(x => x.FacultyName)
+                .ToList();
 
             return new FacultyReportVm { Rows = rows };
         }
@@ -102,24 +122,43 @@ namespace UniTestSystem.Application
         // ==== Báo cáo theo Năm học (Academic Year) ====
         public async Task<AcademicYearReportVm> GetAcademicYearReportAsync(DateTime fromUtc, DateTime toUtc)
         {
-            var query = from s in _sesRepo.Query()
-                        join st in _studentRepo.Query() on s.UserId equals st.Id
-                        where s.EndAt.HasValue && s.EndAt.Value >= fromUtc && s.EndAt.Value <= toUtc && s.Status != SessionStatus.NotStarted
-                        group s by st.AcademicYear into g
-                        select new {
-                            AcademicYear = g.Key ?? "(Unknown)",
-                            SubmissionCount = g.Count(),
-                            AvgScore = g.Average(x => x.TotalScore),
-                            LastSubmissionAt = g.Max(x => x.EndAt)
-                        };
+            var passMap = await _testRepo.Query()
+                .Select(t => new { t.Id, t.PassScore })
+                .ToDictionaryAsync(x => x.Id, x => (decimal)x.PassScore);
 
-            var data = await query.ToListAsync();
-            var rows = data.Select(d => new AcademicYearReportRow {
-                AcademicYear = d.AcademicYear,
-                SubmissionCount = d.SubmissionCount,
-                AvgScore = Math.Round(d.AvgScore, 2),
-                LastSubmissionAt = d.LastSubmissionAt
-            }).ToList();
+            var data = await (from s in _sesRepo.Query()
+                              join st in _studentRepo.Query() on s.UserId equals st.Id
+                              where s.EndAt.HasValue
+                                    && s.EndAt.Value >= fromUtc
+                                    && s.EndAt.Value <= toUtc
+                                    && s.Status != SessionStatus.NotStarted
+                              select new
+                              {
+                                  AcademicYear = st.AcademicYear ?? "(Unknown)",
+                                  StudentId = s.UserId,
+                                  s.TestId,
+                                  s.TotalScore,
+                                  s.EndAt
+                              }).ToListAsync();
+
+            var rows = data
+                .GroupBy(x => x.AcademicYear)
+                .Select(g =>
+                {
+                    var passCount = g.Count(x => passMap.TryGetValue(x.TestId, out var pass) && x.TotalScore >= pass);
+                    var submitCount = g.Count();
+                    return new AcademicYearReportRow
+                    {
+                        AcademicYear = g.Key,
+                        StudentCount = g.Select(x => x.StudentId).Distinct().Count(),
+                        SubmissionCount = submitCount,
+                        AvgScore = submitCount > 0 ? Math.Round(g.Average(x => x.TotalScore), 2) : 0m,
+                        PassRatePercent = submitCount > 0 ? Math.Round((passCount * 100m) / submitCount, 2) : 0m,
+                        LastSubmissionAt = g.Max(x => x.EndAt)
+                    };
+                })
+                .OrderBy(x => x.AcademicYear)
+                .ToList();
 
             return new AcademicYearReportVm { Rows = rows };
         }
@@ -187,6 +226,355 @@ namespace UniTestSystem.Application
                 sb.AppendLine($"{s.Id},\"{uname.Replace("\"", "\"\"")}\",\"{ttitle.Replace("\"", "\"\"")}\",{s.TotalScore},{isPass},{s.EndAt:O}");
             }
             return ($"recent-submissions-{now:yyyyMMddHHmmss}.csv", sb.ToString());
+        }
+
+        // ==== Widget Dashboard (Lecturer/Staff/Admin) ====
+        public async Task<WidgetDashboardVm> GetWidgetDashboardAsync(DateTime fromUtc, DateTime toUtc, Role actorRole, string? actorUserId)
+        {
+            var query = _sesRepo.Query()
+                .Include(s => s.Test)
+                    .ThenInclude(t => t!.Course)
+                .Where(s => s.EndAt.HasValue &&
+                            s.EndAt.Value >= fromUtc &&
+                            s.EndAt.Value <= toUtc &&
+                            s.Status != SessionStatus.NotStarted);
+
+            if (actorRole == Role.Lecturer && !string.IsNullOrWhiteSpace(actorUserId))
+            {
+                query = query.Where(s => s.Test != null &&
+                                         s.Test.Course != null &&
+                                         s.Test.Course.LecturerId == actorUserId);
+            }
+
+            var sessions = await query.ToListAsync();
+            if (!sessions.Any())
+                return new WidgetDashboardVm();
+
+            var enrollmentSemesterMap = await _enrollmentRepo.Query()
+                .Where(e => !e.IsDeleted && !string.IsNullOrWhiteSpace(e.Semester))
+                .Select(e => new { e.StudentId, e.CourseId, e.Semester })
+                .ToDictionaryAsync(
+                    x => $"{x.StudentId}|{x.CourseId}",
+                    x => x.Semester ?? "",
+                    StringComparer.OrdinalIgnoreCase);
+
+            var points = sessions.Select(s =>
+            {
+                var normalizedScore = NormalizeScoreTo10(s);
+                var passScore = s.Test?.PassScore ?? 5;
+                var isPass = s.TotalScore >= passScore;
+                var subject = ResolveSubjectLabel(s);
+                var semester = ResolveSemesterLabel(s, enrollmentSemesterMap);
+                return new
+                {
+                    Score = normalizedScore,
+                    IsPass = isPass,
+                    Subject = subject,
+                    Semester = semester
+                };
+            }).ToList();
+
+            var subjectRows = points
+                .GroupBy(x => x.Subject)
+                .Select(g =>
+                {
+                    var submissionCount = g.Count();
+                    var passCount = g.Count(x => x.IsPass);
+                    var failCount = submissionCount - passCount;
+                    return new SubjectPassRateRow
+                    {
+                        Subject = g.Key,
+                        SubmissionCount = submissionCount,
+                        PassCount = passCount,
+                        FailCount = failCount,
+                        PassRatePercent = submissionCount > 0 ? Math.Round(passCount * 100m / submissionCount, 2) : 0m,
+                        AvgScore = submissionCount > 0 ? Math.Round(g.Average(x => x.Score), 2) : 0m
+                    };
+                })
+                .OrderByDescending(x => x.SubmissionCount)
+                .ThenBy(x => x.Subject)
+                .ToList();
+
+            var semesterRows = points
+                .GroupBy(x => x.Semester)
+                .Select(g => new SemesterAverageRow
+                {
+                    Semester = g.Key,
+                    SubmissionCount = g.Count(),
+                    AvgScore = Math.Round(g.Average(x => x.Score), 2)
+                })
+                .OrderBy(x => x.Semester)
+                .ToList();
+
+            var ranges = new[]
+            {
+                (Label: "0-2", Min: 0m, Max: 2m, IncludeMax: false),
+                (Label: "2-4", Min: 2m, Max: 4m, IncludeMax: false),
+                (Label: "4-6", Min: 4m, Max: 6m, IncludeMax: false),
+                (Label: "6-8", Min: 6m, Max: 8m, IncludeMax: false),
+                (Label: "8-10", Min: 8m, Max: 10m, IncludeMax: true)
+            };
+
+            var total = points.Count;
+            var distRows = ranges.Select(r =>
+            {
+                var count = points.Count(x => x.Score >= r.Min && (r.IncludeMax ? x.Score <= r.Max : x.Score < r.Max));
+                return new ScoreDistributionBucketRow
+                {
+                    BucketLabel = r.Label,
+                    Count = count,
+                    Percent = total > 0 ? Math.Round(count * 100m / total, 2) : 0m
+                };
+            }).ToList();
+
+            var totalPass = points.Count(x => x.IsPass);
+            return new WidgetDashboardVm
+            {
+                SubmissionCount = total,
+                OverallAvgScore = total > 0 ? Math.Round(points.Average(x => x.Score), 2) : 0m,
+                OverallPassRatePercent = total > 0 ? Math.Round(totalPass * 100m / total, 2) : 0m,
+                SubjectPassRates = subjectRows,
+                SemesterAverages = semesterRows,
+                ScoreDistribution = distRows
+            };
+        }
+
+        public async Task<QuestionAnalyticsVm> GetQuestionAnalyticsAsync(DateTime fromUtc, DateTime toUtc, string? courseId = null, int minAttempts = 5)
+        {
+            if (minAttempts < 1) minAttempts = 1;
+
+            var sessionsQuery = _sesRepo.Query()
+                .Include(s => s.Test)
+                    .ThenInclude(t => t!.TestQuestions)
+                .Include(s => s.StudentAnswers)
+                    .ThenInclude(a => a.Question)
+                .Where(s => s.EndAt.HasValue &&
+                            s.EndAt.Value >= fromUtc &&
+                            s.EndAt.Value <= toUtc &&
+                            s.Status != SessionStatus.NotStarted);
+
+            if (!string.IsNullOrWhiteSpace(courseId))
+            {
+                sessionsQuery = sessionsQuery.Where(s => s.Test != null && s.Test.CourseId == courseId);
+            }
+
+            var sessions = await sessionsQuery.ToListAsync();
+            if (!sessions.Any())
+                return new QuestionAnalyticsVm();
+
+            var sessionScoreMap = sessions.ToDictionary(s => s.Id, s => NormalizeScoreTo10(s));
+            var raw = new List<(string SessionId, string QuestionId, decimal Ratio, Question? Question)>();
+
+            foreach (var s in sessions)
+            {
+                if (s.StudentAnswers == null || s.StudentAnswers.Count == 0) continue;
+
+                var testPointMap = s.Test?.TestQuestions?
+                    .GroupBy(tq => tq.QuestionId)
+                    .ToDictionary(g => g.Key, g => g.First().Points, StringComparer.Ordinal) ?? new Dictionary<string, decimal>(StringComparer.Ordinal);
+
+                var fallbackPoints = s.StudentAnswers.Count > 0
+                    ? (s.MaxScore > 0 ? s.MaxScore / s.StudentAnswers.Count : 1m)
+                    : 1m;
+
+                foreach (var ans in s.StudentAnswers)
+                {
+                    if (string.IsNullOrWhiteSpace(ans.QuestionId)) continue;
+
+                    var points = testPointMap.TryGetValue(ans.QuestionId, out var p) ? p : fallbackPoints;
+                    if (points <= 0) points = 1m;
+
+                    var ratio = Math.Clamp(ans.Score / points, 0m, 1m);
+                    raw.Add((s.Id, ans.QuestionId, ratio, ans.Question));
+                }
+            }
+
+            var rows = raw
+                .GroupBy(x => x.QuestionId)
+                .Select(g =>
+                {
+                    var attempts = g.Count();
+                    if (attempts < minAttempts) return null;
+
+                    var avgRatio = g.Average(x => x.Ratio);
+                    var avgPercent = Math.Round(avgRatio * 100m, 2);
+                    var difficultyLabel = ResolveDifficultyLabel(avgRatio);
+
+                    var bySession = g.GroupBy(x => x.SessionId)
+                        .Select(x => new
+                        {
+                            SessionId = x.Key,
+                            QuestionRatio = x.Average(v => v.Ratio),
+                            TotalScoreNorm = sessionScoreMap.TryGetValue(x.Key, out var sc) ? sc : 0m
+                        })
+                        .OrderByDescending(x => x.TotalScoreNorm)
+                        .ToList();
+
+                    var discriminationIndex = CalculateDiscriminationIndex(bySession.Select(x => x.QuestionRatio).ToList());
+                    var discriminationLabel = ResolveDiscriminationLabel(discriminationIndex);
+
+                    var firstQuestion = g.Select(x => x.Question).FirstOrDefault(q => q != null);
+                    var preview = firstQuestion?.Content ?? "(Missing question content)";
+                    if (preview.Length > 120) preview = preview.Substring(0, 117) + "...";
+
+                    return new QuestionAnalyticsRow
+                    {
+                        QuestionId = g.Key,
+                        ContentPreview = preview,
+                        Type = firstQuestion?.Type.ToString() ?? "(Unknown)",
+                        Subject = firstQuestion?.SubjectId ?? "(Unknown)",
+                        Attempts = attempts,
+                        AvgScorePercent = avgPercent,
+                        DifficultyLabel = difficultyLabel,
+                        DiscriminationIndex = Math.Round(discriminationIndex, 3),
+                        DiscriminationLabel = discriminationLabel
+                    };
+                })
+                .Where(x => x != null)
+                .Select(x => x!)
+                .OrderBy(x => x.DiscriminationIndex)
+                .ThenBy(x => x.AvgScorePercent)
+                .ToList();
+
+            return new QuestionAnalyticsVm
+            {
+                TotalQuestions = rows.Count,
+                HardQuestions = rows.Count(x => x.DifficultyLabel == "Hard"),
+                MediumQuestions = rows.Count(x => x.DifficultyLabel == "Medium"),
+                EasyQuestions = rows.Count(x => x.DifficultyLabel == "Easy"),
+                LowDiscriminationQuestions = rows.Count(x => x.DiscriminationIndex < 0.2m),
+                Rows = rows
+            };
+        }
+
+        public async Task<LecturerPerformanceVm> GetLecturerPerformanceReportAsync(DateTime fromUtc, DateTime toUtc, string? lecturerId = null)
+        {
+            var sessionsQuery = _sesRepo.Query()
+                .Include(s => s.Test)
+                    .ThenInclude(t => t!.Course)
+                .Where(s => s.EndAt.HasValue &&
+                            s.EndAt.Value >= fromUtc &&
+                            s.EndAt.Value <= toUtc &&
+                            s.Status != SessionStatus.NotStarted &&
+                            s.Test != null &&
+                            s.Test.Course != null &&
+                            !string.IsNullOrWhiteSpace(s.Test.Course.LecturerId));
+
+            if (!string.IsNullOrWhiteSpace(lecturerId))
+            {
+                sessionsQuery = sessionsQuery.Where(s => s.Test != null &&
+                                                         s.Test.Course != null &&
+                                                         s.Test.Course.LecturerId == lecturerId);
+            }
+
+            var sessions = await sessionsQuery.ToListAsync();
+            if (!sessions.Any())
+                return new LecturerPerformanceVm();
+
+            var lecturerIds = sessions
+                .Select(s => s.Test?.Course?.LecturerId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Cast<string>()
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var lecturers = await _userRepo.Query()
+                .Where(u => lecturerIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, u => u.Name ?? u.Email ?? u.Id);
+
+            var rows = sessions
+                .GroupBy(s => s.Test!.Course!.LecturerId)
+                .Select(g =>
+                {
+                    var testIds = g.Select(x => x.TestId).Distinct(StringComparer.Ordinal).Count();
+                    var courseIds = g.Select(x => x.Test!.CourseId).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).Count();
+                    var submissionCount = g.Count();
+                    var passCount = g.Count(x => x.TotalScore >= (x.Test?.PassScore ?? 5));
+
+                    var avgScore = submissionCount > 0
+                        ? Math.Round(g.Average(x => NormalizeScoreTo10(x)), 2)
+                        : 0m;
+
+                    return new LecturerPerformanceRow
+                    {
+                        LecturerId = g.Key,
+                        LecturerName = lecturers.TryGetValue(g.Key, out var name) ? name : g.Key,
+                        CourseCount = courseIds,
+                        TestCount = testIds,
+                        SubmissionCount = submissionCount,
+                        AvgScore = avgScore,
+                        PassRatePercent = submissionCount > 0 ? Math.Round(passCount * 100m / submissionCount, 2) : 0m,
+                        LastSubmissionAt = g.Max(x => x.EndAt)
+                    };
+                })
+                .OrderByDescending(x => x.SubmissionCount)
+                .ThenBy(x => x.LecturerName)
+                .ToList();
+
+            return new LecturerPerformanceVm { Rows = rows };
+        }
+
+        private static decimal NormalizeScoreTo10(Session s)
+        {
+            if (s.MaxScore <= 0) return Math.Round(Math.Clamp(s.TotalScore, 0m, 10m), 2);
+            var normalized = (s.TotalScore / s.MaxScore) * 10m;
+            return Math.Round(Math.Clamp(normalized, 0m, 10m), 2);
+        }
+
+        private static string ResolveDifficultyLabel(decimal avgRatio)
+        {
+            if (avgRatio < 0.4m) return "Hard";
+            if (avgRatio < 0.7m) return "Medium";
+            return "Easy";
+        }
+
+        private static decimal CalculateDiscriminationIndex(List<decimal> orderedQuestionRatiosBySessionScore)
+        {
+            if (orderedQuestionRatiosBySessionScore.Count < 3)
+                return 0m;
+
+            var n = Math.Max(1, (int)Math.Round(orderedQuestionRatiosBySessionScore.Count * 0.27m, MidpointRounding.AwayFromZero));
+            var upper = orderedQuestionRatiosBySessionScore.Take(n).ToList();
+            var lower = orderedQuestionRatiosBySessionScore.Skip(Math.Max(0, orderedQuestionRatiosBySessionScore.Count - n)).Take(n).ToList();
+
+            if (!upper.Any() || !lower.Any())
+                return 0m;
+
+            return upper.Average() - lower.Average();
+        }
+
+        private static string ResolveDiscriminationLabel(decimal d)
+        {
+            if (d >= 0.4m) return "Excellent";
+            if (d >= 0.2m) return "Good";
+            if (d >= 0m) return "Weak";
+            return "Inverse";
+        }
+
+        private static string ResolveSubjectLabel(Session s)
+        {
+            if (!string.IsNullOrWhiteSpace(s.Test?.Course?.Name))
+                return s.Test.Course.Name.Trim();
+            if (!string.IsNullOrWhiteSpace(s.Test?.SubjectIdFilter))
+                return s.Test.SubjectIdFilter.Trim();
+            if (!string.IsNullOrWhiteSpace(s.Test?.Title))
+                return s.Test.Title.Trim();
+            return "(Unknown Subject)";
+        }
+
+        private static string ResolveSemesterLabel(Session s, IReadOnlyDictionary<string, string> enrollmentSemesterMap)
+        {
+            if (!string.IsNullOrWhiteSpace(s.Test?.Course?.Semester))
+                return s.Test.Course.Semester.Trim();
+
+            if (!string.IsNullOrWhiteSpace(s.Test?.CourseId))
+            {
+                var key = $"{s.UserId}|{s.Test.CourseId}";
+                if (enrollmentSemesterMap.TryGetValue(key, out var sem) && !string.IsNullOrWhiteSpace(sem))
+                    return sem.Trim();
+            }
+
+            return "(Unassigned Semester)";
         }
     }
 }

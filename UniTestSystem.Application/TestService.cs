@@ -14,6 +14,10 @@ namespace UniTestSystem.Application
 
         public async Task<Session> StartAsync(string testId, string userId)
         {
+            // CHECK: Existing InProgress session
+            var existing = await _sRepo.FirstOrDefaultAsync(x => x.TestId == testId && x.UserId == userId && x.Status == SessionStatus.InProgress && !x.IsDeleted);
+            if (existing != null) return existing;
+
             var test = await _tRepo.FirstOrDefaultAsync(t => t.Id == testId) ?? throw new Exception("Test not found");
             var all = await _qRepo.GetAllAsync();
 
@@ -95,6 +99,34 @@ namespace UniTestSystem.Application
                             sa.Score = 0;
                             break;
                         }
+                    case QType.Matching:
+                        {
+                            // Expected format: one pair per line "Left=Right" (or separated by ||).
+                            var expected = (q.MatchingPairs ?? new List<MatchPair>())
+                                .Where(p => !string.IsNullOrWhiteSpace(p.L))
+                                .GroupBy(p => NormalizeToken(p.L), StringComparer.OrdinalIgnoreCase)
+                                .ToDictionary(g => g.Key, g => NormalizeToken(g.First().R), StringComparer.OrdinalIgnoreCase);
+
+                            var actual = ParseKeyValueAnswer(selRaw);
+                            grade = CalculatePartialMatchScore(expected, actual);
+                            sa.EssayAnswer = selRaw;
+                            sa.Score = grade;
+                            break;
+                        }
+                    case QType.DragDrop:
+                        {
+                            // Expected format: one mapping per line "Slot=Token" (or separated by ||).
+                            var expected = (q.DragDrop?.Slots ?? new List<DragSlot>())
+                                .Where(s => !string.IsNullOrWhiteSpace(s.Name))
+                                .GroupBy(s => NormalizeToken(s.Name), StringComparer.OrdinalIgnoreCase)
+                                .ToDictionary(g => g.Key, g => NormalizeToken(g.First().Answer), StringComparer.OrdinalIgnoreCase);
+
+                            var actual = ParseKeyValueAnswer(selRaw);
+                            grade = CalculatePartialMatchScore(expected, actual);
+                            sa.EssayAnswer = selRaw;
+                            sa.Score = grade;
+                            break;
+                        }
                     default:
                         // Other types logic simplified or moved to normalized structure later
                         break;
@@ -171,5 +203,48 @@ namespace UniTestSystem.Application
 
             return pick;
         }
+
+        private static Dictionary<string, string> ParseKeyValueAnswer(string? raw)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(raw)) return result;
+
+            var normalized = raw.Replace("||", Environment.NewLine);
+            var lines = normalized.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var line in lines)
+            {
+                var idx = line.IndexOf('=');
+                if (idx <= 0) continue;
+
+                var key = NormalizeToken(line[..idx]);
+                var value = NormalizeToken(line[(idx + 1)..]);
+                if (string.IsNullOrWhiteSpace(key)) continue;
+                result[key] = value;
+            }
+
+            return result;
+        }
+
+        private static decimal CalculatePartialMatchScore(
+            Dictionary<string, string> expected,
+            Dictionary<string, string> actual)
+        {
+            if (expected.Count == 0) return 0m;
+
+            var correct = 0;
+            foreach (var pair in expected)
+            {
+                if (actual.TryGetValue(pair.Key, out var answer) &&
+                    string.Equals(answer, pair.Value, StringComparison.OrdinalIgnoreCase))
+                {
+                    correct++;
+                }
+            }
+
+            return (decimal)correct / expected.Count;
+        }
+
+        private static string NormalizeToken(string? input)
+            => (input ?? string.Empty).Trim().ToLowerInvariant();
     }
 }

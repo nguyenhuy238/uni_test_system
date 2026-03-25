@@ -1,0 +1,123 @@
+@model List<UniTestSystem.Domain.Enrollment>
+@{
+    ViewData["Title"] = "Student Transcript Details";
+    var studentId = (string?)ViewBag.StudentId ?? "";
+    var studentName = (string?)ViewBag.StudentName ?? studentId;
+    var summary = ViewBag.Summary as UniTestSystem.Domain.Transcript;
+    var selectedSemester = (string?)ViewBag.Semester;
+    var isTranscriptLocked = (bool?)ViewBag.IsTranscriptLocked ?? false;
+    var schoolLocked = (bool?)ViewBag.SchoolLocked ?? false;
+    var facultyLocked = (bool?)ViewBag.FacultyLocked ?? false;
+    var facultyLockName = (string?)ViewBag.FacultyLockName;
+}
+
+<partial name="~/Views/Shared/_Flash.cshtml" />
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1"><i class="bi bi-journal-check me-2"></i>Transcript Details</h2>
+        <div class="text-muted">@studentName (@studentId)</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-success" href="/transcripts/@studentId/export/xlsx?semester=@selectedSemester">Export Excel</a>
+        <a class="btn btn-outline-danger" href="/transcripts/@studentId/export/pdf?semester=@selectedSemester">Export PDF</a>
+        <a class="btn btn-outline-secondary" href="/Transcripts/Index">Back</a>
+    </div>
+</div>
+
+@if (isTranscriptLocked)
+{
+    <div class="alert alert-warning">
+        Finalize grade is locked.
+        @if (schoolLocked)
+        {
+            <span>Scope: School level.</span>
+        }
+        else if (facultyLocked)
+        {
+            <span>Scope: Faculty level (@(facultyLockName ?? "Unknown")).</span>
+        }
+    </div>
+}
+
+<div class="card mb-3 border-0 shadow-sm">
+    <div class="card-body d-flex gap-4">
+        <div><span class="text-muted">Cumulative GPA:</span> <b>@(summary?.GPA.ToString("0.00") ?? "0.00")</b></div>
+        <div><span class="text-muted">Total Credits:</span> <b>@(summary?.TotalCredits ?? 0)</b></div>
+    </div>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+    <input type="hidden" name="id" value="@studentId" />
+    <div class="col-md-4">
+        <label class="form-label">Semester</label>
+        <select class="form-select" name="semester" asp-items="ViewBag.Semesters">
+            <option value="">All</option>
+        </select>
+    </div>
+    <div class="col-md-4 d-flex align-items-end gap-2">
+        <button class="btn btn-primary">Filter</button>
+        <a class="btn btn-outline-secondary" href="/Transcripts/Details/@studentId">Reset</a>
+    </div>
+</form>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="ps-4">Semester</th>
+                        <th>Course</th>
+                        <th class="text-center">Credits</th>
+                        <th class="text-center">Final Score</th>
+                        <th class="text-center">Grade</th>
+                        <th class="text-center">Grade Point</th>
+                        <th class="text-end pe-4">Finalize / Weighted</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                No enrollments found for this filter.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var e in Model.OrderBy(x => x.Semester).ThenBy(x => x.Course?.Code))
+                    {
+                        <tr>
+                            <td class="ps-4">@e.Semester</td>
+                            <td>@e.Course?.Code - @e.Course?.Name</td>
+                            <td class="text-center">@e.Course?.Credits</td>
+                            <td class="text-center">@(e.FinalScore?.ToString("0.0") ?? "-")</td>
+                            <td class="text-center">@(e.Grade ?? "-")</td>
+                            <td class="text-center">@(e.GradePoint?.ToString("0.0") ?? "-")</td>
+                            <td class="text-end pe-4">
+                                <form asp-action="FinalizeGrade" method="post" class="d-flex justify-content-end gap-2">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="enrollmentId" value="@e.Id" />
+                                    <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                    <div>
+                                        <div class="d-flex justify-content-end gap-2">
+                                            <input type="number" name="finalScore" step="0.1" min="0" max="10" value="@(e.FinalScore?.ToString("0.0") ?? "0")" class="form-control form-control-sm" style="width:90px;" @(isTranscriptLocked ? "disabled" : null) />
+                                            <button type="submit" class="btn btn-sm btn-outline-primary" @(isTranscriptLocked ? "disabled" : null)>Save</button>
+                                        </div>
+                                        <div class="d-flex justify-content-end gap-1 mt-1">
+                                            <input type="number" name="assignmentScore" step="0.1" min="0" max="10" class="form-control form-control-sm" style="width:70px;" placeholder="Asm" @(isTranscriptLocked ? "disabled" : null) />
+                                            <input type="number" name="assignmentWeight" step="1" min="0" max="100" value="30" class="form-control form-control-sm" style="width:68px;" placeholder="A%" @(isTranscriptLocked ? "disabled" : null) />
+                                            <input type="number" name="examScore" step="0.1" min="0" max="10" class="form-control form-control-sm" style="width:70px;" placeholder="Exam" @(isTranscriptLocked ? "disabled" : null) />
+                                            <input type="number" name="examWeight" step="1" min="0" max="100" value="70" class="form-control form-control-sm" style="width:68px;" placeholder="E%" @(isTranscriptLocked ? "disabled" : null) />
+                                        </div>
+                                        <div class="text-muted small text-end">If component scores are filled, final score is auto-calculated by weights.</div>
+                                    </div>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

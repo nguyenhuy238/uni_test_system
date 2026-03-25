@@ -3,54 +3,76 @@
     Layout = "_UserLayout";
 }
 
-<div class="container">
-    <div class="row">
-        <div class="col-12 text-center mb-4">
-            <h1 class="display-5 fw-bold text-primary">UniTestSystem</h1>
-            <p class="lead text-muted">Chào mừng bạn đến với hệ thống quản lý thi và khảo sát sinh viên</p>
-        </div>
-    </div>
+<div class="uts-dashboard-shell" id="studentDashboardShell">
+    <aside class="uts-dashboard-sidebar" id="studentSidebar">
+        <div class="uts-sidebar-head">Student Hub</div>
+        <a class="uts-sidebar-link active" href="/Student/Dashboard">Dashboard</a>
+        <a class="uts-sidebar-link" href="/Student/Tests">My Tests</a>
+        <a class="uts-sidebar-link" href="/Student/Results">Results</a>
+        <a class="uts-sidebar-link" href="/Transcripts/MyTranscript">Transcript</a>
+    </aside>
 
-    <div class="row g-4">
-        <div class="col-md-6">
-            <div class="card h-100 shadow-sm border-0">
-                <div class="card-body text-center p-4">
-                    <div class="bg-primary bg-opacity-10 p-3 rounded-circle d-inline-block mb-3">
-                        <i class="bi bi-pencil-square text-primary fs-2"></i>
-                    </div>
-                    <h3 class="card-title h5 fw-bold">My Tests</h3>
-                    <p class="card-text text-muted">Làm bài kiểm tra và đánh giá kiến thức theo môn học đã được phân công.</p>
-                    <a href="/User/Tests" class="btn btn-primary px-4 mt-2">Go to Tests</a>
-                </div>
+    <div class="uts-dashboard-main">
+        <div class="uts-topbar ui-surface">
+            <button class="btn btn-sm btn-outline-primary" id="studentSidebarToggle" type="button">Menu</button>
+            <div>
+                <h1 class="h4 mb-1">Student Dashboard</h1>
+                <p class="mb-0 text-muted">Theo dõi tiến độ học tập và kỳ thi của bạn</p>
+            </div>
+            <div class="small text-muted text-end">
+                <div>Vai trò: Student</div>
+                <div>UniTestSystem</div>
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="card h-100 shadow-sm border-0">
-                <div class="card-body text-center p-4">
-                    <div class="bg-success bg-opacity-10 p-3 rounded-circle d-inline-block mb-3">
-                        <i class="bi bi-bar-chart-line text-success fs-2"></i>
-                    </div>
-                    <h3 class="card-title h5 fw-bold">Test Results</h3>
-                    <p class="card-text text-muted">Xem kết quả chi tiết, điểm số và nhận xét từ giảng viên cho các bài thi đã làm.</p>
-                    <a href="/User/Results" class="btn btn-success px-4 mt-2">View Results</a>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <div class="row mt-5">
-        <div class="col-12">
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-white py-3">
-                    <h4 class="h5 mb-0 fw-bold"><i class="bi bi-clock-history me-2 text-primary"></i>Kết quả thi gần đây</h4>
-                </div>
-                <div class="card-body">
-                    <div id="recentResults">
-                        <div class="text-center py-4">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
+        <div class="row g-3 mt-1">
+            <div class="col-md-4">
+                <div class="ui-card h-100">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="text-muted small">Bài thi khả dụng</div>
+                            <div class="display-6 fw-bold text-primary" id="statUpcoming">--</div>
                         </div>
+                        <span class="badge text-bg-primary">Exam</span>
+                    </div>
+                    <a href="/Student/Tests" class="btn btn-outline-primary mt-3">Vào phòng thi</a>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="ui-card h-100">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="text-muted small">Điểm trung bình</div>
+                            <div class="display-6 fw-bold" id="statAverage">--</div>
+                        </div>
+                        <span class="badge" style="background:#e0f2fe;color:#075985;">GPA</span>
+                    </div>
+                    <a href="/Student/Results" class="btn btn-outline-primary mt-3">Xem kết quả</a>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="ui-card h-100">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="text-muted small">Tỷ lệ đạt</div>
+                            <div class="display-6 fw-bold" id="statPassRate">--%</div>
+                        </div>
+                        <span class="badge" style="background:#dcfce7;color:#166534;">Pass</span>
+                    </div>
+                    <a href="/Transcripts/MyTranscript" class="btn btn-outline-primary mt-3">Xem học bạ</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="ui-card mt-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h4 class="h5 mb-0 fw-bold">Kết quả thi gần đây</h4>
+                <a href="/Student/Results" class="btn btn-sm btn-outline-secondary">Tất cả kết quả</a>
+            </div>
+            <div id="recentResults">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
                     </div>
                 </div>
             </div>
@@ -61,6 +83,9 @@
 @section Scripts {
     <script>
         $(document).ready(function() {
+            $('#studentSidebarToggle').on('click', function () {
+                $('#studentDashboardShell').toggleClass('sidebar-collapsed');
+            });
             loadRecentResults();
         });
 
@@ -93,7 +118,9 @@
             
             results.forEach(result => {
                 const date = new Date(result.submitTime).toLocaleDateString('vi-VN');
-                const score = `<strong>${result.score}</strong> / ${result.maxScore}`;
+                const scoreValue = Number(result.score || 0);
+                const maxScoreValue = Number(result.maxScore || 0);
+                const score = `<strong>${scoreValue}</strong> / ${maxScoreValue}`;
                 const passBadge = result.isPass ? 
                     '<span class="badge bg-success-soft text-success border border-success border-opacity-25 ms-2">Đạt</span>' : 
                     '<span class="badge bg-danger-soft text-danger border border-danger border-opacity-25 ms-2">Chưa đạt</span>';
@@ -102,9 +129,17 @@
                     <td><div class="fw-semibold">${result.title}</div><div class="small text-muted">${result.subject || ''}</div></td>
                     <td class="text-center">${score}</td>
                     <td class="text-center text-muted">${date}</td>
-                    <td class="text-end"><a href="/User/ResultDetail/${result.id}" class="btn btn-sm btn-outline-primary rounded-pill px-3">Chi tiết</a></td>
+                    <td class="text-end"><a href="/Student/ResultDetail/${result.id}" class="btn btn-sm btn-outline-primary rounded-pill px-3">Chi tiết</a></td>
                 </tr>`;
             });
+
+            const avg = results.length ? (results.reduce((acc, item) => acc + Number(item.score || 0), 0) / results.length) : 0;
+            const passCount = results.filter(r => r.isPass).length;
+            const passRate = results.length ? Math.round((passCount / results.length) * 100) : 0;
+
+            $('#statUpcoming').text('' + Math.max(0, 5 - results.length));
+            $('#statAverage').text(avg.toFixed(1));
+            $('#statPassRate').text(passRate + '%');
             
             html += '</tbody></table></div>';
             $('#recentResults').html(html);
@@ -113,5 +148,42 @@
     <style>
         .bg-success-soft { background-color: #e6fcf5; }
         .bg-danger-soft { background-color: #fff5f5; }
+        .uts-dashboard-shell {
+            display: grid;
+            grid-template-columns: 240px minmax(0, 1fr);
+            gap: 16px;
+            min-height: calc(100vh - 180px);
+        }
+        .uts-dashboard-shell.sidebar-collapsed { grid-template-columns: 80px minmax(0, 1fr); }
+        .uts-dashboard-sidebar {
+            background: var(--color-primary);
+            border-radius: 8px;
+            padding: 14px;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .uts-sidebar-head { font-weight: 700; padding: 8px; }
+        .uts-sidebar-link {
+            color: #dbeafe;
+            text-decoration: none;
+            border-radius: 6px;
+            padding: 10px;
+            font-weight: 500;
+        }
+        .uts-sidebar-link:hover,
+        .uts-sidebar-link.active { background: rgba(255,255,255,0.16); color: #fff; }
+        .uts-topbar {
+            padding: 12px 16px;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 16px;
+        }
+        @@media (max-width: 992px) {
+            .uts-dashboard-shell { grid-template-columns: 1fr; }
+            .uts-dashboard-sidebar { order: 2; }
+        }
     </style>
 }

@@ -228,6 +228,15 @@ namespace UniTestSystem.Migrations
                     b.Property<DateTime>("EnrolledAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<decimal?>("FinalScore")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("Grade")
+                        .HasColumnType("nvarchar(2)");
+
+                    b.Property<decimal?>("GradePoint")
+                        .HasColumnType("decimal(3,1)");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
@@ -765,6 +774,9 @@ namespace UniTestSystem.Migrations
                     b.Property<DateTime?>("EndAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("GradedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
@@ -918,8 +930,14 @@ namespace UniTestSystem.Migrations
                     b.Property<DateTime>("AnsweredAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Comment")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("EssayAnswer")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("GradedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("QuestionId")
                         .HasColumnType("nvarchar(450)");

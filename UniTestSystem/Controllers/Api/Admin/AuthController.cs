@@ -1,12 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using UniTestSystem.Application;
 using UniTestSystem.Domain;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
-using Microsoft.IdentityModel.Tokens;
-using DomainUser = UniTestSystem.Domain.User;
 
 namespace UniTestSystem.Controllers.Api.Admin;
 
@@ -15,12 +10,10 @@ namespace UniTestSystem.Controllers.Api.Admin;
 public class AdminAuthController : ControllerBase
 {
     private readonly AuthService _authService;
-    private readonly IConfiguration _config;
 
-    public AdminAuthController(AuthService authService, IConfiguration config)
+    public AdminAuthController(AuthService authService)
     {
         _authService = authService;
-        _config = config;
     }
 
     [HttpPost("login")]
@@ -33,40 +26,58 @@ public class AdminAuthController : ControllerBase
         if (user.Role != Role.Admin && user.Role != Role.Lecturer && user.Role != Role.Staff)
             return Forbid(); // Only Admin, Lecturer and Staff can login via this endpoint
 
-        var token = GenerateJwtToken(user);
-        return Ok(new { 
-            token, 
-            user = new { 
-                user.Id, 
-                user.Name, 
-                user.Email, 
-                user.Role 
-            } 
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
+        var token = _authService.GenerateJwtToken(user);
+        var refreshToken = await _authService.GenerateRefreshTokenAsync(user.Id, ip);
+
+        return Ok(new
+        {
+            token,
+            refreshToken = refreshToken.Token,
+            user = new
+            {
+                user.Id,
+                user.Name,
+                user.Email,
+                user.Role
+            }
         });
     }
 
-    private string GenerateJwtToken(DomainUser user)
+    [HttpPost("refresh")]
+    public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
     {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"] ?? "default_secret_key_1234567890123456"));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-        var claims = new[]
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
         {
-            new Claim(ClaimTypes.NameIdentifier, user.Id),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Name, user.Name),
-            new Claim(ClaimTypes.Role, user.Role.ToString())
-        };
+            return BadRequest(new { message = "Refresh token is required." });
+        }
 
-        var token = new JwtSecurityToken(
-            issuer: _config["Jwt:Issuer"],
-            audience: _config["Jwt:Audience"],
-            claims: claims,
-            expires: DateTime.UtcNow.AddDays(1),
-            signingCredentials: creds
-        );
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
+        var rotated = await _authService.RotateRefreshTokenAsync(request.RefreshToken, ip);
+        if (rotated == null)
+        {
+            return Unauthorized(new { message = "Invalid refresh token." });
+        }
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return Ok(new
+        {
+            token = rotated.Value.jwt,
+            refreshToken = rotated.Value.refresh.Token
+        });
+    }
+
+    [Authorize]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout([FromBody] RefreshRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.RefreshToken))
+        {
+            await _authService.RevokeRefreshTokenAsync(
+                request.RefreshToken,
+                HttpContext.Connection.RemoteIpAddress?.ToString() ?? "");
+        }
+
+        return Ok(new { message = "Logged out." });
     }
 }
 
@@ -74,4 +85,9 @@ public class LoginRequest
 {
     public string Email { get; set; } = "";
     public string Password { get; set; } = "";
+}
+
+public class RefreshRequest
+{
+    public string RefreshToken { get; set; } = "";
 }

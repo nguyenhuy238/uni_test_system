@@ -1,48 +1,76 @@
+@using UniTestSystem.Domain
 @{
-    ViewData["Title"] = "Take Test";
-    Layout = "_UserLayout";
+    ViewData["Title"] = "Examination in Progress";
+    Layout = "_ExamLayout";
     var testId = ViewBag.TestId as string;
 }
 
-<div class="container">
-    <div class="row">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h2>Test in Progress</h2>
-                <div class="d-flex align-items-center">
-                    <span class="badge bg-primary me-2">Time Remaining:</span>
-                    <span id="timer" class="fw-bold">--:--</span>
+<div class="exam-room-shell">
+    <div class="exam-room-main">
+        <section class="exam-question-panel ui-surface">
+            <header class="exam-question-header">
+                <h5 class="mb-0 fw-bold" id="testTitle">Loading test...</h5>
+                <div class="exam-progress-pill">
+                    Question <span id="currentQNum">0</span> / <span id="totalQNum">0</span>
+                </div>
+            </header>
+
+            <div class="exam-question-body" id="questionContainer">
+                <div class="text-center py-5" id="loader">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-3 text-muted">Preparing your examination questions...</p>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <div class="row">
-        <div class="col-12">
-            <div class="progress mb-4">
-                <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row">
-        <div class="col-12">
-            <div id="testContent">
-                <div class="text-center">
-                    <div class="spinner-border" role="status">
-                        <span class="visually-hidden">Loading test...</span>
-                    </div>
+            <footer class="exam-question-footer">
+                <button id="prevBtn" class="btn btn-outline-secondary" onclick="prevQuestion()" disabled>
+                    <i class="bi bi-arrow-left me-1"></i> Previous
+                </button>
+                <div class="d-flex gap-2">
+                    <button id="nextBtn" class="btn ui-btn-primary text-white" onclick="nextQuestion()" disabled>
+                        Next <i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                    <button id="submitBtn" class="btn btn-success d-none" onclick="confirmSubmit()">
+                        <i class="bi bi-check2-circle me-1"></i> Submit Test
+                    </button>
                 </div>
-            </div>
-        </div>
+            </footer>
+        </section>
     </div>
 
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="d-flex justify-content-between">
-                <button id="prevBtn" class="btn btn-secondary" onclick="previousQuestion()" disabled>Previous</button>
-                <button id="nextBtn" class="btn btn-primary" onclick="nextQuestion()">Next</button>
-                <button id="submitBtn" class="btn btn-success d-none" onclick="submitTest()">Submit Test</button>
+    <aside class="exam-room-sidebar">
+        <section class="ui-surface exam-right-panel sticky-top">
+            <div class="exam-timer-wrap" id="timerWrap">
+                <span class="text-uppercase small fw-semibold">Time Remaining</span>
+                <div class="exam-timer" id="timer">--:--</div>
+            </div>
+
+            <div class="exam-nav-header">
+                <span class="fw-semibold">Question Navigator</span>
+            </div>
+            <div id="qPalette" class="exam-q-grid"></div>
+
+            <div class="exam-security-note mt-3">
+                <strong>Secure Mode Active</strong>
+                <div class="small mt-1">Tab switching, copy/paste, and shortcuts are monitored.</div>
+            </div>
+
+            <button class="btn btn-danger w-100 mt-3" onclick="confirmSubmit()">
+                <i class="bi bi-send-check me-1"></i> Submit Test
+            </button>
+        </section>
+    </aside>
+</div>
+
+<!-- Anti-cheat Alert Modal -->
+<div class="modal fade" id="cheatModal" data-bs-backdrop="static" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-body text-center p-5">
+                <i class="bi bi-exclamation-triangle-fill text-danger fs-1 mb-3"></i>
+                <h4 class="fw-bold mb-3">Security Violation Detected</h4>
+                <p class="text-muted mb-4">You have switched away from the examination tab. This event has been logged and reported to the system administrator.</p>
+                <button type="button" class="btn btn-primary px-5" data-bs-dismiss="modal">I Understand</button>
             </div>
         </div>
     </div>
@@ -50,109 +78,313 @@
 
 @section Scripts {
     <script>
-        let currentQuestionIndex = 0;
-        let questions = [];
-        let answers = {};
-        let testInfo = {};
+        const TEST_ID = '@testId';
         let sessionId = '';
+        let questions = [];
+        let currentIndex = 0;
+        let userAnswers = {}; // { questionId: value }
+        let timerSeconds = 0;
         let timerInterval;
 
         $(document).ready(function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const testId = urlParams.get('testId');
-            sessionId = urlParams.get('sessionId');
-            
-            if (!testId || !sessionId) {
-                window.location.href = '/User/Tests';
-                return;
-            }
-
-            loadTest(testId);
+            initAntiCheat();
+            startTest();
         });
 
-        function loadTest(testId) {
-            const token = localStorage.getItem('jwtToken');
-            
+        // --- 1. CORE LOGIC ---
+
+        function startTest() {
             $.ajax({
-                url: `/api/user/tests/${testId}`,
-                method: 'GET',
-                headers: {
-                    'Authorization': 'Bearer ' + token
+                url: `/api/tests/${TEST_ID}/start`,
+                method: 'POST',
+                success: function(res) {
+                    sessionId = res.sessionId;
+                    questions = res.questions;
+                    timerSeconds = res.remainingMinutes * 60;
+                    
+                    $('#testTitle').text('Online Examination');
+                    $('#totalQNum').text(questions.length);
+                    $('#loader').remove();
+                    
+                    renderPalette();
+                    showQuestion(0);
+                    startTimer();
                 },
-                success: function(test) {
-                    testInfo = test;
-                    loadQuestions(testId);
-                },
-                error: function() {
-                    $('#testContent').html('<div class="alert alert-danger">Failed to load test. Please try again.</div>');
+                error: function(err) {
+                    $('#questionContainer').html(`
+                        <div class="alert alert-danger">
+                            <i class="bi bi-x-circle me-2"></i>
+                            Failed to start test: ${err.responseText || 'Unauthorized or session error'}
+                        </div>
+                    `);
                 }
             });
         }
 
-        function loadQuestions(testId) {
-            // This would need to be implemented to get questions for the test
-            // For now, showing a placeholder
-            $('#testContent').html(`
-                <div class="alert alert-info">
-                    <h4>Test: ${testInfo.title}</h4>
-                    <p>This is a placeholder for the test questions.</p>
-                    <p>In a complete implementation, this would load the actual questions and allow the user to answer them.</p>
-                    <p>Duration: ${testInfo.durationMinutes} minutes</p>
-                    <p>Max Score: ${testInfo.totalMaxScore} points</p>
-                </div>
-            `);
+        function showQuestion(index) {
+            currentIndex = index;
+            const q = questions[index];
             
-            // Enable submit button for demo
-            $('#submitBtn').removeClass('d-none');
+            $('#currentQNum').text(index + 1);
+            $('#prevBtn').prop('disabled', index === 0);
+            
+            if (index === questions.length - 1) {
+                $('#nextBtn').addClass('d-none');
+                $('#submitBtn').removeClass('d-none');
+            } else {
+                $('#nextBtn').removeClass('d-none');
+                $('#submitBtn').addClass('d-none');
+                $('#nextBtn').prop('disabled', false);
+            }
+
+            let html = `<div class="mb-4"><h4 class="fw-bold exam-question">${q.content}</h4></div>`;
+            
+            if (q.type === 'MCQ' || q.type === 'TrueFalse') {
+                html += '<div class="exam-option-list">';
+                q.options.forEach(opt => {
+                    const isChecked = userAnswers[q.id] === opt.content ? 'checked' : '';
+                    html += `
+                        <label class="exam-option-item cursor-pointer">
+                            <input class="form-check-input me-3 mt-0" type="radio" name="q_${q.id}" value="${opt.content}" ${isChecked} onchange="saveAnswer('${q.id}', this.value)">
+                            <span>${opt.content}</span>
+                        </label>`;
+                });
+                html += '</div>';
+            } else if (q.type === 'Essay') {
+                const val = userAnswers[q.id] || '';
+                html += `<textarea class="form-control shadow-sm exam-essay" rows="10" placeholder="Type your answer here..." oninput="saveAnswer('${q.id}', this.value)">${val}</textarea>`;
+            }
+
+            $('#questionContainer').html(html);
+            updatePaletteActive();
         }
 
-        function previousQuestion() {
-            if (currentQuestionIndex > 0) {
-                currentQuestionIndex--;
-                displayQuestion();
-            }
+        function saveAnswer(qid, val) {
+            userAnswers[qid] = val;
+            updatePaletteActive();
         }
 
         function nextQuestion() {
-            if (currentQuestionIndex < questions.length - 1) {
-                currentQuestionIndex++;
-                displayQuestion();
-            } else {
-                $('#submitBtn').removeClass('d-none');
-                $('#nextBtn').addClass('d-none');
+            if (currentIndex < questions.length - 1) showQuestion(currentIndex + 1);
+        }
+
+        function prevQuestion() {
+            if (currentIndex > 0) showQuestion(currentIndex - 1);
+        }
+
+        function renderPalette() {
+            let html = '';
+            questions.forEach((q, i) => {
+                html += `<button id="pal_${i}" class="exam-q-btn" onclick="showQuestion(${i})">${i + 1}</button>`;
+            });
+            $('#qPalette').html(html);
+        }
+
+        function updatePaletteActive() {
+            questions.forEach((q, i) => {
+                const btn = $(`#pal_${i}`);
+                btn.removeClass('is-current is-answered');
+                
+                if (i === currentIndex) {
+                    btn.addClass('is-current');
+                } else if (userAnswers[q.id]) {
+                    btn.addClass('is-answered');
+                }
+            });
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                timerSeconds--;
+                if (timerSeconds <= 0) {
+                    clearInterval(timerInterval);
+                    autoSubmit();
+                }
+                const m = Math.floor(timerSeconds / 60);
+                const s = timerSeconds % 60;
+                $('#timer').text(`${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+                
+                if (timerSeconds < 300) { // Red timer if < 5 mins
+                    $('#timerWrap').addClass('time-critical');
+                }
+            }, 1000);
+        }
+
+        function confirmSubmit() {
+            if (confirm('Are you sure you want to submit your test? You cannot make changes after submission.')) {
+                submitTest();
             }
         }
 
         function submitTest() {
-            const token = localStorage.getItem('jwtToken');
-            
+            clearInterval(timerInterval);
             $.ajax({
                 url: `/api/tests/sessions/${sessionId}/submit`,
                 method: 'POST',
-                headers: {
-                    'Authorization': 'Bearer ' + token
-                },
-                data: JSON.stringify(answers),
                 contentType: 'application/json',
-                success: function() {
-                    alert('Test submitted successfully!');
-                    window.location.href = '/User/Results';
+                data: JSON.stringify({ answers: userAnswers }),
+                success: function(res) {
+                    window.location.href = `/Student/ResultDetail/${res.id}`;
                 },
-                error: function() {
-                    alert('Failed to submit test. Please try again.');
+                error: function(err) {
+                    alert('Submission failed. Please check your connection.');
                 }
             });
         }
 
-        function updateTimer() {
-            // Timer implementation would go here
-            // For now, just showing placeholder
-            $('#timer').text('30:00');
+        function autoSubmit() {
+            alert('Time is up! Your test will be submitted automatically.');
+            submitTest();
         }
 
-        function updateProgress() {
-            const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
-            $('#progressBar').css('width', progress + '%');
+        // --- 2. ANTI-CHEAT LOGIC ---
+
+        function initAntiCheat() {
+            // Disable right click
+            document.addEventListener('contextmenu', e => e.preventDefault());
+
+            // Disable Copy/Paste
+            document.addEventListener('copy', e => {
+                e.preventDefault();
+                logCheatEvent('Copy', 'Attempted to copy content');
+            });
+            document.addEventListener('paste', e => {
+                e.preventDefault();
+                logCheatEvent('Paste', 'Attempted to paste content');
+            });
+
+            // Detect Window Blur (Tab switching)
+            let blurCount = 0;
+            $(window).on('blur', function() {
+                blurCount++;
+                logCheatEvent('TabSwitch', `User left the exam tab (Occurrence: ${blurCount})`);
+                new bootstrap.Modal('#cheatModal').show();
+            });
+
+            // Detect Shortcuts
+            document.addEventListener('keydown', e => {
+                // F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
+                if (e.keyCode == 123 || 
+                    (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74)) || 
+                    (e.ctrlKey && e.keyCode == 85)) {
+                    e.preventDefault();
+                    logCheatEvent('DevTools', 'Attempted to open Developer Tools');
+                }
+                
+                // PrintScreen (Basic)
+                if (e.keyCode == 44) {
+                    logCheatEvent('PrintScreen', 'Print screen detected');
+                }
+            });
+        }
+
+        function logCheatEvent(type, detail) {
+            if (!sessionId) return;
+            $.ajax({
+                url: `/api/tests/sessions/${sessionId}/log`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ actionType: type, detail: detail }),
+                global: false // Don't trigger global loading spinners
+            });
         }
     </script>
+    
+    <style>
+        .cursor-pointer { cursor: pointer; }
+        .exam-room-shell {
+            min-height: 100vh;
+            background: var(--color-bg);
+            display: grid;
+            grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr);
+            gap: 20px;
+            padding: 20px;
+        }
+        .exam-room-main { min-width: 0; }
+        .exam-question-panel { min-height: calc(100vh - 40px); display: flex; flex-direction: column; }
+        .exam-question-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        .exam-progress-pill {
+            background: #dbeafe;
+            color: var(--color-primary);
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        .exam-question-body { padding: 24px; flex: 1; overflow: auto; }
+        .exam-question-footer {
+            border-top: 1px solid #e2e8f0;
+            padding: 14px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .exam-right-panel { top: 20px; padding: 16px; }
+        .exam-timer-wrap {
+            border-radius: 8px;
+            background: #0f172a;
+            color: #fff;
+            padding: 14px;
+            margin-bottom: 12px;
+            transition: background-color 180ms ease;
+        }
+        .exam-timer-wrap.time-critical { background: var(--color-danger); }
+        .exam-timer { font-size: 2rem; font-weight: 700; line-height: 1; margin-top: 4px; }
+        .exam-nav-header { margin: 8px 0 10px; }
+        .exam-q-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+        .exam-q-btn {
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #fff;
+            color: var(--color-text);
+            font-weight: 600;
+            min-height: 36px;
+        }
+        .exam-q-btn.is-current {
+            background: var(--color-primary);
+            color: #fff;
+            border-color: var(--color-primary);
+        }
+        .exam-q-btn.is-answered {
+            background: var(--color-success);
+            color: #fff;
+            border-color: var(--color-success);
+        }
+        .exam-option-list { display: grid; gap: 10px; }
+        .exam-option-item {
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: flex-start;
+            font-size: 1.05rem;
+            line-height: 1.5;
+            background: #fff;
+        }
+        .exam-option-item:hover { border-color: var(--color-secondary); background: #f8fbff; }
+        .exam-security-note {
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            background: #fff7ed;
+            color: #92400e;
+            border-radius: 8px;
+            padding: 10px 12px;
+        }
+        .exam-essay { font-size: 1rem; line-height: 1.6; }
+        @@media (max-width: 992px) {
+            .exam-room-shell {
+                grid-template-columns: 1fr;
+                padding: 12px;
+                gap: 12px;
+            }
+            .exam-question-panel { min-height: auto; }
+            .exam-right-panel { position: static !important; top: auto; }
+        }
+    </style>
 }

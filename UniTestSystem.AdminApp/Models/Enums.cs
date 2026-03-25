@@ -3,6 +3,7 @@ namespace UniTestSystem.AdminApp.Models
     public enum Role
     {
         Admin,
+        Staff,
         Lecturer,
         Student
     }

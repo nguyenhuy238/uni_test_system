@@ -1,8 +1,8 @@
 system_name: UniTestSystem
-version: 1.0.0
+version: 1.1.0
 architecture_type: Clean Architecture (.NET 8)
 enforcement_level: Enterprise
-last_updated: 2026-03-01
+last_updated: 2026-03-25
 
 rules:
   # 1. FUNCTIONALITY RULES
@@ -90,6 +90,11 @@ rules:
         severity: High
         validation_method: Code review
         measurable_criteria: "Usage of C# `IDbContextTransaction` or EF Core implicit transactions."
+      - rule_id: REL_004
+        description: "Repositories must not commit per method; transaction boundary belongs to Use Case/Application service."
+        severity: High
+        validation_method: Static analysis / Code review
+        measurable_criteria: "No `SaveChanges`/`SaveChangesAsync` calls inside generic repository CRUD methods."
 
   # 5. USABILITY RULES
   - group: USABILITY
@@ -128,6 +133,46 @@ rules:
         severity: Critical
         validation_method: Static analysis / Code review
         measurable_criteria: "Detection of credentials or connection strings in source code."
+      - rule_id: MAIN_004
+        description: "Application layer must be framework-agnostic (no ASP.NET Core runtime coupling)."
+        severity: Critical
+        validation_method: Static analysis
+        measurable_criteria: "No `Microsoft.AspNetCore.*` namespace usage in `UniTestSystem.Application`."
+      - rule_id: MAIN_005
+        description: "Web/API Controllers must call Application Use Cases/Services; direct `IRepository<T>` injection in controllers is prohibited."
+        severity: Critical
+        validation_method: Static analysis / PR gate
+        measurable_criteria: "0 controller classes containing constructor parameters of type `IRepository<>`."
+      - rule_id: MAIN_006
+        description: "Project dependency direction must follow Clean Architecture: Domain <- Application <- Infrastructure <- Web/API."
+        severity: Critical
+        validation_method: CI architecture check
+        measurable_criteria: "Only allowed project references exist; no reverse dependency from inner to outer layers."
+      - rule_id: MAIN_007
+        description: "Composition Root must be modularized through DI extension methods."
+        severity: High
+        validation_method: Code review
+        measurable_criteria: "`Program.cs` delegates service wiring to `AddApplicationServices()` and `AddInfrastructureServices(...)`."
+      - rule_id: MAIN_008
+        description: "Service Locator usage (`GetRequiredService`) is restricted to startup/bootstrap scenarios with documented justification."
+        severity: High
+        validation_method: Static analysis / Code review
+        measurable_criteria: "No `GetRequiredService` usage inside controllers and Application services."
+      - rule_id: MAIN_009
+        description: "Presentation ViewModels must stay in presentation projects (Web/AdminApp), not in Application core."
+        severity: Medium
+        validation_method: Code review
+        measurable_criteria: "No MVC/WPF ViewModel classes under `UniTestSystem.Application/Models` except cross-layer DTO contracts."
+      - rule_id: MAIN_010
+        description: "Authorization handler implementations belong to Web/API boundary, while permission decision logic belongs to Application."
+        severity: High
+        validation_method: Code review
+        measurable_criteria: "`AuthorizationHandler` implementations exist in Web project; Application exposes only permission service/contracts."
+      - rule_id: MAIN_011
+        description: "WPF AdminApp must use HostBuilder + DI + IHttpClientFactory; manual `new HttpClient()`/`new ApiService(...)` in App bootstrap is prohibited."
+        severity: High
+        validation_method: Static analysis / Code review
+        measurable_criteria: "AdminApp startup composes dependencies via `IServiceProvider`; HTTP clients created through factory/typed clients."
 
   # 7. FLEXIBILITY RULES
   - group: FLEX_001
@@ -175,6 +220,11 @@ rules:
         severity: Medium
         validation_method: Automated CI
         measurable_criteria: "Testing against an actual SQL Server or In-Memory DB."
+      - rule_id: TEST_003
+        description: "Architecture tests are mandatory for layer boundaries and dependency direction."
+        severity: High
+        validation_method: Automated CI
+        measurable_criteria: "CI fails if layering/dependency constraints (MAIN_004/005/006/010) are violated."
 
   # 10. SAFETY RULES
   - group: SAFETY

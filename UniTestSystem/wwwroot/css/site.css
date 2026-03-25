@@ -1,22 +1,195 @@
-html {
-  font-size: 14px;
-}
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 
-@media (min-width: 768px) {
-  html {
-    font-size: 16px;
-  }
-}
+:root {
+  --color-primary: #1e3a8a;
+  --color-secondary: #3b82f6;
+  --color-bg-light: #f8fafc;
+  --color-surface: #ffffff;
+  --color-text-main: #1e293b;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --font-main: "Inter", "Segoe UI", sans-serif;
+  --border-radius-lg: 8px;
+  --border-radius-sm: 4px;
 
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+  /* Backward-compatible aliases used across existing views */
+  --color-bg: var(--color-bg-light);
+  --color-text: var(--color-text-main);
+  --font-sans: var(--font-main);
+  --radius-sm: var(--border-radius-sm);
+  --radius-md: var(--border-radius-lg);
+
+  --font-size-base: 16px;
+  --font-size-question: 18px;
+  --line-height-base: 1.6;
+  --line-height-question: 1.6;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 2px 8px rgba(15, 23, 42, 0.06);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --dur-fast: 140ms;
+  --dur-normal: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
 html {
   position: relative;
   min-height: 100%;
+  font-size: var(--font-size-base);
 }
 
 body {
+  margin: 0;
   margin-bottom: 60px;
+  background: var(--color-bg-light);
+  color: var(--color-text-main);
+  font-family: var(--font-main);
+  line-height: var(--line-height-base);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+a:hover {
+  color: var(--color-secondary);
+}
+
+.btn:focus,
+.btn:active:focus,
+.btn-link.nav-link:focus,
+.form-control:focus,
+.form-check-input:focus {
+  box-shadow: 0 0 0 0.1rem #fff, 0 0 0 0.25rem rgba(59, 130, 246, 0.35);
+}
+
+.ui-surface {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.ui-card {
+  background: var(--color-surface);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5);
+}
+
+.ui-btn {
+  border: 0;
+  border-radius: var(--border-radius-sm);
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-standard),
+    opacity var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-normal) var(--ease-standard);
+}
+
+.ui-btn:active {
+  transform: translateY(1px);
+}
+
+.ui-btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.ui-btn-primary:hover {
+  background: var(--color-secondary);
+}
+
+.ui-input,
+.ui-select,
+.ui-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--border-radius-sm);
+  background: #fff;
+  color: var(--color-text);
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.ui-input:focus,
+.ui-select:focus,
+.ui-textarea:focus {
+  border-color: var(--color-secondary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+}
+
+.exam-question {
+  font-size: var(--font-size-question);
+  line-height: var(--line-height-question);
+}
+
+.uts-app-navbar {
+  background: linear-gradient(90deg, var(--color-primary), #27489a);
+}
+
+.uts-page-wrap {
+  padding-top: 8px;
+}
+
+.uts-auth-shell {
+  min-height: calc(100vh - 120px);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-radius: var(--border-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  background: var(--color-surface);
+}
+
+.uts-auth-visual {
+  background: linear-gradient(135deg, rgba(30, 58, 138, 0.95), rgba(59, 130, 246, 0.88));
+  color: #fff;
+  padding: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.uts-auth-form {
+  padding: 28px;
+  background: var(--color-surface);
+}
+
+.uts-auth-form .form-control,
+.uts-auth-form .form-select {
+  border-radius: var(--border-radius-sm);
+  padding: 0.65rem 0.8rem;
+}
+
+.uts-footer {
+  background: var(--color-surface);
+}
+
+@media (max-width: 992px) {
+  .uts-auth-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .uts-auth-visual {
+    min-height: 220px;
+  }
+}
+
+@media (max-width: 768px) {
+  body {
+    margin-bottom: 80px;
+  }
+
+  .ui-card {
+    padding: 16px;
+  }
 }

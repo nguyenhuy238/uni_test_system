@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace UniTestSystem.Controllers.Api.Admin;
 
 [ApiController]
-[Authorize(Policy = "RequireLecturerOrStaffOrAdmin")]
+[Authorize(Policy = PermissionCodes.Question_View)]
 [Route("api/admin/questions")]
 public class QuestionsController : ControllerBase
 {
@@ -23,6 +23,7 @@ public class QuestionsController : ControllerBase
     }
 
     [HttpPost("submit/{id}")]
+    [Authorize(Policy = PermissionCodes.Question_Edit)]
     public async Task<IActionResult> Submit(string id)
     {
         var (success, reason) = await _svc.SubmitAsync(id, User.Identity?.Name ?? "admin");
@@ -31,6 +32,7 @@ public class QuestionsController : ControllerBase
     }
 
     [HttpPost("approve/{id}")]
+    [Authorize(Policy = PermissionCodes.Question_Approve)]
     public async Task<IActionResult> Approve(string id)
     {
         var (success, reason) = await _svc.ApproveAsync(id, User.Identity?.Name ?? "admin");
@@ -39,6 +41,7 @@ public class QuestionsController : ControllerBase
     }
 
     [HttpPost("reject/{id}")]
+    [Authorize(Policy = PermissionCodes.Question_Approve)]
     public async Task<IActionResult> Reject(string id, [FromQuery] string? reason)
     {
         var (success, r) = await _svc.RejectAsync(id, User.Identity?.Name ?? "admin", reason);
@@ -69,6 +72,7 @@ public class QuestionsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = PermissionCodes.Question_Create)]
     public async Task<IActionResult> Create([FromBody] CreateQuestionRequest request)
     {
         var question = new Question
@@ -100,6 +104,7 @@ public class QuestionsController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Policy = PermissionCodes.Question_Edit)]
     public async Task<IActionResult> Update(string id, [FromBody] UpdateQuestionRequest request)
     {
         var existingQuestion = await _questions.FirstOrDefaultAsync(x => x.Id == id);
@@ -135,6 +140,7 @@ public class QuestionsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Policy = PermissionCodes.Question_Delete)]
     public async Task<IActionResult> Delete(string id)
     {
         await _options.DeleteAsync(o => o.QuestionId == id);

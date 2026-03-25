@@ -13,9 +13,9 @@
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
-        <div class="container">
-            <a class="navbar-brand d-flex align-items-center gap-2" href="/User/Dashboard">
+    <nav class="navbar navbar-expand-lg navbar-dark uts-app-navbar shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="/Student/Dashboard">
                 <i class="bi bi-mortarboard-fill"></i> UniTestSystem
             </a>
             
@@ -26,17 +26,17 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="/User/Dashboard">
+                        <a class="nav-link" href="/Student/Dashboard">
                             <i class="bi bi-house"></i> Dashboard
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/User/Tests">
+                        <a class="nav-link" href="/Student/Tests">
                             <i class="bi bi-pencil-square"></i> My Tests
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="/User/Results">
+                        <a class="nav-link" href="/Student/Results">
                             <i class="bi bi-journal-check"></i> Results
                         </a>
                     </li>
@@ -44,18 +44,18 @@
                 
                 <div class="user-info">
                     <span id="userName" class="text-white small me-2">Loading...</span>
-                    <a href="/profile" class="btn btn-outline-light btn-sm rounded-pill"><i class="bi bi-person-circle"></i> Profile</a>
+                    <a href="/Profile/Edit" class="btn btn-outline-light btn-sm rounded-pill"><i class="bi bi-person-circle"></i> Profile</a>
                     <button class="btn btn-light btn-sm rounded-pill text-primary fw-bold" onclick="logout()">Logout</button>
                 </div>
             </div>
         </div>
     </nav>
 
-    <div class="container mt-4 mb-5">
+    <div class="container uts-page-wrap mt-3 mb-5">
         @RenderBody()
     </div>
 
-    <footer class="bg-light text-center py-4 mt-auto border-top">
+    <footer class="text-center py-4 mt-auto border-top uts-footer">
         <div class="container">
             <p class="mb-0 text-muted">&copy; @DateTime.Now.Year UniTestSystem - Hệ thống thi & khảo sát sinh viên.</p>
         </div>
@@ -75,7 +75,7 @@
             }
             
             const token = localStorage.getItem('jwtToken');
-            if (!token && !window.location.pathname.includes('/User/Login') && !window.location.pathname.includes('/User/Register')) {
+            if (!token && !window.location.pathname.includes('/Student/Login') && !window.location.pathname.includes('/Student/Register')) {
                 // window.location.href = '/User/Login'; 
             }
         });
@@ -95,7 +95,7 @@
             if (xAdmin.status === 401) {
                 localStorage.removeItem('jwtToken');
                 localStorage.removeItem('user');
-                window.location.href = '/User/Login';
+                window.location.href = '/Student/Login';
             }
         });
     </script>

@@ -23,16 +23,23 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        // Show login window first
+        // Login first (or restore prior session)
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        var loginWindow = new LoginWindow(_apiService);
-        if (loginWindow.ShowDialog() == true)
+
+        var hasSession = _apiService.TryRestoreSessionAsync().GetAwaiter().GetResult();
+        var loginSucceeded = hasSession;
+
+        if (!hasSession)
         {
-            // Login successful, show main window
+            var loginWindow = new LoginWindow(_apiService);
+            loginSucceeded = loginWindow.ShowDialog() == true;
+        }
+
+        if (loginSucceeded)
+        {
             var viewModel = new MainViewModel(_apiService);
-            var mainWindow = new MainWindow(viewModel);
+            var mainWindow = new MainWindow(viewModel, _apiService);
             
-            // Re-enable automatic shutdown when last window closes
             ShutdownMode = ShutdownMode.OnLastWindowClose;
             Application.Current.MainWindow = mainWindow;
             
@@ -40,7 +47,6 @@ public partial class App : Application
         }
         else
         {
-            // Login failed or cancelled, shutdown
             Shutdown();
         }
     }

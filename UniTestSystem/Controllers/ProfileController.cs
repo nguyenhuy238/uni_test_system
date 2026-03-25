@@ -77,7 +77,7 @@ namespace UniTestSystem.Controllers
 
         [ValidateAntiForgeryToken]
         [HttpPost("/profile")]
-        public async Task<IActionResult> Edit(ProfileViewModel vm)
+        public async Task<IActionResult> Edit(ProfileViewModel vm, IFormFile? avatarFile)
         {
             var uid = CurrentUserId;
             if (string.IsNullOrEmpty(uid)) return RedirectToAction("Login", "Auth");
@@ -95,15 +95,15 @@ namespace UniTestSystem.Controllers
                 return View(vm);
             }
 
-            if (vm.AvatarFile != null)
+            if (avatarFile != null)
             {
                 var folder = Path.Combine(_env.WebRootPath, "uploads", "avatars");
                 Directory.CreateDirectory(folder);
-                var fileName = u.Id + Path.GetExtension(vm.AvatarFile.FileName);
+                var fileName = u.Id + Path.GetExtension(avatarFile.FileName);
                 var path = Path.Combine(folder, fileName);
                 using (var stream = new FileStream(path, FileMode.Create))
                 {
-                    await vm.AvatarFile.CopyToAsync(stream);
+                    await avatarFile.CopyToAsync(stream);
                 }
                 u.AvatarUrl = "/uploads/avatars/" + fileName;
             }

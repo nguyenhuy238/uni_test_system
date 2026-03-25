@@ -10,24 +10,24 @@ namespace UniTestSystem.Controllers.Api.Admin;
 [Route("api/admin/courses")]
 public class AdminCoursesController : ControllerBase
 {
-    private readonly IRepository<Course> _repo;
+    private readonly IAcademicService _academicService;
 
-    public AdminCoursesController(IRepository<Course> repo)
+    public AdminCoursesController(IAcademicService academicService)
     {
-        _repo = repo;
+        _academicService = academicService;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var list = await _repo.GetAllAsync(x => !x.IsDeleted);
+        var list = await _academicService.GetAllCoursesAsync();
         return Ok(list.OrderBy(x => x.Name).ToList());
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
-        var course = await _repo.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
+        var course = await _academicService.GetCourseByIdAsync(id);
         if (course == null) return NotFound();
         return Ok(course);
     }
@@ -35,31 +35,25 @@ public class AdminCoursesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] Course course)
     {
-        course.Id = string.IsNullOrWhiteSpace(course.Id) ? Guid.NewGuid().ToString("N") : course.Id;
-        course.CreatedAt = DateTime.UtcNow;
-        await _repo.InsertAsync(course);
+        var ok = await _academicService.CreateCourseAsync(course);
+        if (!ok) return BadRequest();
+
         return Ok(course);
     }
 
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(string id, [FromBody] Course course)
     {
-        course.Id = id;
-        course.UpdatedAt = DateTime.UtcNow;
-        await _repo.UpsertAsync(x => x.Id == id, course);
+        var ok = await _academicService.UpdateCourseAsync(id, course);
+        if (!ok) return NotFound();
+
         return NoContent();
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id)
     {
-        var course = await _repo.FirstOrDefaultAsync(x => x.Id == id);
-        if (course != null)
-        {
-            course.IsDeleted = true;
-            course.UpdatedAt = DateTime.UtcNow;
-            await _repo.UpdateAsync(course);
-        }
+        await _academicService.DeleteCourseAsync(id);
         return NoContent();
     }
 }

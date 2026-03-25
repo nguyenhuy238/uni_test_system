@@ -5,6 +5,8 @@ using UniTestSystem.Domain;
 using UniTestSystem.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
 
 namespace UniTestSystem.Controllers
 {
@@ -15,11 +17,18 @@ namespace UniTestSystem.Controllers
         private readonly IExportService _export;
         private readonly ISettingsService _settings;
         private readonly IRepository<User> _userRepo;
+        private readonly IRepository<Course> _courseRepo;
         private readonly IPermissionService _perms;
 
-        public ReportsController(ReportService svc, IExportService export, ISettingsService settings, IRepository<User> userRepo, IPermissionService perms)
+        public ReportsController(
+            ReportService svc,
+            IExportService export,
+            ISettingsService settings,
+            IRepository<User> userRepo,
+            IRepository<Course> courseRepo,
+            IPermissionService perms)
         {
-            _svc = svc; _export = export; _settings = settings; _userRepo = userRepo; _perms = perms;
+            _svc = svc; _export = export; _settings = settings; _userRepo = userRepo; _courseRepo = courseRepo; _perms = perms;
         }
 
         [HttpGet("/reports")]
@@ -34,11 +43,81 @@ namespace UniTestSystem.Controllers
             var facultyVm = await _svc.GetFacultyReportAsync(fromUtc, toUtc);
             var yearVm = await _svc.GetAcademicYearReportAsync(fromUtc, toUtc);
 
+            var roleValue = User.FindFirstValue(ClaimTypes.Role);
+            var role = Enum.TryParse<Role>(roleValue, out var parsedRole) ? parsedRole : Role.Staff;
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var dashboardVm = await _svc.GetWidgetDashboardAsync(fromUtc, toUtc, role, currentUserId);
+
+            var vm = new ReportsIndexVm
+            {
+                Faculty = facultyVm,
+                AcademicYear = yearVm,
+                Dashboard = dashboardVm
+            };
+
             ViewBag.From = fromUtc.ToString("yyyy-MM-dd");
             ViewBag.To = toUtc.ToString("yyyy-MM-dd");
             ViewBag.CanExport = await _perms.HasAsync(User, PermissionCodes.Reports_Export);
 
-            return View("Index", (facultyVm, yearVm));
+            return View("Index", vm);
+        }
+
+        [HttpGet("/reports/question-analytics")]
+        public async Task<IActionResult> QuestionAnalytics(string? from = null, string? to = null, string? courseId = null, int minAttempts = 5)
+        {
+            if (!await _perms.HasAsync(User, PermissionCodes.Reports_View))
+                return Redirect("/auth/denied");
+
+            var toUtc = string.IsNullOrWhiteSpace(to) ? DateTime.UtcNow : DateTime.Parse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            var fromUtc = string.IsNullOrWhiteSpace(from) ? toUtc.AddDays(-30) : DateTime.Parse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+
+            var vm = await _svc.GetQuestionAnalyticsAsync(fromUtc, toUtc, courseId, minAttempts);
+            var courses = await _courseRepo.GetAllAsync(c => !c.IsDeleted);
+
+            ViewBag.From = fromUtc.ToString("yyyy-MM-dd");
+            ViewBag.To = toUtc.ToString("yyyy-MM-dd");
+            ViewBag.MinAttempts = minAttempts < 1 ? 1 : minAttempts;
+            ViewBag.CourseId = courseId;
+            ViewBag.Courses = courses.OrderBy(c => c.Name).ToList();
+
+            return View("QuestionAnalytics", vm);
+        }
+
+        [HttpGet("/reports/lecturer-performance")]
+        public async Task<IActionResult> LecturerPerformance(string? from = null, string? to = null, string? lecturerId = null)
+        {
+            if (!await _perms.HasAsync(User, PermissionCodes.Reports_View))
+                return Redirect("/auth/denied");
+
+            var toUtc = string.IsNullOrWhiteSpace(to) ? DateTime.UtcNow : DateTime.Parse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            var fromUtc = string.IsNullOrWhiteSpace(from) ? toUtc.AddDays(-30) : DateTime.Parse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var isAdminOrStaff = User.IsInRole(Role.Admin.ToString()) || User.IsInRole(Role.Staff.ToString());
+
+            if (!isAdminOrStaff)
+            {
+                lecturerId = currentUserId;
+            }
+            else if (string.IsNullOrWhiteSpace(lecturerId))
+            {
+                lecturerId = null;
+            }
+
+            var vm = await _svc.GetLecturerPerformanceReportAsync(fromUtc, toUtc, lecturerId);
+
+            var lecturers = await _userRepo.Query()
+                .Where(x => x.Role == Role.Lecturer && x.IsActive)
+                .OrderBy(x => x.Name)
+                .ToListAsync();
+
+            ViewBag.From = fromUtc.ToString("yyyy-MM-dd");
+            ViewBag.To = toUtc.ToString("yyyy-MM-dd");
+            ViewBag.LecturerId = lecturerId;
+            ViewBag.Lecturers = lecturers;
+            ViewBag.IsAdminOrStaff = isAdminOrStaff;
+
+            return View("LecturerPerformance", vm);
         }
 
         [HttpGet("/reports/student-subject")]

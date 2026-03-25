@@ -14,6 +14,11 @@ namespace UniTestSystem.Domain
 
         public string Semester { get; set; } = "";
 
+        // Grading results
+        public decimal? FinalScore { get; set; } // 0..10
+        public string? Grade { get; set; } // A, B, C, D, F
+        public decimal? GradePoint { get; set; } // 4.0 scale
+
         [System.ComponentModel.DataAnnotations.Timestamp]
         public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 

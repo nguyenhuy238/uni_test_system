@@ -14,7 +14,8 @@ namespace UniTestSystem.Application.Models
             public string Content { get; set; } = "";
             public decimal MaxPoints { get; set; } = 0m;
             public string? UserAnswer { get; set; }
-            public double? GivenScore { get; set; } // prefill nếu đã chấm
+            public decimal? GivenScore { get; set; } // prefill nếu đã chấm
+            public string? Comment { get; set; }
         }
     }
 }

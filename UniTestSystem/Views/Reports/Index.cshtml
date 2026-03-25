@@ -1,10 +1,11 @@
 @using UniTestSystem.Application.Models
-@model (FacultyReportVm facultyVm, AcademicYearReportVm yearVm)
+@model ReportsIndexVm
 @{
     ViewData["Title"] = "Academic Reports";
     var from = (string)ViewBag.From;
     var to = (string)ViewBag.To;
     bool canExport = (bool)(ViewBag.CanExport ?? false);
+    var maxBucketCount = Model.Dashboard.ScoreDistribution.Any() ? Model.Dashboard.ScoreDistribution.Max(x => x.Count) : 0;
 }
 <h2 class="mb-3">Academic Reports</h2>
 
@@ -19,6 +20,8 @@
     </div>
     <div class="col-auto align-self-end">
         <button class="btn btn-primary">Apply</button>
+        <a class="btn btn-outline-secondary" href="/reports/question-analytics?from=@from&to=@to">Question Analytics</a>
+        <a class="btn btn-outline-secondary" href="/reports/lecturer-performance?from=@from&to=@to">Lecturer Performance</a>
         @if (canExport)
         {
             <a class="btn btn-outline-success" href="/reports/export/xlsx?from=@from&to=@to">Export Excel</a>
@@ -26,6 +29,118 @@
         }
     </div>
 </form>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100 border-0">
+            <div class="card-body">
+                <div class="text-muted small">Total Submissions</div>
+                <div class="fs-3 fw-bold">@Model.Dashboard.SubmissionCount</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100 border-0">
+            <div class="card-body">
+                <div class="text-muted small">Average Score (Normalized 10)</div>
+                <div class="fs-3 fw-bold">@Model.Dashboard.OverallAvgScore.ToString("0.00")</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100 border-0">
+            <div class="card-body">
+                <div class="text-muted small">Pass Rate</div>
+                <div class="fs-3 fw-bold">@Model.Dashboard.OverallPassRatePercent.ToString("0.00")%</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header fw-bold">Widget: Pass/Fail by Subject</div>
+            <div class="card-body table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr><th>Subject</th><th>#Submits</th><th>#Pass</th><th>#Fail</th><th>Pass%</th><th>Avg</th></tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Dashboard.SubjectPassRates.Any())
+                        {
+                            <tr><td colspan="6" class="text-center text-muted py-3">No data in selected range.</td></tr>
+                        }
+                        @foreach (var r in Model.Dashboard.SubjectPassRates)
+                        {
+                            <tr>
+                                <td>@r.Subject</td>
+                                <td>@r.SubmissionCount</td>
+                                <td>@r.PassCount</td>
+                                <td>@r.FailCount</td>
+                                <td>@r.PassRatePercent.ToString("0.00")</td>
+                                <td>@r.AvgScore.ToString("0.00")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header fw-bold">Widget: Average Score by Semester</div>
+            <div class="card-body table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr><th>Semester</th><th>#Submits</th><th>Avg Score</th></tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Dashboard.SemesterAverages.Any())
+                        {
+                            <tr><td colspan="3" class="text-center text-muted py-3">No data in selected range.</td></tr>
+                        }
+                        @foreach (var r in Model.Dashboard.SemesterAverages)
+                        {
+                            <tr>
+                                <td>@r.Semester</td>
+                                <td>@r.SubmissionCount</td>
+                                <td>@r.AvgScore.ToString("0.00")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-header fw-bold">Widget: Score Distribution</div>
+    <div class="card-body">
+        @if (!Model.Dashboard.ScoreDistribution.Any())
+        {
+            <div class="text-muted">No data in selected range.</div>
+        }
+        else
+        {
+            @foreach (var b in Model.Dashboard.ScoreDistribution)
+            {
+                var width = maxBucketCount > 0 ? (b.Count * 100 / maxBucketCount) : 0;
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between">
+                        <span>@b.BucketLabel</span>
+                        <span class="text-muted">@b.Count (@b.Percent.ToString("0.00")%)</span>
+                    </div>
+                    <div class="progress" style="height:10px;">
+                        <div class="progress-bar bg-primary" role="progressbar" style="width:@width%"></div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
 
 <div class="row">
     <div class="col-md-6">
@@ -37,7 +152,7 @@
                         <tr><th>Faculty</th><th>#Students</th><th>#Submits</th><th>Avg</th><th>Pass%</th><th>Last</th></tr>
                     </thead>
                     <tbody>
-                        @foreach (var r in Model.facultyVm.Rows)
+                        @foreach (var r in Model.Faculty.Rows)
                         {
                             <tr>
                                 <td>@r.FacultyName</td>
@@ -63,7 +178,7 @@
                         <tr><th>Year</th><th>#Students</th><th>#Submits</th><th>Avg</th><th>Pass%</th><th>Last</th></tr>
                     </thead>
                     <tbody>
-                        @foreach (var r in Model.yearVm.Rows)
+                        @foreach (var r in Model.AcademicYear.Rows)
                         {
                             <tr>
                                 <td>@r.AcademicYear</td>

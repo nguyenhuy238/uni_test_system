@@ -10,11 +10,19 @@ namespace UniTestSystem.Controllers
     {
         private readonly AuthService _auth;
         private readonly PasswordResetService _reset;
+        private readonly EmailVerificationService _emailVerification;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(AuthService auth, PasswordResetService reset)
+        public AuthController(
+            AuthService auth,
+            PasswordResetService reset,
+            EmailVerificationService emailVerification,
+            ILogger<AuthController> logger)
         {
             _auth = auth;
             _reset = reset;
+            _emailVerification = emailVerification;
+            _logger = logger;
         }
 
         [HttpGet("/auth/login")]
@@ -66,6 +74,19 @@ namespace UniTestSystem.Controllers
             public string RefreshToken { get; set; } = "";
         }
 
+        [HttpPost("/api/auth/logout")]
+        public async Task<IActionResult> LogoutApi([FromBody] RefreshRequest request)
+        {
+            if (!string.IsNullOrWhiteSpace(request.RefreshToken))
+            {
+                await _auth.RevokeRefreshTokenAsync(
+                    request.RefreshToken,
+                    HttpContext.Connection.RemoteIpAddress?.ToString() ?? "");
+            }
+
+            return Ok(new { message = "Logged out and refresh token revoked." });
+        }
+
         [HttpPost("/auth/register")]
         public async Task<IActionResult> RegisterPost(string name, string email, string role, string password, string confirmPassword)
         {
@@ -111,8 +132,60 @@ namespace UniTestSystem.Controllers
             user.IsActive = true;
 
             await _auth.CreateUserAsync(user);
-            TempData["Info"] = "Đăng ký thành công. Vui lòng đăng nhập.";
+
+            try
+            {
+                var baseUrl = $"{Request.Scheme}://{Request.Host}";
+                await _emailVerification.IssueVerificationEmailAsync(user.Id, user.Email, user.Name, baseUrl);
+                TempData["Msg"] = "Đăng ký thành công. Hệ thống đã gửi email xác nhận, vui lòng kiểm tra hộp thư.";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send verification email for user {UserId}", user.Id);
+                TempData["Msg"] = "Đăng ký thành công. Không thể gửi email xác nhận ở thời điểm hiện tại.";
+            }
+
             return RedirectToAction("Login");
+        }
+
+        [HttpGet("/auth/confirm-email")]
+        public async Task<IActionResult> ConfirmEmail(string token)
+        {
+            var result = await _emailVerification.ConfirmEmailAsync(token);
+            if (result.Success)
+                TempData["Msg"] = result.Message;
+            else
+                TempData["Err"] = result.Message;
+
+            return RedirectToAction(nameof(Login));
+        }
+
+        [HttpPost("/auth/resend-confirmation")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ResendConfirmation(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                TempData["Err"] = "Vui lòng nhập email để gửi lại liên kết xác nhận.";
+                return RedirectToAction(nameof(Login));
+            }
+
+            var user = await _auth.FindByEmailAsync(email.Trim());
+            if (user != null)
+            {
+                try
+                {
+                    var baseUrl = $"{Request.Scheme}://{Request.Host}";
+                    await _emailVerification.IssueVerificationEmailAsync(user.Id, user.Email, user.Name, baseUrl);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to resend verification email for user {UserId}", user.Id);
+                }
+            }
+
+            TempData["Msg"] = "Nếu email tồn tại, liên kết xác nhận đã được gửi lại.";
+            return RedirectToAction(nameof(Login));
         }
 
         [HttpPost("/auth/login")]
@@ -137,7 +210,7 @@ namespace UniTestSystem.Controllers
                 ExpiresUtc = rememberMe ? DateTimeOffset.UtcNow.AddDays(30) : null
             };
 
-            await HttpContext.SignInAsync("cookie", AuthService.CreatePrincipal(u), props);
+            await HttpContext.SignInAsync("cookie", AuthService.CreatePrincipal(u, session.Id), props);
 
             if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
                 return Redirect(returnUrl);
@@ -145,6 +218,7 @@ namespace UniTestSystem.Controllers
             return u.Role switch
             {
                 Role.Admin => RedirectToAction("Dashboard", "Admin"),
+                Role.Staff => RedirectToAction("Dashboard", "Staff"),
                 Role.Lecturer => RedirectToAction("Dashboard", "Lecturer"),
                 Role.Student => RedirectToAction("Index", "MyTests"),
                 _ => RedirectToAction("Index", "MyTests")

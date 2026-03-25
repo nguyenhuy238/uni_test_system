@@ -89,7 +89,7 @@ namespace UniTestSystem.Application
             return u;
         }
 
-        public static ClaimsPrincipal CreatePrincipal(User u)
+        public static ClaimsPrincipal CreatePrincipal(User u, string? sessionId = null)
         {
             var claims = new List<Claim>
             {
@@ -98,6 +98,8 @@ namespace UniTestSystem.Application
                 new(ClaimTypes.Email, u.Email),
                 new(ClaimTypes.Role, u.Role.ToString()),
             };
+            if (!string.IsNullOrWhiteSpace(sessionId))
+                claims.Add(new Claim("sid", sessionId));
             return new ClaimsPrincipal(new ClaimsIdentity(claims, "cookie"));
         }
 
@@ -222,6 +224,23 @@ namespace UniTestSystem.Application
                 s.RevokedAt = DateTime.UtcNow;
                 await _userSessions.UpdateAsync(s);
             }
+        }
+
+        public async Task RevokeAllRefreshTokensAsync(string userId, string revokedByIp)
+        {
+            var tokens = await _refreshTokens.GetAllAsync(x => x.UserId == userId && !x.IsRevoked && x.ExpiresAt > DateTime.UtcNow);
+            foreach (var token in tokens)
+            {
+                token.RevokedAt = DateTime.UtcNow;
+                token.RevokedByIp = revokedByIp;
+                await _refreshTokens.UpdateAsync(token);
+            }
+        }
+
+        public async Task InvalidateAllAuthSessionsAsync(string userId, string revokedByIp)
+        {
+            await RevokeAllSessionsAsync(userId);
+            await RevokeAllRefreshTokensAsync(userId, revokedByIp);
         }
     }
 }

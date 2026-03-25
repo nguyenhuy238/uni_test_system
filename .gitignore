@@ -18,6 +18,10 @@ obj/
 
 ## [Log files]
 *.log
+/build*.log
+/build*.txt
+/migration_log.txt
+/UniTestSystem/build_errors*.txt
 
 ## [Publish]
 publish/
@@ -33,3 +37,9 @@ TestResults/
 ## [OS files]
 .DS_Store
 Thumbs.db
+
+## [Runtime data]
+/UniTestSystem/App_Data/Backups/*.bak
+/UniTestSystem/wwwroot/uploads/*
+!/UniTestSystem/wwwroot/uploads/logo/
+!/UniTestSystem/wwwroot/uploads/logo/**

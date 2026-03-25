@@ -346,6 +346,7 @@ public class AppDbContext : DbContext
                 .IsRequired(false); // Fix warning 10622
 
             entity.Property(e => e.Score).HasPrecision(18, 2); // Fix warning 30000
+            entity.Property(e => e.GradedAt).HasColumnType("datetime2");
         });
 
         modelBuilder.Entity<SessionLog>(entity =>
@@ -416,6 +417,10 @@ public class AppDbContext : DbContext
                 .WithMany(p => p.Enrollments)
                 .HasForeignKey(d => d.CourseId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.Property(e => e.FinalScore).HasColumnType("decimal(5,2)");
+            entity.Property(e => e.Grade).HasColumnType("nvarchar(2)");
+            entity.Property(e => e.GradePoint).HasColumnType("decimal(3,1)");
         });
 
         modelBuilder.Entity<ExamSchedule>(entity =>

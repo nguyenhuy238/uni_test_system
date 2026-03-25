@@ -2,6 +2,28 @@
 
 Tài liệu này đóng vai trò là danh sách kiểm tra chủ chốt cho toàn bộ quá trình phát triển hệ thống quản lý thi Đại học (UniTestSystem). Được thiết kế theo chuẩn Enterprise, bao gồm mọi khía cạnh từ chức năng, phi chức năng đến quy trình triển khai và sẵn sàng vận hành.
 
+## Cập nhật gần nhất (2026-03-24)
+- Hoàn thiện cụm **J. WPF AdminApp**: bổ sung chế độ Admin/Staff theo role-based UI, tab Audit Log, cấu hình hệ thống qua API, backup/restore DB (SQL `.bak`), lập lịch thi đơn lẻ & đồng loạt (bulk queue + export CSV), và export báo cáo định kỳ.
+- Nâng cấp bảo mật phiên AdminApp: lưu token cục bộ bằng DPAPI (Windows), hỗ trợ refresh token rotation và tự làm mới access token khi gần hết hạn/401.
+- Nâng cấp UI/UX AdminApp: thêm Dark/Light mode và hiệu ứng chuyển tab (fade) mượt.
+- Hoàn thiện thêm kiểm tra lịch thi: xung đột phòng/sinh viên/giảng viên, kiểm tra quá tải theo `ExamScheduling:RoomCapacities`, và export CSV lịch thi.
+- Bổ sung cơ chế token truy cập bài thi cho luồng vào bài từ lịch thi sinh viên (`/mytests/start` với `scheduleId + accessToken`).
+- Bổ sung guard chống đa thiết bị cho phiên thi đang làm (`DeviceFingerprint`) trên luồng start/resume/save/submit.
+- Sửa tổng hợp báo cáo khoa/năm học để trả đúng `StudentCount` và `PassRatePercent`.
+- Bổ sung khôi phục phiên bản câu hỏi từ Audit Log (UI + service).
+- Bổ sung kiểm tra trùng lặp nâng cao bằng độ tương đồng nội dung (Jaccard).
+- Bổ sung quản lý bảng điểm có lọc theo khoa/lớp/kỳ trên web và export transcript Excel/PDF (QuestPDF).
+- Bổ sung chấm điểm từng phần cho câu hỏi Matching/DragDrop trong auto-grading.
+- Bổ sung luồng phúc khảo (regrade request) cho sinh viên và moderation xử lý bởi giảng viên/staff.
+- Bổ sung khóa/mở khóa điểm (grade locking) trên phiên chấm.
+- Bổ sung vô hiệu hóa phiên đăng nhập ngay khi vai trò người dùng thay đổi (cookie/JWT validation + revoke session/refresh token).
+- Bổ sung công thức tính điểm trọng số (điểm quá trình + điểm thi, tùy chỉnh trọng số) trong luồng finalize bảng điểm.
+- Bổ sung khóa/mở bảng điểm cấp khoa/trường và chặn finalize khi đang bị khóa.
+- Hoàn thiện Widget Dashboard trên Web Reports: tỷ lệ đạt/trượt theo môn, điểm trung bình theo kỳ, và biểu đồ phổ điểm.
+- Hoàn thiện Phân tích Câu hỏi trên Web Reports: độ khó thực tế (difficulty index) và độ phân biệt (discrimination index) theo dữ liệu làm bài thật.
+- Hoàn thiện Báo cáo giảng dạy (Lecturer performance) trên Web Reports với thống kê theo giảng viên (số môn/số đề/số lượt nộp/điểm TB/tỷ lệ đạt).
+- Hoàn thiện email xác nhận đăng ký (optional): gửi link xác nhận sau đăng ký, endpoint xác nhận token và gửi lại email xác nhận.
+
 ---
 
 ## 1️⃣ Yêu cầu Chức năng (Functional Requirements - FR)
@@ -13,11 +35,11 @@ Mô tả: Quản lý vòng đời người dùng, phân quyền và bảo mật 
 - **Ứng dụng:** Web App (User access), WPF AdminApp (Management).
 - **Vai trò:** Toàn bộ (Đăng nhập/Hồ sơ), Admin/Staff (Quản trị).
 
-- [ ] **Đăng ký (Register)** [Web App] [Student/Lecturer]
+- [x] **Đăng ký (Register)** [Web App] [Student/Lecturer]
     - [x] Tạo tài khoản mới với các trường bắt buộc (Email, Password, Role).
     - [x] Xác thực định dạng email (miền nội bộ trường đại học).
     - [x] Kiểm tra độ mạnh mật khẩu (Tối thiểu 8 ký tự, chữ hoa, chữ thường, số, ký tự đặc biệt).
-    - [ ] Gửi email xác nhận (Optional).
+    - [x] Gửi email xác nhận (Optional).
 - [x] **Đăng nhập (Login)** [Web App/WPF App] [All Roles]
     - [x] Đăng nhập bằng Cookie (Web) và JWT (API).
     - [x] Lưu trữ mật khẩu bằng hashing BCrypt.
@@ -25,7 +47,7 @@ Mô tả: Quản lý vòng đời người dùng, phân quyền và bảo mật 
     - [x] Chống tấn công Brute Force (Lockout sau 5 lần thử sai).
 - [/] **Đăng xuất (Logout)** [Web App/WPF App] [All Roles]
     - [x] Thu hồi session cookie.
-    - [ ] Vô hiệu hóa JWT/Refresh Token (Blacklisting).
+    - [/] Vô hiệu hóa JWT/Refresh Token (đã revoke Refresh Token qua API logout; chưa triển khai blacklist Access Token tức thời).
 - [x] **Refresh Token** [Web App/WPF App] [All Roles]
     - [x] Cấp mới Access Token bằng Refresh Token (cho AdminApp/API).
     - [x] Refresh Token quay vòng (Rotation) để tăng tính bảo mật.
@@ -38,10 +60,10 @@ Mô tả: Quản lý vòng đời người dùng, phân quyền và bảo mật 
     - [x] Bảo vệ API Endpoints và UI Components theo quyền hạn.
 - [x] **Quản lý Hồ sơ (Profile Management)** [Web App] [All Roles]
     - [x] Xem và cập nhật thông tin cá nhân (Họ tên, ngày sinh, ảnh đại diện).
-- [/] **Xử lý Đa thiết bị & Phiên làm việc (Multi-device & Session Handling)** [Web App] [All Roles]
+- [x] **Xử lý Đa thiết bị & Phiên làm việc (Multi-device & Session Handling)** [Web App] [All Roles]
     - [x] Hiển thị danh sách các phiên làm việc đang hoạt động.
     - [x] Chức năng "Đăng xuất khỏi tất cả các thiết bị".
-    - [ ] Vô hiệu hóa phiên làm việc ngay lập tức khi vai trò người dùng thay đổi.
+    - [x] Vô hiệu hóa phiên làm việc ngay lập tức khi vai trò người dùng thay đổi.
 
 ---
 
@@ -92,15 +114,15 @@ Mô tả: Kho lưu trữ câu hỏi phong phú, hỗ trợ đa dạng loại hì
 - [x] **Quy trình Phê duyệt (Approval Workflow)** [WPF AdminApp/Web App] [Staff/Admin]
     - [x] Trạng thái câu hỏi: Draft (Nháp) -> Pending (Chờ duyệt) -> Approved (Đã duyệt) -> Rejected (Từ chối).
     - [x] Chỉ giảng viên/staff có quyền mới được phê duyệt. (Note: Đăng ký quyền trong PermissionService)
-- [/] **Phiên bản & Lịch sử (Versioning)** [Web App] [Lecturer/Staff]
+- [x] **Phiên bản & Lịch sử (Versioning)** [Web App] [Lecturer/Staff]
     - [x] Lưu vết các thay đổi của câu hỏi thông qua Audit Log/Versioning logic.
-    - [ ] Khôi phục phiên bản cũ nếu cần (Dữ liệu đã sẵn sàng trong Audit, cần UI/Service cụ thể để Restore).
+    - [x] Khôi phục phiên bản cũ nếu cần (Restore từ Audit trên màn hình chỉnh sửa câu hỏi).
 - [/] **Import/Export Hàng loạt** [WPF AdminApp/Web App] [Lecturer/Staff]
     - [x] Import từ Excel theo template chuẩn (Hỗ trợ Question, Options, Matching, DragDrop).
     - [/] Xử lý hình ảnh nhúng trong Excel (Hiện tại hỗ trợ qua URL/Meta, chưa hỗ trợ binary embedded).
-- [/] **Phát hiện Trùng lặp (Duplicate Detection)** [Web App] [Lecturer]
+- [x] **Phát hiện Trùng lặp (Duplicate Detection)** [Web App] [Lecturer]
     - [x] Kiểm tra trùng lặp cơ bản (Exact match on Content + Type + Subject) khi Import.
-    - [ ] Kiểm tra độ tương đồng nội dung nâng cao (Similarity algorithms).
+    - [x] Kiểm tra độ tương đồng nội dung nâng cao (Jaccard token similarity, chặn tạo/sửa/import câu hỏi tương đồng cao).
 
 ---
 
@@ -131,16 +153,16 @@ Mô tả: Sắp xếp ca thi, phòng thi và thí sinh.
 - **Ứng dụng:** Web App (Giao đề), WPF AdminApp (Lập lịch tập trung).
 - **Vai trò:** Staff, Admin, Lecturer.
 
-- [ ] **Tạo Lịch thi (Exam Schedule)** [Web App/WPF AdminApp] [Staff/Lecturer]
-    - [ ] Chọn đề thi, ngày thi, giờ thi.
-    - [ ] Gán phòng thi và sức chứa (Capacity).
-- [ ] **Kiểm tra Xung đột (Conflict Detection)** [System] [Staff]
-    - [ ] Cảnh báo nếu một sinh viên/giảng viên bị trùng lịch thi.
-    - [ ] Cảnh báo nếu phòng thi bị quá tải hoặc trùng giờ.
-- [ ] **Khóa/Mở Lịch thi** [WPF AdminApp/Web App] [Staff/Admin]
-    - [ ] Cho phép hoặc ngăn chặn sinh viên truy cập bài thi ngoài khung giờ thi.
-- [ ] **Xuất báo cáo lịch thi** [WPF AdminApp/Web App] [Staff]
-    - [ ] Xuất PDF/Excel lịch thi cho sinh viên và cán bộ coi thi.
+- [x] **Tạo Lịch thi (Exam Schedule)** [Web App/WPF AdminApp] [Staff/Lecturer]
+    - [x] Chọn đề thi, ngày thi, giờ thi.
+    - [x] Gán phòng thi và sức chứa (Capacity theo cấu hình phòng).
+- [x] **Kiểm tra Xung đột (Conflict Detection)** [System] [Staff]
+    - [x] Cảnh báo nếu một sinh viên/giảng viên bị trùng lịch thi.
+    - [x] Cảnh báo nếu phòng thi bị quá tải hoặc trùng giờ.
+- [/] **Khóa/Mở Lịch thi** [WPF AdminApp/Web App] [Staff/Admin]
+    - [/] Cho phép hoặc ngăn chặn sinh viên truy cập bài thi ngoài khung giờ thi (đang chặn theo khung giờ + assignment; chưa có toggle khóa/mở thủ công theo lịch).
+- [/] **Xuất báo cáo lịch thi** [WPF AdminApp/Web App] [Staff]
+    - [/] Xuất CSV lịch thi (chưa có PDF/Excel template chính thức).
 
 ---
 
@@ -149,19 +171,19 @@ Mô tả: Giao diện và logic cho sinh viên làm bài trực tuyến.
 - **Ứng dụng:** Web App.
 - **Vai trò:** Student.
 
-- [ ] **Quá trình Làm bài** [Web App] [Student]
-    - [ ] Truy cập bài thi bằng Token bảo mật.
-    - [ ] Đồng hồ đếm ngược (Timer) chính xác từng giây.
-    - [ ] Tự động lưu bài thi (Auto-save) sau mỗi X giây hoặc khi chuyển câu hỏi.
-    - [ ] Hỗ trợ xem lại danh sách câu hỏi và đánh dấu câu chưa làm.
-- [ ] **Bảo mật & Chống gian lận (Anti-cheat)** [Web App] [Student]
-    - [ ] Phát hiện chuyển Tab/Cửa sổ (Window Blur event).
-    - [ ] Ngăn chặn phím tắt (F12, Ctr+C, Ctrl+V, v.v.).
-    - [ ] Giới hạn mỗi tài khoản chỉ được thực hiện trên 1 thiết bị/phiên duy nhất.
-- [ ] **Nộp bài (Submission)** [Web App] [Student]
-    - [ ] Xác nhận trước khi nộp.
-    - [ ] Tự động nộp bài khi hết giờ (Timeout auto-submit).
-    - [ ] Xử lý mất kết nối: Lưu trạng thái bài thi locally và đồng bộ lại khi có mạng.
+- [/] **Quá trình Làm bài** [Web App] [Student]
+    - [/] Truy cập bài thi bằng Token bảo mật (đã áp dụng cho luồng vào bài từ lịch thi).
+    - [x] Đồng hồ đếm ngược (Timer) chính xác từng giây.
+    - [x] Tự động lưu bài thi (Auto-save) sau mỗi X giây hoặc khi chuyển câu hỏi.
+    - [x] Hỗ trợ xem lại danh sách câu hỏi và đánh dấu câu chưa làm.
+- [/] **Bảo mật & Chống gian lận (Anti-cheat)** [Web App] [Student]
+    - [x] Phát hiện chuyển Tab/Cửa sổ (Window Blur event).
+    - [x] Ngăn chặn phím tắt (F12, Ctr+C, Ctrl+V, v.v.).
+    - [x] Giới hạn mỗi tài khoản chỉ được thực hiện trên 1 thiết bị/phiên duy nhất.
+- [/] **Nộp bài (Submission)** [Web App] [Student]
+    - [x] Xác nhận trước khi nộp.
+    - [x] Tự động nộp bài khi hết giờ (Timeout auto-submit).
+    - [/] Xử lý mất kết nối: Lưu trạng thái bài thi locally và đồng bộ lại khi có mạng (đã có local + auto-save server; chưa có cơ chế retry queue offline đầy đủ).
 
 ---
 
@@ -170,16 +192,16 @@ Mô tả: Chấm điểm tự động và thủ công.
 - **Ứng dụng:** Web App (Giảng viên chấm), WPF AdminApp (Giám sát).
 - **Vai trò:** Lecturer (Chấm), Staff/Admin (Xem).
 
-- [ ] **Chấm điểm tự động (Auto Grading)** [Server-side] [Student]
-    - [ ] Áp dụng ngay sau khi nộp bài cho MCQ, Đúng/Sai.
-    - [ ] Hỗ trợ chấm điểm từng phần (Partial scoring) cho các loại câu hỏi phức tạp.
-- [ ] **Chấm thủ công (Manual Grading - Essay)** [Web App] [Lecturer]
-    - [ ] Giảng viên truy cập giao diện chấm bài tự luận.
-    - [ ] Nhận xét và cho điểm từng câu hỏi.
-- [ ] **Moderation & Regrade** [Web App] [Lecturer/Staff]
-    - [ ] Tính năng phúc khảo (Regrade request).
-    - [ ] Nhật ký thay đổi điểm (Audit trail).
-    - [ ] Khóa điểm (Grade locking) sau khi hoàn tất.
+- [x] **Chấm điểm tự động (Auto Grading)** [Server-side] [Student]
+    - [x] Áp dụng ngay sau khi nộp bài cho MCQ, Đúng/Sai.
+    - [x] Hỗ trợ chấm điểm từng phần (Partial scoring) cho các loại câu hỏi phức tạp.
+- [x] **Chấm thủ công (Manual Grading - Essay)** [Web App] [Lecturer]
+    - [x] Giảng viên truy cập giao diện chấm bài tự luận.
+    - [x] Nhận xét và cho điểm từng câu hỏi.
+- [x] **Moderation & Regrade** [Web App] [Lecturer/Staff]
+    - [x] Tính năng phúc khảo (Regrade request).
+    - [x] Nhật ký thay đổi điểm (Audit trail).
+    - [x] Khóa điểm (Grade locking) sau khi hoàn tất.
 
 ---
 
@@ -188,14 +210,14 @@ Mô tả: Tổng hợp kết quả học tập.
 - **Ứng dụng:** Web App (Sinh viên/Giảng viên xem), WPF AdminApp (Quản lý).
 - **Vai trò:** Student (Xem), Lecturer (Xem), Staff/Admin (Quản lý).
 
-- [ ] **Tính toán Điểm** [Server-side/WPF AdminApp] [Staff]
-    - [ ] Tính điểm trung bình (GPA) theo học kỳ và năm học.
-    - [ ] Xử lý công thức tính điểm phức tạp (trọng số thi, trọng số bài tập).
-- [ ] **Quản lý Bảng điểm** [WPF AdminApp] [Staff/Admin]
-    - [ ] Khóa/Mở bảng điểm cấp khoa/trường.
-    - [ ] Lọc bảng điểm theo khoa, lớp, kỳ học.
-- [ ] **Xuất Bảng điểm** [Web App/WPF AdminApp] [Student/Staff]
-    - [ ] Xuất PDF chuyên nghiệp bằng QuestPDF.
+- [/] **Tính toán Điểm** [Server-side/WPF AdminApp] [Staff]
+    - [/] Tính điểm trung bình (GPA) theo học kỳ và năm học (đã có GPA tích lũy + hiển thị GPA theo kỳ; chưa tách pipeline year-end hoàn chỉnh).
+    - [x] Xử lý công thức tính điểm phức tạp (trọng số thi, trọng số bài tập).
+- [x] **Quản lý Bảng điểm** [WPF AdminApp] [Staff/Admin]
+    - [x] Khóa/Mở bảng điểm cấp khoa/trường.
+    - [x] Lọc bảng điểm theo khoa, lớp, kỳ học.
+- [x] **Xuất Bảng điểm** [Web App/WPF AdminApp] [Student/Staff]
+    - [x] Xuất PDF chuyên nghiệp bằng QuestPDF.
 
 ---
 
@@ -204,16 +226,16 @@ Mô tả: Cung cấp góc nhìn số liệu cho nhà quản lý.
 - **Ứng dụng:** Web App (Dashboard), WPF AdminApp (Báo cáo chi tiết/Export).
 - **Vai trò:** Lecturer, Staff, Admin.
 
-- [ ] **Widget Dashboard** [Web App] [Lecturer/Staff/Admin]
-    - [ ] Tỷ lệ đạt/trượt theo môn.
-    - [ ] Điểm trung bình qua các kỳ.
-    - [ ] Biểu đồ phổ điểm.
-- [ ] **Phân tích Câu hỏi** [Web App/WPF AdminApp] [Lecturer/Staff]
-    - [ ] Đánh giá độ khó thực tế của câu hỏi dựa trên kết quả thi.
-    - [ ] Độ phân biệt của câu hỏi.
-- [ ] **Báo cáo Hiệu suất** [WPF AdminApp/Web App] [Staff/Admin]
-    - [ ] Báo cáo giảng dạy (Lecturer performance).
-    - [ ] Báo cáo chất lượng đào tạo theo Khoa.
+- [x] **Widget Dashboard** [Web App] [Lecturer/Staff/Admin]
+    - [x] Tỷ lệ đạt/trượt theo môn.
+    - [x] Điểm trung bình qua các kỳ.
+    - [x] Biểu đồ phổ điểm.
+- [x] **Phân tích Câu hỏi** [Web App/WPF AdminApp] [Lecturer/Staff]
+    - [x] Đánh giá độ khó thực tế của câu hỏi dựa trên kết quả thi.
+    - [x] Độ phân biệt của câu hỏi.
+- [x] **Báo cáo Hiệu suất** [WPF AdminApp/Web App] [Staff/Admin]
+    - [x] Báo cáo giảng dạy (Lecturer performance).
+    - [x] Báo cáo chất lượng đào tạo theo Khoa.
 
 ---
 
@@ -222,20 +244,20 @@ Mô tả: Ứng dụng Desktop quản lý chuyên sâu.
 - **Ứng dụng:** WPF AdminApp.
 - **Vai trò:** Admin, Staff.
 
-- [ ] **Chế độ Admin:** [WPF AdminApp] [Admin]
-    - [ ] Quản lý toàn bộ người dùng và vai trò.
-    - [ ] Xem nhật ký hệ thống (Audit log).
-    - [ ] Cấu hình tham số hệ thống.
-    - [ ] Sao lưu và Phục hồi cơ sở dữ liệu (Backup/Restore).
-- [ ] **Chế độ Staff:** [WPF AdminApp] [Staff]
-    - [ ] Thực hiện mọi thao tác học vụ (Quản lý khoa, lớp, sinh viên).
-    - [ ] Lập lịch thi đồng loạt.
-    - [ ] Export báo cáo định kỳ.
-- [ ] **UI/UX & Kỹ thuật:** [WPF AdminApp] [Developer]
-    - [ ] MVVM Pattern chuẩn chỉnh.
-    - [ ] Quản lý Token (JWT/Refresh Token) an toàn.
-    - [ ] Điều khiển hiển thị menu dựa trên quyền hạn Role-based.
-    - [ ] Hiệu ứng chuyển cảnh mượt mà, Dark/Light mode.
+- [x] **Chế độ Admin:** [WPF AdminApp] [Admin]
+    - [x] Quản lý toàn bộ người dùng và vai trò.
+    - [x] Xem nhật ký hệ thống (Audit log).
+    - [x] Cấu hình tham số hệ thống.
+    - [x] Sao lưu và Phục hồi cơ sở dữ liệu (Backup/Restore).
+- [x] **Chế độ Staff:** [WPF AdminApp] [Staff]
+    - [x] Thực hiện mọi thao tác học vụ (Quản lý khoa, lớp, sinh viên).
+    - [x] Lập lịch thi đồng loạt.
+    - [x] Export báo cáo định kỳ.
+- [x] **UI/UX & Kỹ thuật:** [WPF AdminApp] [Developer]
+    - [x] MVVM Pattern chuẩn chỉnh.
+    - [x] Quản lý Token (JWT/Refresh Token) an toàn.
+    - [x] Điều khiển hiển thị menu dựa trên quyền hạn Role-based.
+    - [x] Hiệu ứng chuyển cảnh mượt mà, Dark/Light mode.
 
 ---
 

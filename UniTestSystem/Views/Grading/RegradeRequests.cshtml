@@ -1,0 +1,84 @@
+@model List<UniTestSystem.Application.Models.RegradeRequestItemVm>
+@{
+    ViewData["Title"] = "Regrade Requests";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0"><i class="bi bi-flag me-2"></i>Regrade Requests</h2>
+    <a href="/grading/pending" class="btn btn-outline-secondary">Back to Queue</a>
+</div>
+
+@if (TempData["Msg"] != null)
+{
+    <div class="alert alert-success">@TempData["Msg"]</div>
+}
+@if (TempData["Err"] != null)
+{
+    <div class="alert alert-danger">@TempData["Err"]</div>
+}
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="ps-4">Requested At</th>
+                        <th>Student</th>
+                        <th>Test</th>
+                        <th>Reason</th>
+                        <th>Status</th>
+                        <th class="text-end pe-4">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                No pending regrade requests.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td class="ps-4">@item.RequestedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>
+                                <div class="fw-bold">@item.StudentName</div>
+                                <small class="text-muted">@item.StudentId</small>
+                            </td>
+                            <td>@item.TestTitle</td>
+                            <td style="max-width: 420px; white-space: pre-wrap;">@item.Reason</td>
+                            <td>
+                                @if (item.IsGradeLocked)
+                                {
+                                    <span class="badge bg-dark">Locked</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning text-dark">Open</span>
+                                }
+                            </td>
+                            <td class="text-end pe-4">
+                                <div class="d-flex justify-content-end gap-2 flex-wrap">
+                                    <a href="/grading/@item.SessionId" class="btn btn-sm btn-outline-primary">Open Session</a>
+                                    <form method="post" action="/grading/regrade/@item.SessionId/resolve" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="approved" value="true" />
+                                        <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                                    </form>
+                                    <form method="post" action="/grading/regrade/@item.SessionId/resolve" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="approved" value="false" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
