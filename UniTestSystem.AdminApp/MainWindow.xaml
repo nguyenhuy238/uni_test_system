@@ -71,6 +71,7 @@
                     <Border Background="#ECF3FF" CornerRadius="999" Padding="10,4">
                         <TextBlock Text="{Binding CurrentUserRole}" Foreground="#365FA8" FontWeight="SemiBold"/>
                     </Border>
+                    <Button Content="Logout" Margin="10,0,0,0" Height="32" Click="Logout_Click"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -95,6 +96,7 @@
                     <Separator Margin="6,10"/>
                     <Button Content="Refresh Data" Style="{StaticResource SidebarNavButton}" Command="{Binding LoadDataCommand}"/>
                     <Button Content="Toggle Theme" Style="{StaticResource SidebarNavButton}" Command="{Binding ToggleThemeCommand}"/>
+                    <Button Content="Logout" Style="{StaticResource SidebarNavButton}" Click="Logout_Click"/>
                     <Button Content="Exit" Style="{StaticResource SidebarNavButton}" Click="Exit_Click"/>
                 </StackPanel>
             </ScrollViewer>

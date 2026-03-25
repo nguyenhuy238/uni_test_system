@@ -3,7 +3,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using UniTestSystem.AdminApp.Services;
 using UniTestSystem.AdminApp.ViewModels;
+using UniTestSystem.AdminApp.Views;
 
 namespace UniTestSystem.AdminApp;
 
@@ -13,12 +15,14 @@ namespace UniTestSystem.AdminApp;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
+    private readonly ApiService _apiService;
     private bool _isSidebarCollapsed;
 
-    public MainWindow(MainViewModel viewModel)
+    public MainWindow(MainViewModel viewModel, ApiService apiService)
     {
         InitializeComponent();
         _viewModel = viewModel;
+        _apiService = apiService;
         DataContext = _viewModel;
         _viewModel.PropertyChanged += ViewModelOnPropertyChanged;
         ApplyTheme(_viewModel.IsDarkTheme);
@@ -94,5 +98,51 @@ public partial class MainWindow : Window
         {
             MainTabControl.SelectedIndex = index;
         }
+    }
+
+    private async void Logout_Click(object sender, RoutedEventArgs e)
+    {
+        var confirm = MessageBox.Show(
+            "Bạn có chắc muốn đăng xuất?",
+            "Xác nhận đăng xuất",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (confirm != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        Hide();
+
+        try
+        {
+            await _apiService.LogoutAsync();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Không thể đăng xuất qua server: {ex.Message}\nỨng dụng sẽ vẫn xóa phiên cục bộ.", "Cảnh báo", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        var loginWindow = new LoginWindow(_apiService);
+        var loginResult = loginWindow.ShowDialog() == true;
+
+        if (!loginResult)
+        {
+            Application.Current.Shutdown();
+            return;
+        }
+
+        var nextViewModel = new MainViewModel(_apiService);
+        var nextWindow = new MainWindow(nextViewModel, _apiService);
+
+        var previousShutdownMode = Application.Current.ShutdownMode;
+        Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        Application.Current.MainWindow = nextWindow;
+        nextWindow.Show();
+        Close();
+
+        Application.Current.ShutdownMode = previousShutdownMode;
     }
 }

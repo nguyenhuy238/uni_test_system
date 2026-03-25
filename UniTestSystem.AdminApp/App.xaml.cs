@@ -38,7 +38,7 @@ public partial class App : Application
         if (loginSucceeded)
         {
             var viewModel = new MainViewModel(_apiService);
-            var mainWindow = new MainWindow(viewModel);
+            var mainWindow = new MainWindow(viewModel, _apiService);
             
             ShutdownMode = ShutdownMode.OnLastWindowClose;
             Application.Current.MainWindow = mainWindow;
