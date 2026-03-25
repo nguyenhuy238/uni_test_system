@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
-using UniTestSystem.Application.Models;
+using UniTestSystem.ViewModels.Feedback;
 
 namespace UniTestSystem.Controllers
 {
@@ -10,17 +10,17 @@ namespace UniTestSystem.Controllers
     public class AdminController : Controller
     {
         private readonly ISystemMaintenanceService _systemMaintenanceService;
-        private readonly IRepository<Feedback> _feedbackRepo;
-        private readonly IRepository<Session> _sessionRepo;
-        private readonly IRepository<User> _userRepo;
-        private readonly IRepository<Test> _testRepo;
+        private readonly IEntityStore<Feedback> _feedbackRepo;
+        private readonly IEntityStore<Session> _sessionRepo;
+        private readonly IEntityStore<User> _userRepo;
+        private readonly IEntityStore<Test> _testRepo;
 
         public AdminController(
             ISystemMaintenanceService systemMaintenanceService,
-            IRepository<Feedback> feedbackRepo,
-            IRepository<Session> sessionRepo,
-            IRepository<User> userRepo,
-            IRepository<Test> testRepo)
+            IEntityStore<Feedback> feedbackRepo,
+            IEntityStore<Session> sessionRepo,
+            IEntityStore<User> userRepo,
+            IEntityStore<Test> testRepo)
         {
             _systemMaintenanceService = systemMaintenanceService;
             _feedbackRepo = feedbackRepo;
@@ -79,3 +79,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

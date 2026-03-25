@@ -11,11 +11,11 @@ namespace UniTestSystem.Controllers.Api.User;
 [Route("api/user/tests")]
 public class TestsController : ControllerBase
 {
-    private readonly IRepository<Test> _tests;
-    private readonly IRepository<Session> _sessions;
-    private readonly IRepository<Result> _results;
+    private readonly IEntityStore<Test> _tests;
+    private readonly IEntityStore<Session> _sessions;
+    private readonly IEntityStore<Result> _results;
 
-    public TestsController(IRepository<Test> tests, IRepository<Session> sessions, IRepository<Result> results)
+    public TestsController(IEntityStore<Test> tests, IEntityStore<Session> sessions, IEntityStore<Result> results)
     {
         _tests = tests;
         _sessions = sessions;
@@ -137,3 +137,4 @@ public class TestsController : ControllerBase
         });
     }
 }
+

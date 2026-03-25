@@ -13,15 +13,15 @@ namespace UniTestSystem.Controllers.Api.Admin;
 public class AutoTestApiController : ControllerBase
 {
     private readonly ITestGenerationService _svc;
-    private readonly IRepository<Student> _sRepo;
-    private readonly IRepository<Test> _tRepo;
-    private readonly IRepository<Assessment> _asRepo;
+    private readonly IEntityStore<Student> _sRepo;
+    private readonly IEntityStore<Test> _tRepo;
+    private readonly IEntityStore<Assessment> _asRepo;
 
     public AutoTestApiController(
         ITestGenerationService svc,
-        IRepository<Student> sRepo,
-        IRepository<Test> tRepo,
-        IRepository<Assessment> asRepo)
+        IEntityStore<Student> sRepo,
+        IEntityStore<Test> tRepo,
+        IEntityStore<Assessment> asRepo)
     {
         _svc = svc;
         _sRepo = sRepo;
@@ -104,3 +104,4 @@ public class AssignBatchRequest
     public DateTime? StartAtUtc { get; set; }
     public DateTime? EndAtUtc { get; set; }
 }
+

@@ -10,16 +10,16 @@ namespace UniTestSystem.Controllers
     [Authorize]
     public class SessionsController : Controller
     {
-        private readonly IRepository<Session> _sRepo;
-        private readonly IRepository<Test> _tRepo;
+        private readonly IEntityStore<Session> _sRepo;
+        private readonly IEntityStore<Test> _tRepo;
         private readonly TestService _testSvc;
         private readonly AssessmentService _assessSvc;
         private readonly ExamAccessTokenService _examAccessTokenService;
         private readonly SessionDeviceGuardService _sessionDeviceGuardService;
         private readonly IGradingService _gradingService;
 
-        public SessionsController(IRepository<Session> s,
-                                  IRepository<Test> t,
+        public SessionsController(IEntityStore<Session> s,
+                                  IEntityStore<Test> t,
                                   TestService testSvc,
                                   AssessmentService assessSvc,
                                   ExamAccessTokenService examAccessTokenService,
@@ -205,3 +205,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

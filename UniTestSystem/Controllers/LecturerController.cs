@@ -10,10 +10,10 @@ namespace UniTestSystem.Controllers
     [Authorize(Roles = "Lecturer,Admin")]
     public class LecturerController : Controller
     {
-        private readonly IRepository<Question> _questionRepo;
-        private readonly IRepository<Test> _testRepo;
+        private readonly IEntityStore<Question> _questionRepo;
+        private readonly IEntityStore<Test> _testRepo;
 
-        public LecturerController(IRepository<Question> questionRepo, IRepository<Test> testRepo)
+        public LecturerController(IEntityStore<Question> questionRepo, IEntityStore<Test> testRepo)
         {
             _questionRepo = questionRepo;
             _testRepo = testRepo;
@@ -32,3 +32,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

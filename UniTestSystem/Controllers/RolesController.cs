@@ -12,9 +12,9 @@ namespace UniTestSystem.Controllers
     public class RolesController : Controller
     {
         private readonly IPermissionService _perms;
-        private readonly IRepository<User> _userRepo;
+        private readonly IEntityStore<User> _userRepo;
 
-        public RolesController(IPermissionService perms, IRepository<User> userRepo)
+        public RolesController(IPermissionService perms, IEntityStore<User> userRepo)
         { _perms = perms; _userRepo = userRepo; }
 
         [HttpGet("/roles")]
@@ -60,3 +60,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

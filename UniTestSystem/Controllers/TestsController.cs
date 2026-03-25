@@ -1,64 +1,34 @@
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Application;
 using UniTestSystem.Domain;
-using UniTestSystem.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using System.Text;
-using System.Text.RegularExpressions;
+using UniTestSystem.ViewModels.Tests;
 
 namespace UniTestSystem.Controllers
 {
     [Authorize(Policy = PermissionCodes.Tests_View)]
     public class TestsController : Controller
     {
-        private readonly IRepository<Test> _repo;
-        private readonly IRepository<Assessment> _asRepo;
-        private readonly IRepository<Student> _sRepo;
+        private readonly ITestAdministrationService _testAdministrationService;
         private readonly IQuestionService _questionService;
-        private readonly INotificationService? _notiService;
 
         public TestsController(
-            IRepository<Test> r,
-            IRepository<Assessment> asRepo,
-            IRepository<Student> sRepo,
-            IQuestionService questionService,
-            INotificationService? notiService = null)
+            ITestAdministrationService testAdministrationService,
+            IQuestionService questionService)
         {
-            _repo = r;
-            _asRepo = asRepo;
-            _sRepo = sRepo;
+            _testAdministrationService = testAdministrationService;
             _questionService = questionService;
-            _notiService = notiService;
         }
 
         // ---------- Index ----------
         public async Task<IActionResult> Index(string? status = null)
         {
-            var list = await _repo.GetAllAsync();
-            
-            // Only show non-archived by default
-            if (status != "Archived")
-            {
-                list = list.Where(t => !t.IsArchived).ToList();
-            }
-            else
-            {
-                list = list.Where(t => t.IsArchived).ToList();
-            }
-
-            if (!string.IsNullOrWhiteSpace(status) && status != "Archived")
-            {
-                if (string.Equals(status, "Draft", StringComparison.OrdinalIgnoreCase))
-                    list = list.Where(t => !t.IsPublished).ToList();
-                else if (string.Equals(status, "Published", StringComparison.OrdinalIgnoreCase))
-                    list = list.Where(t => t.IsPublished).ToList();
-            }
-
+            var list = await _testAdministrationService.GetTestsByStatusAsync(status);
             return View(list);
         }
 
@@ -155,27 +125,7 @@ namespace UniTestSystem.Controllers
                 return View(vm);
             }
 
-            t.IsPublished = true;
-            t.CreatedAt = DateTime.UtcNow;
-            t.PublishedAt = DateTime.UtcNow;
-            t.ShuffleQuestions = true; // Default
-            t.ShuffleOptions = true;   // Default
-            t.FrozenRandom = new FrozenRandomConfig
-            {
-                SubjectIdFilter = t.SubjectIdFilter,
-                RandomMCQ = t.RandomMCQ,
-                RandomTF = t.RandomTF,
-                RandomEssay = t.RandomEssay
-            };
-
-            await _repo.InsertAsync(t);
-            
-            // Create snapshots for non-random questions
-            if (t.TestQuestions.Any())
-            {
-                await CreateSnapshotsAsync(t);
-                await _repo.UpsertAsync(x => x.Id == t.Id, t);
-            }
+            await _testAdministrationService.CreateAndPublishAsync(t, SelectedQuestionIds);
 
             TempData["Msg"] = "Đã tạo và publish bài test.";
             return RedirectToAction(nameof(Index));
@@ -186,7 +136,7 @@ namespace UniTestSystem.Controllers
         [Authorize(Policy = PermissionCodes.Tests_Create)]
         public async Task<IActionResult> Edit(string id, [FromQuery] QuestionFilter f)
         {
-            var t = await _repo.FirstOrDefaultAsync(x => x.Id == id);
+            var t = await _testAdministrationService.GetTestByIdAsync(id);
             if (t == null) return NotFound();
 
             if (f.Page <= 0) f.Page = 1;
@@ -237,8 +187,8 @@ namespace UniTestSystem.Controllers
         [Authorize(Policy = PermissionCodes.Tests_Create)]
         public async Task<IActionResult> Edit(EditTestViewModel vm, [FromForm] List<string>? SelectedQuestionIds)
         {
-            var t = await _repo.FirstOrDefaultAsync(x => x.Id == vm.Id);
-            if (t == null) return NotFound();
+            var existing = await _testAdministrationService.GetTestByIdAsync(vm.Id);
+            if (existing == null) return NotFound();
 
             if ((SelectedQuestionIds == null || !SelectedQuestionIds.Any()) &&
                 (vm.RandomMCQ + vm.RandomTF + vm.RandomEssay <= 0))
@@ -268,28 +218,21 @@ namespace UniTestSystem.Controllers
                 return View(vm);
             }
 
-            t.Title = vm.Title;
-            t.DurationMinutes = vm.DurationMinutes;
-            t.PassScore = vm.PassScore;
-            t.ShuffleQuestions = vm.ShuffleQuestions;
-            t.ShuffleOptions = vm.ShuffleOptions;
-            t.SubjectIdFilter = vm.SubjectIdFilter;
-            t.RandomMCQ = vm.RandomMCQ;
-            t.RandomTF = vm.RandomTF;
-            t.RandomEssay = vm.RandomEssay;
-            t.UpdatedAt = DateTime.UtcNow;
-
-            if (SelectedQuestionIds != null && SelectedQuestionIds.Any())
+            var request = new TestUpdateRequest
             {
-                t.TestQuestions = SelectedQuestionIds.Distinct().Select(qid => new TestQuestion { TestId = t.Id, QuestionId = qid }).ToList();
-                t.RandomMCQ = 0; t.RandomTF = 0; t.RandomEssay = 0;
-            }
-            else
-            {
-                t.TestQuestions = new List<TestQuestion>();
-            }
+                Id = vm.Id,
+                Title = vm.Title,
+                DurationMinutes = vm.DurationMinutes,
+                PassScore = vm.PassScore,
+                ShuffleQuestions = vm.ShuffleQuestions,
+                ShuffleOptions = vm.ShuffleOptions,
+                SubjectIdFilter = vm.SubjectIdFilter,
+                RandomMCQ = vm.RandomMCQ,
+                RandomTF = vm.RandomTF,
+                RandomEssay = vm.RandomEssay
+            };
 
-            await _repo.UpsertAsync(x => x.Id == t.Id, t);
+            await _testAdministrationService.UpdateAsync(request, SelectedQuestionIds);
             TempData["Msg"] = "Đã lưu thay đổi.";
             return RedirectToAction(nameof(Index));
         }
@@ -300,12 +243,7 @@ namespace UniTestSystem.Controllers
         [Authorize(Policy = PermissionCodes.Tests_Create)]
         public async Task<IActionResult> Delete(string id)
         {
-            var test = await _repo.FirstOrDefaultAsync(t => t.Id == id);
-            if (test?.AssessmentId != null)
-            {
-                await _asRepo.DeleteAsync(a => a.Id == test.AssessmentId);
-            }
-            await _repo.DeleteAsync(t => t.Id == id);
+            await _testAdministrationService.DeleteAsync(id);
             TempData["Msg"] = "Đã xoá bài test.";
             return RedirectToAction(nameof(Index));
         }
@@ -316,36 +254,9 @@ namespace UniTestSystem.Controllers
         [Authorize(Policy = PermissionCodes.Tests_Publish)]
         public async Task<IActionResult> ToggleStatus(string id)
         {
-            var t = await _repo.FirstOrDefaultAsync(x => x.Id == id);
-            if (t == null) return NotFound();
-
-            t.IsPublished = !t.IsPublished;
-            if (t.IsPublished)
-            {
-                t.PublishedAt = DateTime.UtcNow;
-                t.FrozenRandom = new FrozenRandomConfig
-                {
-                    SubjectIdFilter = t.SubjectIdFilter,
-                    RandomMCQ = t.RandomMCQ,
-                    RandomTF = t.RandomTF,
-                    RandomEssay = t.RandomEssay
-                };
-
-                // Create snapshots on publish
-                if (t.TestQuestions.Any())
-                {
-                    await CreateSnapshotsAsync(t);
-                }
-
-                TempData["Msg"] = "Đã chuyển sang Published và tạo Snapshot câu hỏi.";
-            }
-            else
-            {
-                t.PublishedAt = null;
-                TempData["Msg"] = "Đã chuyển sang Draft.";
-            }
-
-            await _repo.UpsertAsync(x => x.Id == t.Id, t);
+            var (found, message) = await _testAdministrationService.ToggleStatusAsync(id);
+            if (!found) return NotFound();
+            TempData["Msg"] = message;
             return RedirectToAction(nameof(Index));
         }
 
@@ -355,29 +266,8 @@ namespace UniTestSystem.Controllers
         [Authorize(Policy = PermissionCodes.Tests_Create)]
         public async Task<IActionResult> Clone(string id)
         {
-            var t = await _repo.FirstOrDefaultAsync(x => x.Id == id);
-            if (t == null) return NotFound();
-
-            var clone = new Test
-            {
-                Title = t.Title + " (Clone)",
-                DurationMinutes = t.DurationMinutes,
-                PassScore = t.PassScore,
-                ShuffleQuestions = t.ShuffleQuestions,
-                ShuffleOptions = t.ShuffleOptions,
-                SubjectIdFilter = t.SubjectIdFilter,
-                RandomMCQ = t.RandomMCQ,
-                RandomTF = t.RandomTF,
-                RandomEssay = t.RandomEssay,
-                TotalMaxScore = t.TotalMaxScore,
-                CourseId = t.CourseId,
-                IsPublished = false,
-                CreatedBy = User.Identity?.Name ?? "system",
-                CreatedAt = DateTime.UtcNow,
-                TestQuestions = t.TestQuestions.Select(q => new TestQuestion { QuestionId = q.QuestionId, Points = q.Points }).ToList()
-            };
-
-            await _repo.InsertAsync(clone);
+            var cloned = await _testAdministrationService.CloneAsync(id, User.Identity?.Name ?? "system");
+            if (!cloned) return NotFound();
             TempData["Msg"] = "Đã nhân bản đề thi (Draft).";
             return RedirectToAction(nameof(Index));
         }
@@ -388,40 +278,10 @@ namespace UniTestSystem.Controllers
         [Authorize(Policy = PermissionCodes.Tests_Create)]
         public async Task<IActionResult> Archive(string id)
         {
-            var t = await _repo.FirstOrDefaultAsync(x => x.Id == id);
-            if (t == null) return NotFound();
-
-            t.IsArchived = true;
-            await _repo.UpsertAsync(x => x.Id == t.Id, t);
+            var archived = await _testAdministrationService.ArchiveAsync(id);
+            if (!archived) return NotFound();
             TempData["Msg"] = "Đã chuyển đề thi vào mục Lưu trữ (Archive).";
             return RedirectToAction(nameof(Index));
-        }
-
-        private async Task CreateSnapshotsAsync(Test test)
-        {
-            test.QuestionSnapshots ??= new List<TestQuestionSnapshot>();
-
-            // Nếu đã có snapshot thì không cần tạo lại (tránh tốn tài nguyên)
-            if (test.QuestionSnapshots.Any()) return;
-
-            foreach (var tq in test.TestQuestions)
-            {
-                var q = await _questionService.GetAsync(tq.QuestionId);
-                if (q == null) continue;
-
-                var snapshot = new TestQuestionSnapshot
-                {
-                    TestId = test.Id,
-                    OriginalQuestionId = q.Id,
-                    Content = q.Content,
-                    Type = q.Type,
-                    Points = tq.Points,
-                    Order = tq.Order,
-                    OptionsJson = System.Text.Json.JsonSerializer.Serialize(q.Options.Select(o => new { o.Content, o.IsCorrect })),
-                    CreatedAt = DateTime.UtcNow
-                };
-                test.QuestionSnapshots.Add(snapshot);
-            }
         }
 
         // ---------- Assign nhanh (1 user) ----------
@@ -430,46 +290,9 @@ namespace UniTestSystem.Controllers
         [Authorize(Policy = PermissionCodes.Exam_Schedule)]
         public async Task<IActionResult> AssignToUser(string testId, string userId)
         {
-            var test = await _repo.FirstOrDefaultAsync(t => t.Id == testId);
-            if (test != null && !test.IsPublished)
-            {
-                test.IsPublished = true;
-                test.PublishedAt = DateTime.UtcNow;
-                await _repo.UpsertAsync(t => t.Id == testId, test);
-            }
-
-            var s = DateTime.UtcNow.AddDays(-1);
-            var e = DateTime.UtcNow.AddDays(30);
-
-            var assessment = new Assessment
-            {
-                Title = test?.Title ?? "Quick Quiz",
-                StartTime = s,
-                EndTime = e,
-                TargetType = "Student",
-                TargetValue = userId,
-                CourseId = test?.CourseId ?? "default",
-                Type = AssessmentType.Quiz
-            };
-            await _asRepo.InsertAsync(assessment);
-            if (test != null)
-            {
-                test.AssessmentId = assessment.Id;
-                await _repo.UpsertAsync(t => t.Id == testId, test);
-            }
-
-            var u = await _sRepo.FirstOrDefaultAsync(x => x.Id == userId);
-            if (test != null && u != null)
-            {
-                var targets = new[]
-                {
-                    new AssignmentNotifyTarget { User = u, SessionId = string.Empty }
-                };
-                await NotifySafe(test, targets, s, e);
-            }
-
-            TempData["Msg"] = $"Đã assign test '{test?.Title ?? testId}' cho sinh viên '{userId}'" +
-                               (_notiService != null ? " và đã gửi thông báo/email." : ".");
+            var (found, message) = await _testAdministrationService.AssignToUserAsync(testId, userId);
+            if (!found) return NotFound();
+            TempData["Msg"] = message;
             return RedirectToAction(nameof(Index));
         }
 
@@ -482,39 +305,17 @@ namespace UniTestSystem.Controllers
             if (string.IsNullOrWhiteSpace(id))
                 return NotFound();
 
-            var test = await _repo.FirstOrDefaultAsync(t => t.Id == id);
-            if (test == null) return NotFound();
-
-            var allStudents = await _sRepo.GetAllAsync();
-
-            var classes = allStudents
-                .Select(u => u.StudentClassId ?? "")
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(s => s)
-                .ToList();
-
-            var usersToShow = allStudents;
-            if (!string.IsNullOrWhiteSpace(faculty))
-            {
-                usersToShow = allStudents
-                    .Where(u => string.Equals(u.StudentClassId ?? "", faculty, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-            }
-
-            var assigns = (await _asRepo.GetAllAsync())
-                .Where(a => a.TargetType == "Student")
-                .Select(a => a.TargetValue)
-                .Where(v => !string.IsNullOrWhiteSpace(v))
-                .ToHashSet(StringComparer.Ordinal);
+            var assignData = await _testAdministrationService.GetAssignDataAsync(id, faculty);
+            if (assignData == null) return NotFound();
 
             var vm = new AssignUsersViewModel
             {
-                TestId = id,
-                TestTitle = test.Title,
-                Users = usersToShow.Cast<User>().ToList(),
-                AssignedUserIds = assigns.Cast<string>().ToHashSet(),
-                Faculties = classes,
-                SelectedFaculty = faculty
+                TestId = assignData.TestId,
+                TestTitle = assignData.TestTitle,
+                Users = assignData.Users,
+                AssignedUserIds = assignData.AssignedUserIds,
+                Faculties = assignData.Faculties,
+                SelectedFaculty = assignData.SelectedFaculty
             };
             return View(vm);
         }
@@ -531,73 +332,9 @@ namespace UniTestSystem.Controllers
             [FromForm] DateTime? startAt,
             [FromForm] DateTime? endAt)
         {
-            var test = await _repo.FirstOrDefaultAsync(t => t.Id == testId);
-            if (test == null) return NotFound();
-
-            if (!test.IsPublished)
-            {
-                test.IsPublished = true;
-                test.PublishedAt = DateTime.UtcNow;
-                await _repo.UpsertAsync(t => t.Id == testId, test);
-            }
-
-            var s = startAt ?? DateTime.UtcNow.AddDays(-1);
-            var e = endAt ?? DateTime.UtcNow.AddDays(30);
-
-            // clear cũ: Một test link tới một Assessment. Ở đây nếu assign nhiều user, tui sẽ tạo nhiều Assessment?
-            // Hay một Assessment cho nhiều user? Hiện tại Assessment chưa có bảng bridge cho Student.
-            // Để giữ logic cũ, tui sẽ tạo mỗi user 1 Assessment record (giống Assignment cũ).
-            // Nếu muốn tối ưu, cần bảng AssessmentTarget. Nhưng theo yêu cầu "Assessment replaces Assignment", tui làm tiếp như cũ.
-            
-            await _asRepo.DeleteAsync(a => a.TargetType == "Student" && 
-                                            test.AssessmentId != null && a.Id == test.AssessmentId);
-
-            var newAssigned = (userIds ?? new List<string>()).Distinct().ToList();
-
-            if (newAssigned.Count == 0)
-            {
-                test.AssessmentId = "";
-                await _repo.UpsertAsync(x => x.Id == test.Id, test);
-                TempData["Msg"] = "Đã lưu: không có sinh viên nào được assign.";
-                return RedirectToAction(nameof(Assign), new { id = testId });
-            }
-
-            // Để đơn giản, tui lấy user đầu tiên hoặc tạo Assessment tổng quát.
-            // Nhưng thiết kế cũ là 1 test -> 1 assignment (cho 1 target).
-            // Nếu chọn nhiều user, tui sẽ tạo nhiều Assessment? Không, tui sẽ tạo 1 Assessment với TargetType="Student" và TargetValue=string.Join(",", userIds).
-            // HOẶC tui tạo nhiều Assessment. Tui sẽ tạo nhiều để giống logic cũ.
-            
-            foreach (var uid in newAssigned)
-            {
-                var assessment = new Assessment
-                {
-                    Title = test.Title,
-                    StartTime = s,
-                    EndTime = e,
-                    TargetType = "Student",
-                    TargetValue = uid,
-                    CourseId = test.CourseId ?? "default",
-                    Type = AssessmentType.Quiz
-                };
-                await _asRepo.InsertAsync(assessment);
-                
-                // Cập nhật AssessmentId cuối cùng cho Test (đây là hạn chế của 1-1 ở đây)
-                test.AssessmentId = assessment.Id;
-            }
-            await _repo.UpsertAsync(x => x.Id == test.Id, test);
-
-            // notify user mới
-            var allStudents = await _sRepo.GetAllAsync();
-            var targets = allStudents
-                .Where(u => newAssigned.Contains(u.Id))
-                .Select(u => new AssignmentNotifyTarget { User = (User)u, SessionId = string.Empty })
-                .ToList();
-
-            if (targets.Count > 0)
-                await NotifySafe(test!, targets, s, e);
-
-            TempData["Msg"] = "Đã lưu danh sách assign và publish test" +
-                               (_notiService != null ? " (đã gửi thông báo/email cho sinh viên)." : ".");
+            var (found, message) = await _testAdministrationService.AssignUsersAsync(testId, userIds, startAt, endAt);
+            if (!found) return NotFound();
+            TempData["Msg"] = message;
             return RedirectToAction(nameof(Assign), new { id = testId });
         }
 
@@ -607,41 +344,15 @@ namespace UniTestSystem.Controllers
         [Authorize(Policy = PermissionCodes.Exam_Schedule)]
         public async Task<IActionResult> AssignByFaculty(string testId, string faculty, DateTime? startAt, DateTime? endAt)
         {
-            var test = await _repo.FirstOrDefaultAsync(t => t.Id == testId);
-            if (test == null) return NotFound();
-
             if (string.IsNullOrWhiteSpace(faculty))
             {
                 TempData["Err"] = "Vui lòng chọn Lớp/Khoa.";
                 return RedirectToAction(nameof(Assign), new { id = testId });
             }
 
-            if (!test.IsPublished)
-            {
-                test.IsPublished = true;
-                test.PublishedAt = DateTime.UtcNow;
-                await _repo.UpsertAsync(t => t.Id == testId, test);
-            }
-
-            var s = startAt ?? DateTime.UtcNow.AddDays(-1);
-            var e = endAt ?? DateTime.UtcNow.AddDays(30);
-
-            var assessment = new Assessment
-            {
-                Title = test.Title,
-                StartTime = s,
-                EndTime = e,
-                TargetType = "Class",
-                TargetValue = faculty,
-                CourseId = test.CourseId ?? "default",
-                Type = AssessmentType.Quiz
-            };
-            await _asRepo.InsertAsync(assessment);
-            
-            test.AssessmentId = assessment.Id;
-            await _repo.UpsertAsync(x => x.Id == test.Id, test);
-
-            TempData["Msg"] = $"Đã gán bài thi cho các sinh viên của Lớp/Khoa '{faculty}'.";
+            var (found, message) = await _testAdministrationService.AssignByFacultyAsync(testId, faculty, startAt, endAt);
+            if (!found) return NotFound();
+            TempData["Msg"] = message;
             return RedirectToAction(nameof(Assign), new { id = testId, faculty });
         }
 
@@ -651,56 +362,7 @@ namespace UniTestSystem.Controllers
         [Authorize(Policy = PermissionCodes.Exam_Schedule)]
         public async Task<IActionResult> BulkAssign([FromForm] List<string> testIds, string userId, DateTime? startAt, DateTime? endAt)
         {
-            if (string.IsNullOrWhiteSpace(userId))
-            {
-                TempData["Err"] = "Thiếu UserId.";
-                return RedirectToAction(nameof(Index));
-            }
-            if (testIds == null || testIds.Count == 0)
-            {
-                TempData["Err"] = "Bạn chưa chọn Test nào.";
-                return RedirectToAction(nameof(Index));
-            }
-
-            var s = startAt ?? DateTime.UtcNow.AddDays(-1);
-            var e = endAt ?? DateTime.UtcNow.AddDays(30);
-
-            int assigned = 0;
-            foreach (var tid in testIds.Distinct())
-            {
-                var t = await _repo.FirstOrDefaultAsync(x => x.Id == tid);
-                if (t == null) continue;
-
-                if (!t.IsPublished)
-                {
-                    t.IsPublished = true;
-                    t.PublishedAt = DateTime.UtcNow;
-                    await _repo.UpsertAsync(x => x.Id == t.Id, t);
-                }
-
-                if (t.AssessmentId != null)
-                {
-                    await _asRepo.DeleteAsync(a => a.Id == t.AssessmentId);
-                }
-
-                var assessment = new Assessment
-                {
-                    Title = t.Title,
-                    StartTime = s,
-                    EndTime = e,
-                    TargetType = "Student",
-                    TargetValue = userId,
-                    CourseId = t.CourseId ?? "default",
-                    Type = AssessmentType.Quiz
-                };
-                await _asRepo.InsertAsync(assessment);
-                
-                t.AssessmentId = assessment.Id;
-                await _repo.UpsertAsync(x => x.Id == t.Id, t);
-                assigned++;
-            }
-
-            TempData["Msg"] = $"Đã assign {assigned} test cho sinh viên '{userId}'.";
+            TempData["Msg"] = await _testAdministrationService.BulkAssignAsync(testIds, userId, startAt, endAt);
             return RedirectToAction(nameof(Index), new { status = "Draft" });
         }
 
@@ -710,128 +372,8 @@ namespace UniTestSystem.Controllers
         [Authorize(Policy = PermissionCodes.Exam_Schedule)]
         public async Task<IActionResult> BulkAssignAuto([FromForm] List<string> testIds, DateTime? startAt, DateTime? endAt)
         {
-            if (testIds == null || testIds.Count == 0)
-            {
-                TempData["Err"] = "Bạn chưa chọn Test nào.";
-                return RedirectToAction(nameof(Index));
-            }
-
-            var students = await _sRepo.GetAllAsync();
-            var tests = await _repo.GetAllAsync();
-
-            var testMap = tests.ToDictionary(t => t.Id, t => t);
-            var s = startAt ?? DateTime.UtcNow.AddDays(-1);
-            var e = endAt ?? DateTime.UtcNow.AddDays(30);
-
-            int assigned = 0;
-            var skipped = new List<string>();
-
-            foreach (var tid in testIds.Distinct())
-            {
-                if (!testMap.TryGetValue(tid, out var t)) { skipped.Add($"{tid} (not found)"); continue; }
-
-                var owner = ResolveOwnerUser(students.Cast<User>().ToList(), t);
-                if (owner == null) { skipped.Add(t.Title); continue; }
-
-                if (!t.IsPublished)
-                {
-                    t.IsPublished = true;
-                    t.PublishedAt = DateTime.UtcNow;
-                    await _repo.UpsertAsync(x => x.Id == t.Id, t);
-                }
-
-                if (t.AssessmentId != null)
-                {
-                    await _asRepo.DeleteAsync(a => a.Id == t.AssessmentId);
-                }
-
-                var assessment = new Assessment
-                {
-                    Title = t.Title,
-                    StartTime = s,
-                    EndTime = e,
-                    TargetType = "Student",
-                    TargetValue = owner.Id,
-                    CourseId = t.CourseId ?? "default",
-                    Type = AssessmentType.Quiz
-                };
-                await _asRepo.InsertAsync(assessment);
-                
-                t.AssessmentId = assessment.Id;
-                await _repo.UpsertAsync(x => x.Id == t.Id, t);
-                assigned++;
-            }
-
-            var msg = $"Đã assign {assigned} test (auto by owner).";
-            if (skipped.Count > 0)
-                msg += $" Bỏ qua {skipped.Count}: {string.Join("; ", skipped.Take(5))}{(skipped.Count > 5 ? "..." : "")}";
-            TempData["Msg"] = msg;
-
+            TempData["Msg"] = await _testAdministrationService.BulkAssignAutoAsync(testIds, startAt, endAt);
             return RedirectToAction(nameof(Index), new { status = "Draft" });
-        }
-
-        // ---------- Helpers ----------
-        private async Task NotifySafe(
-            Test test,
-            IEnumerable<AssignmentNotifyTarget> targets,
-            DateTime startAtUtc,
-            DateTime endAtUtc)
-        {
-            if (_notiService == null) return;
-            try
-            {
-                await _notiService.NotifyAssignmentsAsync(test, targets, startAtUtc, endAtUtc);
-            }
-            catch { /* log nếu có */ }
-        }
-
-        private static string RemoveDiacritics(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-            var normalized = text.Normalize(NormalizationForm.FormD);
-            var sb = new StringBuilder();
-            foreach (var ch in normalized)
-            {
-                var uc = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch);
-                if (uc != System.Globalization.UnicodeCategory.NonSpacingMark)
-                    sb.Append(ch);
-            }
-            return sb.ToString().Normalize(NormalizationForm.FormC);
-        }
-
-        private User? ResolveOwnerUser(List<User> users, Test t)
-        {
-            var title = t.Title ?? "";
-
-            // 1) uid: <id>
-            var mUid = Regex.Match(title, @"uid\s*:\s*(?<id>[A-Za-z0-9\-_]+)", RegexOptions.IgnoreCase);
-            if (mUid.Success)
-            {
-                var id = mUid.Groups["id"].Value.Trim();
-                var byId = users.FirstOrDefault(u => string.Equals(u.Id, id, StringComparison.Ordinal));
-                if (byId != null) return byId;
-            }
-
-            // 2) Auto - <FullName> - ...
-            var mName = Regex.Match(title, @"^Auto\s*-\s*(?<name>[^-]+?)\s*-", RegexOptions.IgnoreCase);
-            if (mName.Success)
-            {
-                var nameInTitle = mName.Groups["name"].Value.Trim();
-                var normTitleName = RemoveDiacritics(nameInTitle).ToLowerInvariant();
-
-                var byName = users.FirstOrDefault(u =>
-                    RemoveDiacritics(u.Name ?? "").ToLowerInvariant() == normTitleName);
-                if (byName != null) return byName;
-
-                var byEmailLocal = users.FirstOrDefault(u =>
-                {
-                    var local = (u.Email ?? "").Split('@')[0];
-                    return RemoveDiacritics(local).ToLowerInvariant() == normTitleName.Replace(" ", "");
-                });
-                if (byEmailLocal != null) return byEmailLocal;
-            }
-
-            return null;
         }
     }
 }

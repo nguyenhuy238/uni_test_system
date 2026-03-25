@@ -1,8 +1,8 @@
 using System.Diagnostics;
-using UniTestSystem.Application.Models;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using UniTestSystem.Domain;
+using UniTestSystem.ViewModels;
 
 namespace UniTestSystem.Controllers
 {

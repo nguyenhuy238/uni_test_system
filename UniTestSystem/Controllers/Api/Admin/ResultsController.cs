@@ -26,11 +26,11 @@ public class ResultsController : ControllerBase
         public SessionStatus Status { get; set; }
     }
 
-    private readonly IRepository<Result> _results;
-    private readonly IRepository<DomainUser> _users;
-    private readonly IRepository<Test> _tests;
+    private readonly IEntityStore<Result> _results;
+    private readonly IEntityStore<DomainUser> _users;
+    private readonly IEntityStore<Test> _tests;
 
-    public ResultsController(IRepository<Result> results, IRepository<DomainUser> users, IRepository<Test> tests)
+    public ResultsController(IEntityStore<Result> results, IEntityStore<DomainUser> users, IEntityStore<Test> tests)
     {
         _results = results;
         _users = users;
@@ -194,3 +194,4 @@ public class ResultsController : ControllerBase
                     .ToList();
     }
 }
+

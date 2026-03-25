@@ -10,9 +10,9 @@ namespace UniTestSystem.Controllers.Api;
 [Route("api/admin/tests")]
 public class AdminTestsController : ControllerBase
 {
-    private readonly IRepository<Test> _tests;
+    private readonly IEntityStore<Test> _tests;
 
-    public AdminTestsController(IRepository<Test> tests)
+    public AdminTestsController(IEntityStore<Test> tests)
     {
         _tests = tests;
     }
@@ -60,3 +60,4 @@ public class AdminTestsController : ControllerBase
         return NoContent();
     }
 }
+

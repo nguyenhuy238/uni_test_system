@@ -10,9 +10,9 @@ namespace UniTestSystem.Controllers.Api;
 [Route("api/admin/users")]
 public class AdminUsersController : ControllerBase
 {
-    private readonly IRepository<UniTestSystem.Domain.User> _users;
+    private readonly IEntityStore<UniTestSystem.Domain.User> _users;
 
-    public AdminUsersController(IRepository<UniTestSystem.Domain.User> users)
+    public AdminUsersController(IEntityStore<UniTestSystem.Domain.User> users)
     {
         _users = users;
     }
@@ -79,3 +79,4 @@ public class AdminUsersController : ControllerBase
         return isStaffActor && (role == Role.Admin || role == Role.Staff);
     }
 }
+

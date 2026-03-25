@@ -1,7 +1,6 @@
 using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Application.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace UniTestSystem.Application
 {
@@ -37,24 +36,30 @@ namespace UniTestSystem.Application
         {
             // Fetch sessions that have essays and are not yet finalized.
             // In a real scenario, we'd filter by lecturer's assigned courses.
-            return await _sRepo.Query()
-                .Include(s => s.Test)
-                .Include(s => s.User)
-                .Where(s => (s.Status == SessionStatus.Submitted || s.Status == SessionStatus.AutoSubmitted || s.Status == SessionStatus.Graded))
+            var spec = new Specification<Session>(s =>
+                    s.Status == SessionStatus.Submitted ||
+                    s.Status == SessionStatus.AutoSubmitted ||
+                    s.Status == SessionStatus.Graded)
+                .Include(s => s.Test!)
+                .Include(s => s.User!)
+                .Include("StudentAnswers.Question");
+
+            var sessions = await _sRepo.ListAsync(spec);
+            return sessions
                 .Where(s => s.StudentAnswers.Any(sa => sa.Question != null && sa.Question.Type == QType.Essay))
                 .OrderByDescending(s => s.EndAt)
-                .ToListAsync();
+                .ToList();
         }
 
         public async Task<Session> GetSessionForGradingAsync(string sessionId)
         {
-            return await _sRepo.Query()
-                .Include(s => s.User)
-                .Include(s => s.Test)
-                    .ThenInclude(t => t!.TestQuestions)
-                .Include(s => s.StudentAnswers)
-                    .ThenInclude(sa => sa.Question)
-                .FirstOrDefaultAsync(s => s.Id == sessionId) 
+            var spec = new Specification<Session>(s => s.Id == sessionId)
+                .Include(s => s.User!)
+                .Include(s => s.Test!)
+                .Include("Test.TestQuestions")
+                .Include("StudentAnswers.Question");
+
+            return await _sRepo.FirstOrDefaultAsync(spec)
                 ?? throw new Exception("Session not found");
         }
 
@@ -79,10 +84,9 @@ namespace UniTestSystem.Application
 
         private async Task RecalculateTotalScoreAsync(string sessionId)
         {
-            var s = await _sRepo.Query()
-                .Include(x => x.StudentAnswers)
-                .ThenInclude(x => x.Question)
-                .FirstOrDefaultAsync(x => x.Id == sessionId);
+            var spec = new Specification<Session>(x => x.Id == sessionId)
+                .Include("StudentAnswers.Question");
+            var s = await _sRepo.FirstOrDefaultAsync(spec);
 
             if (s != null)
             {
@@ -118,11 +122,11 @@ namespace UniTestSystem.Application
 
         public async Task<bool> IsGradeLockedAsync(string sessionId)
         {
-            var latest = await _logRepo.Query()
-                .Where(l => l.SessionId == sessionId &&
-                            (l.ActionType == ActionGradeLocked || l.ActionType == ActionGradeUnlocked))
+            var latest = (await _logRepo.GetAllAsync(l =>
+                    l.SessionId == sessionId &&
+                    (l.ActionType == ActionGradeLocked || l.ActionType == ActionGradeUnlocked)))
                 .OrderByDescending(l => l.Timestamp)
-                .FirstOrDefaultAsync();
+                .FirstOrDefault();
 
             return latest?.ActionType == ActionGradeLocked;
         }
@@ -161,10 +165,11 @@ namespace UniTestSystem.Application
         {
             if (!await HasPendingRegradeRequestAsync(sessionId)) return null;
 
-            var request = await _logRepo.Query()
-                .Where(l => l.SessionId == sessionId && l.ActionType == ActionRegradeRequested)
+            var request = (await _logRepo.GetAllAsync(l =>
+                    l.SessionId == sessionId &&
+                    l.ActionType == ActionRegradeRequested))
                 .OrderByDescending(l => l.Timestamp)
-                .FirstOrDefaultAsync();
+                .FirstOrDefault();
 
             return request?.Detail;
         }
@@ -172,15 +177,15 @@ namespace UniTestSystem.Application
         public async Task<List<RegradeRequestItemVm>> GetPendingRegradeRequestsAsync(string lecturerId)
         {
             // lecturerId currently unused due to legacy assignment model; kept for future course-bound filtering.
-            var requestLogs = await _logRepo.Query()
-                .Where(l => l.ActionType == ActionRegradeRequested)
+            var requestLogs = (await _logRepo.GetAllAsync(l => l.ActionType == ActionRegradeRequested))
                 .OrderByDescending(l => l.Timestamp)
-                .ToListAsync();
+                .ToList();
 
-            var resolvedLogs = await _logRepo.Query()
-                .Where(l => l.ActionType == ActionRegradeApproved || l.ActionType == ActionRegradeRejected)
+            var resolvedLogs = (await _logRepo.GetAllAsync(l =>
+                    l.ActionType == ActionRegradeApproved ||
+                    l.ActionType == ActionRegradeRejected))
                 .OrderByDescending(l => l.Timestamp)
-                .ToListAsync();
+                .ToList();
 
             var pendingRequestBySession = requestLogs
                 .GroupBy(l => l.SessionId)
@@ -200,17 +205,16 @@ namespace UniTestSystem.Application
                 return new List<RegradeRequestItemVm>();
 
             var sessionIds = pendingRequestBySession.Select(x => x.SessionId).Distinct().ToList();
-            var sessions = await _sRepo.Query()
-                .Include(s => s.User)
-                .Include(s => s.Test)
-                .Where(s => sessionIds.Contains(s.Id))
-                .ToListAsync();
+            var sessionSpec = new Specification<Session>(s => sessionIds.Contains(s.Id))
+                .Include(s => s.User!)
+                .Include(s => s.Test!);
+            var sessions = await _sRepo.ListAsync(sessionSpec);
 
-            var lockLogs = await _logRepo.Query()
-                .Where(l => sessionIds.Contains(l.SessionId) &&
-                            (l.ActionType == ActionGradeLocked || l.ActionType == ActionGradeUnlocked))
+            var lockLogs = (await _logRepo.GetAllAsync(l =>
+                    sessionIds.Contains(l.SessionId) &&
+                    (l.ActionType == ActionGradeLocked || l.ActionType == ActionGradeUnlocked)))
                 .OrderByDescending(l => l.Timestamp)
-                .ToListAsync();
+                .ToList();
 
             var latestLockBySession = lockLogs
                 .GroupBy(l => l.SessionId)
@@ -241,9 +245,9 @@ namespace UniTestSystem.Application
 
         public async Task RequestRegradeAsync(string sessionId, string studentId, string reason, string? ipAddress)
         {
-            var session = await _sRepo.Query()
-                .Include(s => s.Test)
-                .FirstOrDefaultAsync(s => s.Id == sessionId)
+            var spec = new Specification<Session>(s => s.Id == sessionId)
+                .Include(s => s.Test!);
+            var session = await _sRepo.FirstOrDefaultAsync(spec)
                 ?? throw new Exception("Session not found");
 
             if (!string.Equals(session.UserId, studentId, StringComparison.Ordinal))
@@ -319,26 +323,26 @@ namespace UniTestSystem.Application
 
         public async Task<List<SessionLog>> GetModerationLogsAsync(string sessionId)
         {
-            return await _logRepo.Query()
-                .Where(l => l.SessionId == sessionId &&
-                            (l.ActionType == ActionRegradeRequested ||
-                             l.ActionType == ActionRegradeApproved ||
-                             l.ActionType == ActionRegradeRejected ||
-                             l.ActionType == ActionGradeLocked ||
-                             l.ActionType == ActionGradeUnlocked))
+            return (await _logRepo.GetAllAsync(l =>
+                    l.SessionId == sessionId &&
+                    (l.ActionType == ActionRegradeRequested ||
+                     l.ActionType == ActionRegradeApproved ||
+                     l.ActionType == ActionRegradeRejected ||
+                     l.ActionType == ActionGradeLocked ||
+                     l.ActionType == ActionGradeUnlocked)))
                 .OrderByDescending(l => l.Timestamp)
-                .ToListAsync();
+                .ToList();
         }
 
         private async Task<SessionLog?> GetLatestRegradeLifecycleLogAsync(string sessionId)
         {
-            return await _logRepo.Query()
-                .Where(l => l.SessionId == sessionId &&
-                            (l.ActionType == ActionRegradeRequested ||
-                             l.ActionType == ActionRegradeApproved ||
-                             l.ActionType == ActionRegradeRejected))
+            return (await _logRepo.GetAllAsync(l =>
+                    l.SessionId == sessionId &&
+                    (l.ActionType == ActionRegradeRequested ||
+                     l.ActionType == ActionRegradeApproved ||
+                     l.ActionType == ActionRegradeRejected)))
                 .OrderByDescending(l => l.Timestamp)
-                .FirstOrDefaultAsync();
+                .FirstOrDefault();
         }
 
         private static string BuildActorDetail(string actor, string? note)

@@ -10,9 +10,9 @@ namespace UniTestSystem.Controllers.Api.Admin;
 [Route("api/admin/faculties")]
 public class AdminFacultiesController : ControllerBase
 {
-    private readonly IRepository<Faculty> _repo;
+    private readonly IEntityStore<Faculty> _repo;
 
-    public AdminFacultiesController(IRepository<Faculty> repo)
+    public AdminFacultiesController(IEntityStore<Faculty> repo)
     {
         _repo = repo;
     }
@@ -56,3 +56,4 @@ public class AdminFacultiesController : ControllerBase
         return NoContent();
     }
 }
+

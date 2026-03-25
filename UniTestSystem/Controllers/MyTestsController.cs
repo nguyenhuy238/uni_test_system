@@ -11,10 +11,10 @@ namespace UniTestSystem.Controllers
     public class MyTestsController : Controller
     {
         private readonly AssessmentService _assessSvc;
-        private readonly IRepository<Test> _tRepo;
-        private readonly IRepository<Session> _sRepo;
+        private readonly IEntityStore<Test> _tRepo;
+        private readonly IEntityStore<Session> _sRepo;
 
-        public MyTestsController(AssessmentService a, IRepository<Test> t, IRepository<Session> s)
+        public MyTestsController(AssessmentService a, IEntityStore<Test> t, IEntityStore<Session> s)
         { _assessSvc = a; _tRepo = t; _sRepo = s; }
 
         public async Task<IActionResult> Index()
@@ -66,3 +66,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

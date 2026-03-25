@@ -12,11 +12,11 @@ namespace UniTestSystem.Controllers.Api
     [Route("api/internal/sessions")]
     public class SessionsApiController : ControllerBase
     {
-        private readonly IRepository<Session> _sRepo;
-        private readonly IRepository<Test> _tRepo;
+        private readonly IEntityStore<Session> _sRepo;
+        private readonly IEntityStore<Test> _tRepo;
         private readonly SessionDeviceGuardService _sessionDeviceGuard;
 
-        public SessionsApiController(IRepository<Session> sRepo, IRepository<Test> tRepo, SessionDeviceGuardService sessionDeviceGuard)
+        public SessionsApiController(IEntityStore<Session> sRepo, IEntityStore<Test> tRepo, SessionDeviceGuardService sessionDeviceGuard)
         {
             _sRepo = sRepo;
             _tRepo = tRepo;
@@ -111,3 +111,4 @@ namespace UniTestSystem.Controllers.Api
         }
     }
 }
+

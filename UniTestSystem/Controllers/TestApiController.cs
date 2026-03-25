@@ -14,19 +14,19 @@ namespace UniTestSystem.Controllers
     {
         private readonly TestService _svc;
         private readonly AssessmentService _assessSvc;
-        private readonly IRepository<Test> _tRepo;
-        private readonly IRepository<Session> _sRepo;
-        private readonly IRepository<Question> _qRepo;
-        private readonly IRepository<SessionLog> _slRepo;
+        private readonly IEntityStore<Test> _tRepo;
+        private readonly IEntityStore<Session> _sRepo;
+        private readonly IEntityStore<Question> _qRepo;
+        private readonly IEntityStore<SessionLog> _slRepo;
         private readonly SessionDeviceGuardService _sessionDeviceGuard;
 
         public TestsApiController(
             TestService svc,
             AssessmentService assessSvc,
-            IRepository<Test> tRepo,
-            IRepository<Session> sRepo,
-            IRepository<Question> qRepo,
-            IRepository<SessionLog> slRepo,
+            IEntityStore<Test> tRepo,
+            IEntityStore<Session> sRepo,
+            IEntityStore<Question> qRepo,
+            IEntityStore<SessionLog> slRepo,
             SessionDeviceGuardService sessionDeviceGuard)
         {
             _svc = svc;
@@ -275,3 +275,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

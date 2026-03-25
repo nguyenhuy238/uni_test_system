@@ -11,11 +11,11 @@ namespace UniTestSystem.Controllers.Api.Admin;
 [Route("api/admin/questions")]
 public class QuestionsController : ControllerBase
 {
-    private readonly IRepository<Question> _questions;
-    private readonly IRepository<Option> _options;
+    private readonly IEntityStore<Question> _questions;
+    private readonly IEntityStore<Option> _options;
     private readonly IQuestionService _svc;
 
-    public QuestionsController(IRepository<Question> questions, IRepository<Option> options, IQuestionService svc)
+    public QuestionsController(IEntityStore<Question> questions, IEntityStore<Option> options, IQuestionService svc)
     {
         _questions = questions;
         _options = options;
@@ -172,3 +172,4 @@ public class OptionRequest
     public string Content { get; set; } = "";
     public bool IsCorrect { get; set; }
 }
+

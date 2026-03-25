@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Domain;
 
@@ -66,10 +65,9 @@ namespace UniTestSystem.Application
             if (string.IsNullOrWhiteSpace(token))
                 return (false, "Liên kết xác nhận không hợp lệ.");
 
-            var issuedEntries = await _auditRepo.Query()
-                .Where(x => x.EntityName == EntityName && x.Action == ActionIssued)
+            var issuedEntries = (await _auditRepo.GetAllAsync(x => x.EntityName == EntityName && x.Action == ActionIssued))
                 .OrderByDescending(x => x.At)
-                .ToListAsync();
+                .ToList();
 
             AuditEntry? issued = null;
             VerificationPayload? issuedPayload = null;
@@ -91,9 +89,10 @@ namespace UniTestSystem.Application
             if (issuedPayload.ExpiresAtUtc < DateTime.UtcNow)
                 return (false, "Liên kết xác nhận đã hết hạn.");
 
-            var verifyEntries = await _auditRepo.Query()
-                .Where(x => x.EntityName == EntityName && x.Action == ActionVerified && x.EntityId == issued.EntityId)
-                .ToListAsync();
+            var verifyEntries = await _auditRepo.GetAllAsync(x =>
+                x.EntityName == EntityName &&
+                x.Action == ActionVerified &&
+                x.EntityId == issued.EntityId);
 
             foreach (var entry in verifyEntries)
             {

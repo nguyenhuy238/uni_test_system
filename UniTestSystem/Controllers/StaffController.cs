@@ -9,12 +9,12 @@ namespace UniTestSystem.Controllers
     [Authorize(Policy = "RequireStaffOrAdmin")]
     public class StaffController : Controller
     {
-        private readonly IRepository<ExamSchedule> _examScheduleRepo;
+        private readonly IEntityStore<ExamSchedule> _examScheduleRepo;
         private readonly ITranscriptService _transcriptService;
         private readonly IGradingService _gradingService;
 
         public StaffController(
-            IRepository<ExamSchedule> examScheduleRepo,
+            IEntityStore<ExamSchedule> examScheduleRepo,
             ITranscriptService transcriptService,
             IGradingService gradingService)
         {
@@ -42,3 +42,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

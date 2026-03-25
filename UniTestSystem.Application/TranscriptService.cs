@@ -1,7 +1,6 @@
 using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Application.Models;
-using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
 namespace UniTestSystem.Application
@@ -41,10 +40,12 @@ namespace UniTestSystem.Application
 
         public async Task<Transcript> CalculateGPAAsync(string studentId)
         {
-            var enrollments = await _enrollmentRepo.Query()
-                .Include(e => e.Course)
-                .Where(e => e.StudentId == studentId && !e.IsDeleted && e.GradePoint.HasValue)
-                .ToListAsync();
+            var spec = new Specification<Enrollment>(e =>
+                    e.StudentId == studentId &&
+                    !e.IsDeleted &&
+                    e.GradePoint.HasValue)
+                .Include(e => e.Course!);
+            var enrollments = await _enrollmentRepo.ListAsync(spec);
 
             if (!enrollments.Any()) return new Transcript { StudentId = studentId };
 
@@ -67,37 +68,29 @@ namespace UniTestSystem.Application
 
         public async Task<List<Transcript>> GetAllTranscriptsAsync()
         {
-            return await _transcriptRepo.Query()
-                .Include(t => t.Student)
-                .Where(t => !t.IsDeleted)
+            var spec = new Specification<Transcript>(t => !t.IsDeleted)
+                .Include(t => t.Student!);
+            var transcripts = await _transcriptRepo.ListAsync(spec);
+            return transcripts
                 .OrderByDescending(t => t.GPA)
-                .ToListAsync();
+                .ToList();
         }
 
         public async Task<List<TranscriptAdminRowVm>> GetAdminTranscriptRowsAsync(string? facultyId = null, string? classId = null, string? semester = null)
         {
-            var transcripts = await _transcriptRepo.Query()
-                .Include(t => t.Student)
-                .Where(t => !t.IsDeleted)
-                .ToListAsync();
+            var transcriptSpec = new Specification<Transcript>(t => !t.IsDeleted)
+                .Include(t => t.Student!);
+            var transcripts = await _transcriptRepo.ListAsync(transcriptSpec);
 
-            var students = await _studentRepo.Query()
-                .Where(s => !s.IsDeleted)
+            var students = (await _studentRepo.GetAllAsync(s => !s.IsDeleted))
                 .Select(s => new { s.Id, s.StudentClassId })
-                .ToListAsync();
+                .ToList();
 
-            var classes = await _classRepo.Query()
-                .Where(c => !c.IsDeleted)
-                .ToListAsync();
-
-            var faculties = await _facultyRepo.Query()
-                .Where(f => !f.IsDeleted)
-                .ToListAsync();
-
-            var enrollments = await _enrollmentRepo.Query()
-                .Where(e => !e.IsDeleted)
+            var classes = await _classRepo.GetAllAsync(c => !c.IsDeleted);
+            var faculties = await _facultyRepo.GetAllAsync(f => !f.IsDeleted);
+            var enrollments = (await _enrollmentRepo.GetAllAsync(e => !e.IsDeleted))
                 .Select(e => new { e.StudentId, e.Semester })
-                .ToListAsync();
+                .ToList();
 
             var studentClassMap = students.ToDictionary(x => x.Id, x => x.StudentClassId);
             var classMap = classes.ToDictionary(x => x.Id, x => x);
@@ -162,12 +155,13 @@ namespace UniTestSystem.Application
 
         public async Task<List<string>> GetAvailableSemestersAsync()
         {
-            return await _enrollmentRepo.Query()
-                .Where(e => !e.IsDeleted && !string.IsNullOrWhiteSpace(e.Semester))
+            return (await _enrollmentRepo.GetAllAsync(e => !e.IsDeleted && !string.IsNullOrWhiteSpace(e.Semester)))
                 .Select(e => e.Semester)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s!)
                 .Distinct()
                 .OrderBy(x => x)
-                .ToListAsync();
+                .ToList();
         }
 
         public decimal CalculateWeightedFinalScore(decimal assignmentScore, decimal examScore, decimal assignmentWeightPercent, decimal examWeightPercent)
@@ -189,9 +183,9 @@ namespace UniTestSystem.Application
 
         public async Task<bool> FinalizeCourseGradeAsync(string enrollmentId, decimal finalScore)
         {
-            var enrollment = await _enrollmentRepo.Query()
-                .Include(e => e.Course)
-                .FirstOrDefaultAsync(e => e.Id == enrollmentId)
+            var spec = new Specification<Enrollment>(e => e.Id == enrollmentId)
+                .Include(e => e.Course!);
+            var enrollment = await _enrollmentRepo.FirstOrDefaultAsync(spec)
                 ?? throw new Exception("Enrollment not found");
 
             if (finalScore < 0 || finalScore > 10)
@@ -227,13 +221,13 @@ namespace UniTestSystem.Application
 
         public async Task<Dictionary<string, bool>> GetFacultyTranscriptLockMapAsync()
         {
-            var logs = await _auditRepo.Query()
-                .Where(x => x.EntityName == TranscriptLockEntityName &&
-                            x.EntityId.StartsWith("faculty:") &&
-                            (x.Action == TranscriptLockActionLock || x.Action == TranscriptLockActionUnlock))
+            var logs = (await _auditRepo.GetAllAsync(x =>
+                    x.EntityName == TranscriptLockEntityName &&
+                    x.EntityId.StartsWith("faculty:") &&
+                    (x.Action == TranscriptLockActionLock || x.Action == TranscriptLockActionUnlock)))
                 .OrderByDescending(x => x.At)
                 .ThenByDescending(x => x.Id)
-                .ToListAsync();
+                .ToList();
 
             return logs
                 .GroupBy(x => x.EntityId, StringComparer.OrdinalIgnoreCase)
@@ -257,30 +251,30 @@ namespace UniTestSystem.Application
 
         public async Task<List<Enrollment>> GetStudentGradesAsync(string studentId)
         {
-            return await _enrollmentRepo.Query()
-                .Include(e => e.Course)
-                .Where(e => e.StudentId == studentId && !e.IsDeleted)
+            var spec = new Specification<Enrollment>(e => e.StudentId == studentId && !e.IsDeleted)
+                .Include(e => e.Course!);
+            var enrollments = await _enrollmentRepo.ListAsync(spec);
+            return enrollments
                 .OrderBy(e => e.Semester)
-                .ToListAsync();
+                .ToList();
         }
 
         public async Task<Transcript?> GetStudentTranscriptSummaryAsync(string studentId)
         {
-            return await _transcriptRepo.Query()
-                .FirstOrDefaultAsync(x => x.StudentId == studentId && !x.IsDeleted);
+            return await _transcriptRepo.FirstOrDefaultAsync(x => x.StudentId == studentId && !x.IsDeleted);
         }
 
         private static string GetFacultyScope(string facultyId) => $"faculty:{facultyId}";
 
         private async Task<bool> IsScopeLockedAsync(string scope)
         {
-            var latest = await _auditRepo.Query()
-                .Where(x => x.EntityName == TranscriptLockEntityName &&
-                            x.EntityId == scope &&
-                            (x.Action == TranscriptLockActionLock || x.Action == TranscriptLockActionUnlock))
+            var latest = (await _auditRepo.GetAllAsync(x =>
+                    x.EntityName == TranscriptLockEntityName &&
+                    x.EntityId == scope &&
+                    (x.Action == TranscriptLockActionLock || x.Action == TranscriptLockActionUnlock)))
                 .OrderByDescending(x => x.At)
                 .ThenByDescending(x => x.Id)
-                .FirstOrDefaultAsync();
+                .FirstOrDefault();
 
             return latest?.Action == TranscriptLockActionLock;
         }
@@ -317,18 +311,14 @@ namespace UniTestSystem.Application
             if (await IsSchoolTranscriptLockedAsync())
                 throw new Exception("Transcript is locked at school level.");
 
-            var classId = await _studentRepo.Query()
-                .Where(s => s.Id == studentId)
-                .Select(s => s.StudentClassId)
-                .FirstOrDefaultAsync();
+            var student = await _studentRepo.FirstOrDefaultAsync(s => s.Id == studentId);
+            var classId = student?.StudentClassId;
 
             if (string.IsNullOrWhiteSpace(classId))
                 return;
 
-            var facultyId = await _classRepo.Query()
-                .Where(c => c.Id == classId)
-                .Select(c => c.FacultyId)
-                .FirstOrDefaultAsync();
+            var studentClass = await _classRepo.FirstOrDefaultAsync(c => c.Id == classId);
+            var facultyId = studentClass?.FacultyId;
 
             if (!string.IsNullOrWhiteSpace(facultyId) && await IsFacultyTranscriptLockedAsync(facultyId))
                 throw new Exception("Transcript is locked at faculty level.");

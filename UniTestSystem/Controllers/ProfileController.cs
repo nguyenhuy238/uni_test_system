@@ -2,26 +2,26 @@ using UniTestSystem.Application.Interfaces;
 using System.Security.Claims;
 using UniTestSystem.Application;
 using UniTestSystem.Domain;
-using UniTestSystem.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
+using UniTestSystem.ViewModels.Profile;
 
 namespace UniTestSystem.Controllers
 {
     [Authorize]
     public class ProfileController : Controller
     {
-        private readonly IRepository<User> _userRepo;
-        private readonly IRepository<Student> _studentRepo;
-        private readonly IRepository<Lecturer> _lecturerRepo;
+        private readonly IEntityStore<User> _userRepo;
+        private readonly IEntityStore<Student> _studentRepo;
+        private readonly IEntityStore<Lecturer> _lecturerRepo;
         private readonly AuthService _authService;
         private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _env;
 
         public ProfileController(
-            IRepository<User> userRepo, 
-            IRepository<Student> studentRepo, 
-            IRepository<Lecturer> lecturerRepo, 
+            IEntityStore<User> userRepo, 
+            IEntityStore<Student> studentRepo, 
+            IEntityStore<Lecturer> lecturerRepo, 
             AuthService authService,
             Microsoft.AspNetCore.Hosting.IWebHostEnvironment env)
         {
@@ -177,3 +177,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

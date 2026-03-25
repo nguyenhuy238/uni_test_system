@@ -1,7 +1,6 @@
 using UniTestSystem.Application;
 using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,16 +11,16 @@ public class QuestionsController : Controller
 {
     private readonly IQuestionService _svc;
     private readonly IQuestionExcelService _xlsx;
-    private readonly IRepository<Question> _qRepo;
-    private readonly IRepository<AuditEntry> _auditRepo;
+    private readonly IEntityStore<Question> _qRepo;
+    private readonly IEntityStore<AuditEntry> _auditRepo;
     private readonly IWebHostEnvironment _env;
     private readonly IConfiguration _cfg;
 
     public QuestionsController(
         IQuestionService svc,
         IQuestionExcelService xlsx,
-        IRepository<Question> qRepo,
-        IRepository<AuditEntry> auditRepo,
+        IEntityStore<Question> qRepo,
+        IEntityStore<AuditEntry> auditRepo,
         IWebHostEnvironment env,
         IConfiguration cfg)
     {
@@ -93,11 +92,13 @@ public class QuestionsController : Controller
         var q = await _svc.GetAsync(id);
         if (q == null) return NotFound();
 
-        var versions = await _auditRepo.Query()
-            .Where(a => a.EntityName == "Question" && a.EntityId == id && (a.After != null || a.Before != null))
+        var versions = (await _auditRepo.GetAllAsync(a =>
+                a.EntityName == "Question" &&
+                a.EntityId == id &&
+                (a.After != null || a.Before != null)))
             .OrderByDescending(a => a.At)
             .Take(20)
-            .ToListAsync();
+            .ToList();
 
         ViewBag.QuestionVersions = versions;
         return View(q);
@@ -406,3 +407,4 @@ public class QuestionsController : Controller
         return result;
     }
 }
+

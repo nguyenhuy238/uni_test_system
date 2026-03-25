@@ -1,6 +1,5 @@
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Domain;
-using Microsoft.EntityFrameworkCore;
 
 namespace UniTestSystem.Application;
 
@@ -27,9 +26,9 @@ public class AcademicService : IAcademicService
 
     public async Task<Course?> GetCourseByIdAsync(string id)
     {
-        return await _courseRepo.Query()
-            .Include(c => c.Lecturer)
-            .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted);
+        var spec = new Specification<Course>(c => c.Id == id && !c.IsDeleted)
+            .Include(c => c.Lecturer!);
+        return await _courseRepo.FirstOrDefaultAsync(spec);
     }
 
     public async Task<bool> CreateCourseAsync(Course course)
@@ -61,10 +60,9 @@ public class AcademicService : IAcademicService
 
     public async Task<List<Enrollment>> GetEnrollmentsByCourseAsync(string courseId)
     {
-        return await _enrollmentRepo.Query()
-            .Include(e => e.Student)
-            .Where(e => e.CourseId == courseId && !e.IsDeleted)
-            .ToListAsync();
+        var spec = new Specification<Enrollment>(e => e.CourseId == courseId && !e.IsDeleted)
+            .Include(e => e.Student!);
+        return await _enrollmentRepo.ListAsync(spec);
     }
 
     public async Task<bool> EnrollStudentAsync(string studentId, string courseId, string semester)

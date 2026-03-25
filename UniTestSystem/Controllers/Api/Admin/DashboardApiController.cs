@@ -11,16 +11,16 @@ namespace UniTestSystem.Controllers.Api.Admin;
 [Route("api/admin/dashboard")]
 public class DashboardApiController : ControllerBase
 {
-    private readonly IRepository<Question> _questions;
-    private readonly IRepository<Test> _tests;
-    private readonly IRepository<DomainUser> _users;
-    private readonly IRepository<Result> _results;
+    private readonly IEntityStore<Question> _questions;
+    private readonly IEntityStore<Test> _tests;
+    private readonly IEntityStore<DomainUser> _users;
+    private readonly IEntityStore<Result> _results;
 
     public DashboardApiController(
-        IRepository<Question> questions,
-        IRepository<Test> tests,
-        IRepository<DomainUser> users,
-        IRepository<Result> results)
+        IEntityStore<Question> questions,
+        IEntityStore<Test> tests,
+        IEntityStore<DomainUser> users,
+        IEntityStore<Result> results)
     {
         _questions = questions;
         _tests = tests;
@@ -46,3 +46,4 @@ public class DashboardApiController : ControllerBase
         });
     }
 }
+

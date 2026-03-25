@@ -12,19 +12,19 @@ namespace UniTestSystem.Controllers
     public class TranscriptsController : Controller
     {
         private readonly ITranscriptService _transcriptService;
-        private readonly IRepository<Faculty> _facultyRepo;
-        private readonly IRepository<StudentClass> _classRepo;
-        private readonly IRepository<Student> _studentRepo;
-        private readonly IRepository<User> _userRepo;
+        private readonly IEntityStore<Faculty> _facultyRepo;
+        private readonly IEntityStore<StudentClass> _classRepo;
+        private readonly IEntityStore<Student> _studentRepo;
+        private readonly IEntityStore<User> _userRepo;
         private readonly IExportService _exportService;
         private readonly ISettingsService _settingsService;
 
         public TranscriptsController(
             ITranscriptService transcriptService,
-            IRepository<Faculty> facultyRepo,
-            IRepository<StudentClass> classRepo,
-            IRepository<Student> studentRepo,
-            IRepository<User> userRepo,
+            IEntityStore<Faculty> facultyRepo,
+            IEntityStore<StudentClass> classRepo,
+            IEntityStore<Student> studentRepo,
+            IEntityStore<User> userRepo,
             IExportService exportService,
             ISettingsService settingsService)
         {
@@ -315,3 +315,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

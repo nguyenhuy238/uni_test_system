@@ -1,7 +1,6 @@
 using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Application.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace UniTestSystem.Application
 {
@@ -27,75 +26,32 @@ namespace UniTestSystem.Application
             _userRepo = u; _studentRepo = st; _testRepo = t; _asRepo = a; _sesRepo = s; _qRepo = q; _enrollmentRepo = enrollmentRepo;
         }
 
-        // ==== Dashboard Admin ====
-        public async Task<DashboardViewModel> GetAdminDashboardAsync(DateTime nowUtc)
-        {
-            var totalStudents = await _studentRepo.Query().CountAsync();
-            var totalLecturers = await _userRepo.Query().CountAsync(x => x.Role == Role.Lecturer);
-            
-            var tests = await _testRepo.GetAllAsync();
-            var totalTests = tests.Count;
-            
-            var activeAssessmentsCount = await _asRepo.Query().CountAsync(a => a.StartTime <= nowUtc && nowUtc <= a.EndTime);
-
-            var submitted = await _sesRepo.Query()
-                .Where(s => s.Status != SessionStatus.NotStarted && s.EndAt != null)
-                .OrderByDescending(s => s.EndAt)
-                .Take(100) // Only fetch what we might need
-                .ToListAsync();
-
-            int passed = 0;
-            if (submitted.Any())
-            {
-                var passMap = tests.ToDictionary(t => t.Id, t => t.PassScore);
-                passed = submitted.Count(s => passMap.TryGetValue(s.TestId, out var pass) && s.TotalScore >= (decimal)pass);
-            }
-            var passRate = submitted.Count == 0 ? 0.0m : (100.0m * passed / submitted.Count);
-
-            var recent = submitted
-                .Take(10)
-                .Select(s => new DashboardViewModel.RecentSubmissionRow
-                {
-                    SessionId = s.Id,
-                    UserName = s.UserId, // Note: In a real app, join with User table for Name
-                    TestTitle = tests.FirstOrDefault(t => t.Id == s.TestId)?.Title ?? s.TestId,
-                    Score = (double)s.TotalScore,
-                    IsPass = tests.FirstOrDefault(t => t.Id == s.TestId)?.PassScore is int p && s.TotalScore >= (decimal)p,
-                    EndAt = s.EndAt!.Value
-                }).ToList();
-
-            return new DashboardViewModel
-            {
-                TotalStudents = totalStudents,
-                TotalLecturers = totalLecturers,
-                TotalTests = totalTests,
-                ActiveAssignments = activeAssessmentsCount,
-                PassRatePercent = Math.Round((double)passRate, 1),
-                RecentSubmissions = recent
-            };
-        }
-
         // ==== Báo cáo theo Khoa (Faculty) ====
         public async Task<FacultyReportVm> GetFacultyReportAsync(DateTime fromUtc, DateTime toUtc)
         {
-            var passMap = await _testRepo.Query()
-                .Select(t => new { t.Id, t.PassScore })
-                .ToDictionaryAsync(x => x.Id, x => (decimal)x.PassScore);
+            var passMap = (await _testRepo.GetAllAsync())
+                .ToDictionary(x => x.Id, x => (decimal)x.PassScore);
 
-            var data = await (from s in _sesRepo.Query()
-                              join st in _studentRepo.Query() on s.UserId equals st.Id
-                              where s.EndAt.HasValue
-                                    && s.EndAt.Value >= fromUtc
-                                    && s.EndAt.Value <= toUtc
-                                    && s.Status != SessionStatus.NotStarted
-                              select new
-                              {
-                                  FacultyName = st.StudentClassId ?? "(Unknown)",
-                                  StudentId = s.UserId,
-                                  s.TestId,
-                                  s.TotalScore,
-                                  s.EndAt
-                              }).ToListAsync();
+            var sessions = await _sesRepo.GetAllAsync(s =>
+                s.EndAt.HasValue &&
+                s.EndAt.Value >= fromUtc &&
+                s.EndAt.Value <= toUtc &&
+                s.Status != SessionStatus.NotStarted);
+
+            var students = await _studentRepo.GetAllAsync();
+            var studentClassMap = students.ToDictionary(st => st.Id, st => st.StudentClassId ?? "(Unknown)");
+
+            var data = sessions
+                .Where(s => studentClassMap.ContainsKey(s.UserId))
+                .Select(s => new
+                {
+                    FacultyName = studentClassMap[s.UserId],
+                    StudentId = s.UserId,
+                    s.TestId,
+                    s.TotalScore,
+                    s.EndAt
+                })
+                .ToList();
 
             var rows = data
                 .GroupBy(x => x.FacultyName)
@@ -122,24 +78,29 @@ namespace UniTestSystem.Application
         // ==== Báo cáo theo Năm học (Academic Year) ====
         public async Task<AcademicYearReportVm> GetAcademicYearReportAsync(DateTime fromUtc, DateTime toUtc)
         {
-            var passMap = await _testRepo.Query()
-                .Select(t => new { t.Id, t.PassScore })
-                .ToDictionaryAsync(x => x.Id, x => (decimal)x.PassScore);
+            var passMap = (await _testRepo.GetAllAsync())
+                .ToDictionary(x => x.Id, x => (decimal)x.PassScore);
 
-            var data = await (from s in _sesRepo.Query()
-                              join st in _studentRepo.Query() on s.UserId equals st.Id
-                              where s.EndAt.HasValue
-                                    && s.EndAt.Value >= fromUtc
-                                    && s.EndAt.Value <= toUtc
-                                    && s.Status != SessionStatus.NotStarted
-                              select new
-                              {
-                                  AcademicYear = st.AcademicYear ?? "(Unknown)",
-                                  StudentId = s.UserId,
-                                  s.TestId,
-                                  s.TotalScore,
-                                  s.EndAt
-                              }).ToListAsync();
+            var sessions = await _sesRepo.GetAllAsync(s =>
+                s.EndAt.HasValue &&
+                s.EndAt.Value >= fromUtc &&
+                s.EndAt.Value <= toUtc &&
+                s.Status != SessionStatus.NotStarted);
+
+            var students = await _studentRepo.GetAllAsync();
+            var studentYearMap = students.ToDictionary(st => st.Id, st => st.AcademicYear ?? "(Unknown)");
+
+            var data = sessions
+                .Where(s => studentYearMap.ContainsKey(s.UserId))
+                .Select(s => new
+                {
+                    AcademicYear = studentYearMap[s.UserId],
+                    StudentId = s.UserId,
+                    s.TestId,
+                    s.TotalScore,
+                    s.EndAt
+                })
+                .ToList();
 
             var rows = data
                 .GroupBy(x => x.AcademicYear)
@@ -167,10 +128,14 @@ namespace UniTestSystem.Application
         public async Task<StudentSubjectReportVm> GetStudentSubjectReportAsync(string userId, DateTime fromUtc, DateTime toUtc)
         {
             // Optimized query: filter by userId and date range at DB level
-            var sessions = await _sesRepo.Query()
-                .Where(s => s.UserId == userId && s.EndAt.HasValue && s.EndAt.Value >= fromUtc && s.EndAt.Value <= toUtc && s.Status != SessionStatus.NotStarted)
-                .Include(s => s.StudentAnswers) 
-                .ToListAsync();
+            var spec = new Specification<Session>(s =>
+                    s.UserId == userId &&
+                    s.EndAt.HasValue &&
+                    s.EndAt.Value >= fromUtc &&
+                    s.EndAt.Value <= toUtc &&
+                    s.Status != SessionStatus.NotStarted)
+                .Include(s => s.StudentAnswers!);
+            var sessions = await _sesRepo.ListAsync(spec);
 
             var subjectData = new Dictionary<string, (int QCount, decimal TScore, DateTime? LastSub)>(StringComparer.OrdinalIgnoreCase);
 
@@ -231,29 +196,27 @@ namespace UniTestSystem.Application
         // ==== Widget Dashboard (Lecturer/Staff/Admin) ====
         public async Task<WidgetDashboardVm> GetWidgetDashboardAsync(DateTime fromUtc, DateTime toUtc, Role actorRole, string? actorUserId)
         {
-            var query = _sesRepo.Query()
-                .Include(s => s.Test)
-                    .ThenInclude(t => t!.Course)
-                .Where(s => s.EndAt.HasValue &&
-                            s.EndAt.Value >= fromUtc &&
-                            s.EndAt.Value <= toUtc &&
-                            s.Status != SessionStatus.NotStarted);
+            var spec = new Specification<Session>(s =>
+                    s.EndAt.HasValue &&
+                    s.EndAt.Value >= fromUtc &&
+                    s.EndAt.Value <= toUtc &&
+                    s.Status != SessionStatus.NotStarted)
+                .Include("Test.Course");
 
+            var sessions = await _sesRepo.ListAsync(spec);
             if (actorRole == Role.Lecturer && !string.IsNullOrWhiteSpace(actorUserId))
             {
-                query = query.Where(s => s.Test != null &&
-                                         s.Test.Course != null &&
-                                         s.Test.Course.LecturerId == actorUserId);
+                sessions = sessions
+                    .Where(s => s.Test?.Course?.LecturerId == actorUserId)
+                    .ToList();
             }
 
-            var sessions = await query.ToListAsync();
             if (!sessions.Any())
                 return new WidgetDashboardVm();
 
-            var enrollmentSemesterMap = await _enrollmentRepo.Query()
-                .Where(e => !e.IsDeleted && !string.IsNullOrWhiteSpace(e.Semester))
+            var enrollmentSemesterMap = (await _enrollmentRepo.GetAllAsync(e => !e.IsDeleted && !string.IsNullOrWhiteSpace(e.Semester)))
                 .Select(e => new { e.StudentId, e.CourseId, e.Semester })
-                .ToDictionaryAsync(
+                .ToDictionary(
                     x => $"{x.StudentId}|{x.CourseId}",
                     x => x.Semester ?? "",
                     StringComparer.OrdinalIgnoreCase);
@@ -343,22 +306,20 @@ namespace UniTestSystem.Application
         {
             if (minAttempts < 1) minAttempts = 1;
 
-            var sessionsQuery = _sesRepo.Query()
-                .Include(s => s.Test)
-                    .ThenInclude(t => t!.TestQuestions)
-                .Include(s => s.StudentAnswers)
-                    .ThenInclude(a => a.Question)
-                .Where(s => s.EndAt.HasValue &&
-                            s.EndAt.Value >= fromUtc &&
-                            s.EndAt.Value <= toUtc &&
-                            s.Status != SessionStatus.NotStarted);
+            var spec = new Specification<Session>(s =>
+                    s.EndAt.HasValue &&
+                    s.EndAt.Value >= fromUtc &&
+                    s.EndAt.Value <= toUtc &&
+                    s.Status != SessionStatus.NotStarted)
+                .Include("Test.TestQuestions")
+                .Include("StudentAnswers.Question");
 
+            var sessions = await _sesRepo.ListAsync(spec);
             if (!string.IsNullOrWhiteSpace(courseId))
             {
-                sessionsQuery = sessionsQuery.Where(s => s.Test != null && s.Test.CourseId == courseId);
+                sessions = sessions.Where(s => s.Test?.CourseId == courseId).ToList();
             }
 
-            var sessions = await sessionsQuery.ToListAsync();
             if (!sessions.Any())
                 return new QuestionAnalyticsVm();
 
@@ -449,25 +410,22 @@ namespace UniTestSystem.Application
 
         public async Task<LecturerPerformanceVm> GetLecturerPerformanceReportAsync(DateTime fromUtc, DateTime toUtc, string? lecturerId = null)
         {
-            var sessionsQuery = _sesRepo.Query()
-                .Include(s => s.Test)
-                    .ThenInclude(t => t!.Course)
-                .Where(s => s.EndAt.HasValue &&
-                            s.EndAt.Value >= fromUtc &&
-                            s.EndAt.Value <= toUtc &&
-                            s.Status != SessionStatus.NotStarted &&
-                            s.Test != null &&
-                            s.Test.Course != null &&
-                            !string.IsNullOrWhiteSpace(s.Test.Course.LecturerId));
+            var spec = new Specification<Session>(s =>
+                    s.EndAt.HasValue &&
+                    s.EndAt.Value >= fromUtc &&
+                    s.EndAt.Value <= toUtc &&
+                    s.Status != SessionStatus.NotStarted)
+                .Include("Test.Course");
+
+            var sessions = (await _sesRepo.ListAsync(spec))
+                .Where(s => !string.IsNullOrWhiteSpace(s.Test?.Course?.LecturerId))
+                .ToList();
 
             if (!string.IsNullOrWhiteSpace(lecturerId))
             {
-                sessionsQuery = sessionsQuery.Where(s => s.Test != null &&
-                                                         s.Test.Course != null &&
-                                                         s.Test.Course.LecturerId == lecturerId);
+                sessions = sessions.Where(s => s.Test?.Course?.LecturerId == lecturerId).ToList();
             }
 
-            var sessions = await sessionsQuery.ToListAsync();
             if (!sessions.Any())
                 return new LecturerPerformanceVm();
 
@@ -478,9 +436,8 @@ namespace UniTestSystem.Application
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
 
-            var lecturers = await _userRepo.Query()
-                .Where(u => lecturerIds.Contains(u.Id))
-                .ToDictionaryAsync(u => u.Id, u => u.Name ?? u.Email ?? u.Id);
+            var lecturers = (await _userRepo.GetAllAsync(u => lecturerIds.Contains(u.Id)))
+                .ToDictionary(u => u.Id, u => u.Name ?? u.Email ?? u.Id, StringComparer.Ordinal);
 
             var rows = sessions
                 .GroupBy(s => s.Test!.Course!.LecturerId)

@@ -2,23 +2,23 @@ using UniTestSystem.Application.Interfaces;
 // UniTestSystem.Controllers/FeedbackController.cs
 using System.Security.Claims;
 using UniTestSystem.Domain;
-using UniTestSystem.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using UniTestSystem.ViewModels.Feedback;
 
 namespace UniTestSystem.Controllers
 {
     [Authorize]
     public class FeedbackController : Controller
     {
-        private readonly IRepository<Feedback> _fRepo;
-        private readonly IRepository<Session> _sRepo;
-        private readonly IRepository<Test> _tRepo;
+        private readonly IEntityStore<Feedback> _fRepo;
+        private readonly IEntityStore<Session> _sRepo;
+        private readonly IEntityStore<Test> _tRepo;
 
         public FeedbackController(
-            IRepository<Feedback> fRepo,
-            IRepository<Session> sRepo,
-            IRepository<Test> tRepo)
+            IEntityStore<Feedback> fRepo,
+            IEntityStore<Session> sRepo,
+            IEntityStore<Test> tRepo)
         {
             _fRepo = fRepo;
             _sRepo = sRepo;
@@ -132,3 +132,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

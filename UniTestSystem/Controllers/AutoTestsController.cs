@@ -11,16 +11,16 @@ namespace UniTestSystem.Controllers
     public class AutoTestsController : Controller
     {
         private readonly ITestGenerationService _svc;
-        private readonly IRepository<Student> _sRepo;
-        private readonly IRepository<Test> _tRepo;
-        private readonly IRepository<Assessment> _asRepo;
+        private readonly IEntityStore<Student> _sRepo;
+        private readonly IEntityStore<Test> _tRepo;
+        private readonly IEntityStore<Assessment> _asRepo;
         private readonly INotificationService? _noti;
 
         public AutoTestsController(
             ITestGenerationService svc,
-            IRepository<Student> sRepo,
-            IRepository<Test> tRepo,
-            IRepository<Assessment> asRepo,
+            IEntityStore<Student> sRepo,
+            IEntityStore<Test> tRepo,
+            IEntityStore<Assessment> asRepo,
             INotificationService? noti = null)
         { _svc = svc; _sRepo = sRepo; _tRepo = tRepo; _asRepo = asRepo; _noti = noti; }
 
@@ -142,3 +142,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

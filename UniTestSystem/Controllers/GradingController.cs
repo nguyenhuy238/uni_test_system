@@ -1,9 +1,9 @@
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Domain;
-using UniTestSystem.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using UniTestSystem.ViewModels.Grading;
 
 namespace UniTestSystem.Controllers
 {

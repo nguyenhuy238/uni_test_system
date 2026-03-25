@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Domain;
@@ -26,20 +25,19 @@ namespace UniTestSystem.Application
 
         public async Task<List<ExamSchedule>> GetAllSchedulesAsync()
         {
-            return await _scheduleRepo.Query()
-                .Include(s => s.Test)
-                .Include(s => s.Course)
-                .Where(s => !s.IsDeleted)
-                .OrderBy(s => s.StartTime)
-                .ToListAsync();
+            var spec = new Specification<ExamSchedule>(s => !s.IsDeleted)
+                .Include(s => s.Test!)
+                .Include(s => s.Course!);
+            var schedules = await _scheduleRepo.ListAsync(spec);
+            return schedules.OrderBy(s => s.StartTime).ToList();
         }
 
         public async Task<ExamSchedule?> GetScheduleByIdAsync(string id)
         {
-            return await _scheduleRepo.Query()
-                .Include(s => s.Test)
-                .Include(s => s.Course)
-                .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted);
+            var spec = new Specification<ExamSchedule>(s => s.Id == id && !s.IsDeleted)
+                .Include(s => s.Test!)
+                .Include(s => s.Course!);
+            return await _scheduleRepo.FirstOrDefaultAsync(spec);
         }
 
         public async Task<bool> CreateScheduleAsync(ExamSchedule schedule)
@@ -94,40 +92,55 @@ namespace UniTestSystem.Application
 
         public async Task<bool> HasConflictAsync(string room, DateTime start, DateTime end, string? excludeId = null)
         {
-            return await _scheduleRepo.Query()
-                .AnyAsync(s => !s.IsDeleted && 
-                               s.Room == room && 
-                               s.Id != excludeId &&
-                               IsOverlapping(start, end, s.StartTime, s.EndTime));
+            return await _scheduleRepo.AnyAsync(s =>
+                !s.IsDeleted &&
+                s.Room == room &&
+                s.Id != excludeId &&
+                s.StartTime < end &&
+                s.EndTime > start);
         }
 
         public async Task<List<string>> GetConflictingStudentsAsync(string courseId, DateTime start, DateTime end, string? excludeScheduleId = null)
         {
-            // Get all students enrolled in the current course
-            var studentIds = await _enrollmentRepo.Query()
-                .Where(e => e.CourseId == courseId && !e.IsDeleted)
+            var studentIds = (await _enrollmentRepo.GetAllAsync(e => e.CourseId == courseId && !e.IsDeleted))
                 .Select(e => e.StudentId)
-                .ToListAsync();
+                .Distinct(StringComparer.Ordinal)
+                .ToHashSet(StringComparer.Ordinal);
 
             if (!studentIds.Any()) return new List<string>();
 
-            // Find if any of these students have another exam schedule at the same time
-            var conflictingStudents = await _enrollmentRepo.Query()
-                .Include(e => e.Course)
-                .Join(_scheduleRepo.Query(),
-                    e => e.CourseId,
-                    s => s.CourseId,
-                    (e, s) => new { e, s })
-                .Where(x => !x.s.IsDeleted &&
-                            studentIds.Contains(x.e.StudentId) &&
-                            x.e.CourseId != courseId && // Different course
-                            x.s.Id != excludeScheduleId &&
-                            IsOverlapping(start, end, x.s.StartTime, x.s.EndTime))
-                .Select(x => x.e.StudentId)
-                .Distinct()
-                .ToListAsync();
+            var candidateEnrollments = await _enrollmentRepo.GetAllAsync(e =>
+                !e.IsDeleted &&
+                studentIds.Contains(e.StudentId) &&
+                e.CourseId != courseId);
 
-            return conflictingStudents;
+            var candidateCourseIds = candidateEnrollments
+                .Select(e => e.CourseId)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            if (!candidateCourseIds.Any())
+            {
+                return new List<string>();
+            }
+
+            var conflictingSchedules = await _scheduleRepo.GetAllAsync(s =>
+                !s.IsDeleted &&
+                s.Id != excludeScheduleId &&
+                candidateCourseIds.Contains(s.CourseId) &&
+                s.StartTime < end &&
+                s.EndTime > start);
+
+            var conflictingCourseIds = conflictingSchedules
+                .Select(s => s.CourseId)
+                .Distinct(StringComparer.Ordinal)
+                .ToHashSet(StringComparer.Ordinal);
+
+            return candidateEnrollments
+                .Where(e => conflictingCourseIds.Contains(e.CourseId))
+                .Select(e => e.StudentId)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
         }
 
         public async Task<List<string>> GetConflictingLecturersAsync(string courseId, DateTime start, DateTime end, string? excludeScheduleId = null)
@@ -140,24 +153,24 @@ namespace UniTestSystem.Application
 
             var lecturerId = course.LecturerId;
 
-            var conflictingCourseIds = await _courseRepo.Query()
-                .Where(c => !c.IsDeleted && c.LecturerId == lecturerId)
+            var conflictingCourseIds = (await _courseRepo.GetAllAsync(c => !c.IsDeleted && c.LecturerId == lecturerId))
                 .Select(c => c.Id)
-                .ToListAsync();
+                .ToList();
 
             if (!conflictingCourseIds.Any())
             {
                 return new List<string>();
             }
 
-            var conflicted = await _scheduleRepo.Query()
-                .Where(s => !s.IsDeleted
-                            && s.Id != excludeScheduleId
-                            && conflictingCourseIds.Contains(s.CourseId)
-                            && IsOverlapping(start, end, s.StartTime, s.EndTime))
+            var conflicted = (await _scheduleRepo.GetAllAsync(s =>
+                !s.IsDeleted
+                && s.Id != excludeScheduleId
+                && conflictingCourseIds.Contains(s.CourseId)
+                && s.StartTime < end
+                && s.EndTime > start))
                 .Select(s => s.CourseId)
                 .Distinct()
-                .ToListAsync();
+                .ToList();
 
             return conflicted;
         }
@@ -166,11 +179,10 @@ namespace UniTestSystem.Application
         {
             var capacity = ResolveRoomCapacity(room);
 
-            var enrolledCount = await _enrollmentRepo.Query()
-                .Where(e => !e.IsDeleted && e.CourseId == courseId)
+            var enrolledCount = (await _enrollmentRepo.GetAllAsync(e => !e.IsDeleted && e.CourseId == courseId))
                 .Select(e => e.StudentId)
-                .Distinct()
-                .CountAsync();
+                .Distinct(StringComparer.Ordinal)
+                .Count();
 
             if (!capacity.HasValue)
             {
@@ -182,17 +194,22 @@ namespace UniTestSystem.Application
 
         public async Task<List<ExamSchedule>> GetSchedulesForStudentAsync(string studentId)
         {
-            var courseIds = await _enrollmentRepo.Query()
-                .Where(e => e.StudentId == studentId && !e.IsDeleted)
+            var courseIds = (await _enrollmentRepo.GetAllAsync(e => e.StudentId == studentId && !e.IsDeleted))
                 .Select(e => e.CourseId)
-                .ToListAsync();
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
 
-            return await _scheduleRepo.Query()
-                .Include(s => s.Test)
-                .Include(s => s.Course)
-                .Where(s => !s.IsDeleted && courseIds.Contains(s.CourseId))
-                .OrderBy(s => s.StartTime)
-                .ToListAsync();
+            if (!courseIds.Any())
+            {
+                return new List<ExamSchedule>();
+            }
+
+            var spec = new Specification<ExamSchedule>(s => !s.IsDeleted && courseIds.Contains(s.CourseId))
+                .Include(s => s.Test!)
+                .Include(s => s.Course!);
+
+            var schedules = await _scheduleRepo.ListAsync(spec);
+            return schedules.OrderBy(s => s.StartTime).ToList();
         }
 
         private async Task ValidateBusinessConflictsAsync(

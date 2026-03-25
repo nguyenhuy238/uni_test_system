@@ -11,14 +11,14 @@ namespace UniTestSystem.Controllers.Api.Admin;
 [Route("api/admin/sessions")]
 public class AdminSessionsController : ControllerBase
 {
-    private readonly IRepository<Session> _sRepo;
-    private readonly IRepository<DomainUser> _uRepo;
-    private readonly IRepository<Test> _tRepo;
+    private readonly IEntityStore<Session> _sRepo;
+    private readonly IEntityStore<DomainUser> _uRepo;
+    private readonly IEntityStore<Test> _tRepo;
 
     public AdminSessionsController(
-        IRepository<Session> sRepo,
-        IRepository<DomainUser> uRepo,
-        IRepository<Test> tRepo)
+        IEntityStore<Session> sRepo,
+        IEntityStore<DomainUser> uRepo,
+        IEntityStore<Test> tRepo)
     {
         _sRepo = sRepo;
         _uRepo = uRepo;
@@ -67,3 +67,4 @@ public class AdminSessionsController : ControllerBase
         return Ok(new { message = "Session terminated and deleted." });
     }
 }
+

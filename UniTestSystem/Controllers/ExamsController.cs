@@ -14,13 +14,13 @@ namespace UniTestSystem.Controllers
     {
         private readonly IExamScheduleService _scheduleService;
         private readonly IAcademicService _academicService;
-        private readonly IRepository<Test> _testRepo;
+        private readonly IEntityStore<Test> _testRepo;
         private readonly ExamAccessTokenService _examAccessTokenService;
 
         public ExamsController(
             IExamScheduleService scheduleService, 
             IAcademicService academicService,
-            IRepository<Test> testRepo,
+            IEntityStore<Test> testRepo,
             ExamAccessTokenService examAccessTokenService)
         {
             _scheduleService = scheduleService;
@@ -166,3 +166,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

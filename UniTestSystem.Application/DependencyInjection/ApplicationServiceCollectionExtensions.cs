@@ -25,6 +25,10 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<ITestGenerationService, TestGenerationService>();
         services.AddScoped<IAcademicService, AcademicService>();
         services.AddScoped<IBulkImportService, BulkImportService>();
+        services.AddScoped<ITestAdministrationService, TestAdministrationService>();
+        services.AddScoped<IUserAdministrationService, UserAdministrationService>();
+        services.AddScoped<IReportsUseCaseService, ReportsUseCaseService>();
+        services.AddScoped(typeof(IEntityStore<>), typeof(EntityStore<>));
 
         return services;
     }

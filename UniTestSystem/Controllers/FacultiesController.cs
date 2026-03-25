@@ -10,11 +10,11 @@ namespace UniTestSystem.Controllers
     [Authorize(Policy = PermissionCodes.Org_Manage)]
     public class FacultiesController : Controller
     {
-        private readonly IRepository<Faculty> _facultyRepo;
-        private readonly IRepository<StudentClass> _classRepo;
+        private readonly IEntityStore<Faculty> _facultyRepo;
+        private readonly IEntityStore<StudentClass> _classRepo;
         private readonly IPermissionService _perms;
 
-        public FacultiesController(IRepository<Faculty> facultyRepo, IRepository<StudentClass> classRepo, IPermissionService perms)
+        public FacultiesController(IEntityStore<Faculty> facultyRepo, IEntityStore<StudentClass> classRepo, IPermissionService perms)
         { _facultyRepo = facultyRepo; _classRepo = classRepo; _perms = perms; }
 
         private bool IsAdmin => User?.IsInRole(nameof(Role.Admin)) == true;
@@ -145,3 +145,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+
