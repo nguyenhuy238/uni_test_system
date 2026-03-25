@@ -1,79 +1,65 @@
 @using UniTestSystem.Domain
 @{
     ViewData["Title"] = "Examination in Progress";
+    Layout = "_ExamLayout";
     var testId = ViewBag.TestId as string;
 }
 
-<div class="container-fluid py-4 bg-light min-vh-100">
-    <div class="row justify-content-center">
-        <!-- Main Question Area -->
-        <div class="col-lg-8">
-            <div class="card shadow-sm border-0 mb-4">
-                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
-                    <h5 class="mb-0 fw-bold text-primary" id="testTitle">Loading test...</h5>
-                    <div class="d-flex align-items-center bg-dark text-white px-3 py-1 rounded-pill">
-                        <i class="bi bi-clock me-2"></i>
-                        <span id="timer" class="fs-5 font-monospace">--:--</span>
-                    </div>
+<div class="exam-room-shell">
+    <div class="exam-room-main">
+        <section class="exam-question-panel ui-surface">
+            <header class="exam-question-header">
+                <h5 class="mb-0 fw-bold" id="testTitle">Loading test...</h5>
+                <div class="exam-progress-pill">
+                    Question <span id="currentQNum">0</span> / <span id="totalQNum">0</span>
                 </div>
-                
-                <div class="card-body p-4" id="questionContainer" style="min-height: 400px;">
-                    <!-- Question Content -->
-                    <div class="text-center py-5" id="loader">
-                        <div class="spinner-border text-primary" role="status"></div>
-                        <p class="mt-3 text-muted">Preparing your examination questions...</p>
-                    </div>
-                </div>
+            </header>
 
-                <div class="card-footer bg-white py-3 border-top">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <button id="prevBtn" class="btn btn-outline-secondary px-4" onclick="prevQuestion()" disabled>
-                            <i class="bi bi-arrow-left me-1"></i> Previous
-                        </button>
-                        
-                        <div class="text-muted small fw-bold">
-                            Question <span id="currentQNum">0</span> of <span id="totalQNum">0</span>
-                        </div>
-                        
-                        <div>
-                            <button id="nextBtn" class="btn btn-primary px-4" onclick="nextQuestion()" disabled>
-                                Next <i class="bi bi-arrow-right ms-1"></i>
-                            </button>
-                            <button id="submitBtn" class="btn btn-success px-4 d-none" onclick="confirmSubmit()">
-                                <i class="bi bi-check2-circle me-1"></i> Submit Test
-                            </button>
-                        </div>
-                    </div>
+            <div class="exam-question-body" id="questionContainer">
+                <div class="text-center py-5" id="loader">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-3 text-muted">Preparing your examination questions...</p>
                 </div>
             </div>
-        </div>
 
-        <!-- Sidebar Navigation -->
-        <div class="col-lg-3">
-            <div class="card shadow-sm border-0 sticky-top" style="top: 20px;">
-                <div class="card-header bg-white py-3 border-bottom">
-                    <h6 class="mb-0 fw-bold"><i class="bi bi-grid-3x3-gap me-2"></i>Question Palette</h6>
+            <footer class="exam-question-footer">
+                <button id="prevBtn" class="btn btn-outline-secondary" onclick="prevQuestion()" disabled>
+                    <i class="bi bi-arrow-left me-1"></i> Previous
+                </button>
+                <div class="d-flex gap-2">
+                    <button id="nextBtn" class="btn ui-btn-primary text-white" onclick="nextQuestion()" disabled>
+                        Next <i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                    <button id="submitBtn" class="btn btn-success d-none" onclick="confirmSubmit()">
+                        <i class="bi bi-check2-circle me-1"></i> Submit Test
+                    </button>
                 </div>
-                <div class="card-body p-3">
-                    <div id="qPalette" class="d-flex flex-wrap gap-2 justify-content-start">
-                        <!-- Palette buttons -->
-                    </div>
-                    
-                    <hr class="my-4">
-                    
-                    <div class="alert alert-warning border-0 small mb-0">
-                        <i class="bi bi-shield-lock-fill me-2"></i>
-                        <strong>Secure Mode Active</strong>
-                        <ul class="mt-2 mb-0 ps-3">
-                            <li>Tab switching is monitored</li>
-                            <li>Right-click is disabled</li>
-                            <li>Copy/Paste is disabled</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
+            </footer>
+        </section>
     </div>
+
+    <aside class="exam-room-sidebar">
+        <section class="ui-surface exam-right-panel sticky-top">
+            <div class="exam-timer-wrap" id="timerWrap">
+                <span class="text-uppercase small fw-semibold">Time Remaining</span>
+                <div class="exam-timer" id="timer">--:--</div>
+            </div>
+
+            <div class="exam-nav-header">
+                <span class="fw-semibold">Question Navigator</span>
+            </div>
+            <div id="qPalette" class="exam-q-grid"></div>
+
+            <div class="exam-security-note mt-3">
+                <strong>Secure Mode Active</strong>
+                <div class="small mt-1">Tab switching, copy/paste, and shortcuts are monitored.</div>
+            </div>
+
+            <button class="btn btn-danger w-100 mt-3" onclick="confirmSubmit()">
+                <i class="bi bi-send-check me-1"></i> Submit Test
+            </button>
+        </section>
+    </aside>
 </div>
 
 <!-- Anti-cheat Alert Modal -->
@@ -151,22 +137,22 @@
                 $('#nextBtn').prop('disabled', false);
             }
 
-            let html = `<div class="mb-4"><h5 class="fw-bold line-height-base">${q.content}</h5></div>`;
+            let html = `<div class="mb-4"><h4 class="fw-bold exam-question">${q.content}</h4></div>`;
             
             if (q.type === 'MCQ' || q.type === 'TrueFalse') {
-                html += '<div class="list-group border-0">';
+                html += '<div class="exam-option-list">';
                 q.options.forEach(opt => {
                     const isChecked = userAnswers[q.id] === opt.content ? 'checked' : '';
                     html += `
-                        <label class="list-group-item list-group-item-action border rounded mb-2 py-3 px-4 d-flex align-items-center cursor-pointer">
-                            <input class="form-check-input me-3" type="radio" name="q_${q.id}" value="${opt.content}" ${isChecked} onchange="saveAnswer('${q.id}', this.value)">
+                        <label class="exam-option-item cursor-pointer">
+                            <input class="form-check-input me-3 mt-0" type="radio" name="q_${q.id}" value="${opt.content}" ${isChecked} onchange="saveAnswer('${q.id}', this.value)">
                             <span>${opt.content}</span>
                         </label>`;
                 });
                 html += '</div>';
             } else if (q.type === 'Essay') {
                 const val = userAnswers[q.id] || '';
-                html += `<textarea class="form-control shadow-sm" rows="10" placeholder="Type your answer here..." oninput="saveAnswer('${q.id}', this.value)">${val}</textarea>`;
+                html += `<textarea class="form-control shadow-sm exam-essay" rows="10" placeholder="Type your answer here..." oninput="saveAnswer('${q.id}', this.value)">${val}</textarea>`;
             }
 
             $('#questionContainer').html(html);
@@ -189,7 +175,7 @@
         function renderPalette() {
             let html = '';
             questions.forEach((q, i) => {
-                html += `<button id="pal_${i}" class="btn btn-sm btn-outline-secondary rounded-circle" style="width: 40px; height: 40px;" onclick="showQuestion(${i})">${i + 1}</button>`;
+                html += `<button id="pal_${i}" class="exam-q-btn" onclick="showQuestion(${i})">${i + 1}</button>`;
             });
             $('#qPalette').html(html);
         }
@@ -197,14 +183,12 @@
         function updatePaletteActive() {
             questions.forEach((q, i) => {
                 const btn = $(`#pal_${i}`);
-                btn.removeClass('btn-primary btn-outline-primary btn-success text-white');
+                btn.removeClass('is-current is-answered');
                 
                 if (i === currentIndex) {
-                    btn.addClass('btn-primary text-white');
+                    btn.addClass('is-current');
                 } else if (userAnswers[q.id]) {
-                    btn.addClass('btn-success text-white');
-                } else {
-                    btn.addClass('btn-outline-secondary');
+                    btn.addClass('is-answered');
                 }
             });
         }
@@ -221,7 +205,7 @@
                 $('#timer').text(`${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
                 
                 if (timerSeconds < 300) { // Red timer if < 5 mins
-                    $('#timer').parent().removeClass('bg-dark').addClass('bg-danger');
+                    $('#timerWrap').addClass('time-critical');
                 }
             }, 1000);
         }
@@ -308,7 +292,99 @@
     
     <style>
         .cursor-pointer { cursor: pointer; }
-        .line-height-base { line-height: 1.6; }
-        .btn-outline-secondary:hover { color: #fff; }
+        .exam-room-shell {
+            min-height: 100vh;
+            background: var(--color-bg);
+            display: grid;
+            grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr);
+            gap: 20px;
+            padding: 20px;
+        }
+        .exam-room-main { min-width: 0; }
+        .exam-question-panel { min-height: calc(100vh - 40px); display: flex; flex-direction: column; }
+        .exam-question-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        .exam-progress-pill {
+            background: #dbeafe;
+            color: var(--color-primary);
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        .exam-question-body { padding: 24px; flex: 1; overflow: auto; }
+        .exam-question-footer {
+            border-top: 1px solid #e2e8f0;
+            padding: 14px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .exam-right-panel { top: 20px; padding: 16px; }
+        .exam-timer-wrap {
+            border-radius: 8px;
+            background: #0f172a;
+            color: #fff;
+            padding: 14px;
+            margin-bottom: 12px;
+            transition: background-color 180ms ease;
+        }
+        .exam-timer-wrap.time-critical { background: var(--color-danger); }
+        .exam-timer { font-size: 2rem; font-weight: 700; line-height: 1; margin-top: 4px; }
+        .exam-nav-header { margin: 8px 0 10px; }
+        .exam-q-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+        .exam-q-btn {
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #fff;
+            color: var(--color-text);
+            font-weight: 600;
+            min-height: 36px;
+        }
+        .exam-q-btn.is-current {
+            background: var(--color-primary);
+            color: #fff;
+            border-color: var(--color-primary);
+        }
+        .exam-q-btn.is-answered {
+            background: var(--color-success);
+            color: #fff;
+            border-color: var(--color-success);
+        }
+        .exam-option-list { display: grid; gap: 10px; }
+        .exam-option-item {
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: flex-start;
+            font-size: 1.05rem;
+            line-height: 1.5;
+            background: #fff;
+        }
+        .exam-option-item:hover { border-color: var(--color-secondary); background: #f8fbff; }
+        .exam-security-note {
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            background: #fff7ed;
+            color: #92400e;
+            border-radius: 8px;
+            padding: 10px 12px;
+        }
+        .exam-essay { font-size: 1rem; line-height: 1.6; }
+        @@media (max-width: 992px) {
+            .exam-room-shell {
+                grid-template-columns: 1fr;
+                padding: 12px;
+                gap: 12px;
+            }
+            .exam-question-panel { min-height: auto; }
+            .exam-right-panel { position: static !important; top: auto; }
+        }
     </style>
 }

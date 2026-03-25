@@ -13,6 +13,7 @@ namespace UniTestSystem.AdminApp;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
+    private bool _isSidebarCollapsed;
 
     public MainWindow(MainViewModel viewModel)
     {
@@ -72,7 +73,26 @@ public partial class MainWindow : Window
         }
 
         content.Opacity = 0;
-        var animation = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220));
+        var animation = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180));
         content.BeginAnimation(OpacityProperty, animation);
+    }
+
+    private void SidebarToggle_Click(object sender, RoutedEventArgs e)
+    {
+        _isSidebarCollapsed = !_isSidebarCollapsed;
+        SidebarColumn.Width = _isSidebarCollapsed ? new GridLength(76) : new GridLength(220);
+    }
+
+    private void NavigateTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is null)
+        {
+            return;
+        }
+
+        if (int.TryParse(button.Tag.ToString(), out var index) && index >= 0 && index < MainTabControl.Items.Count)
+        {
+            MainTabControl.SelectedIndex = index;
+        }
     }
 }

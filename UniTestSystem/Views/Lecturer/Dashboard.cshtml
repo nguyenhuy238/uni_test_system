@@ -4,68 +4,111 @@
     var name = User.Identity?.Name ?? "Lecturer";
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h2 class="mb-1">Chào mừng Giảng viên, @name!</h2>
-        <p class="text-muted">UniTestSystem Lecturer Dashboard</p>
-    </div>
-    <div class="text-end">
-        <span class="badge bg-success">Lecturer</span>
-    </div>
-</div>
+<div class="lecturer-shell">
+    <aside class="lecturer-sidebar">
+        <div class="lecturer-brand">Lecturer Panel</div>
+        <a href="/Lecturer/Dashboard" class="lecturer-link active">Dashboard</a>
+        <a href="/Questions" class="lecturer-link">Question Bank</a>
+        <a href="/Tests" class="lecturer-link">Tests</a>
+        <a href="/Reports" class="lecturer-link">Reports</a>
+    </aside>
 
-<div class="row g-4">
-    <div class="col-md-4">
-        <div class="card h-100 shadow-sm border-0 bg-primary bg-opacity-10 text-primary">
-            <div class="card-body text-center py-4">
-                <i class="bi bi-question-circle fs-1 mb-2"></i>
-                <h3 class="display-6 fw-bold">@ViewBag.TotalQuestions</h3>
-                <p class="card-text fw-bold">Tổng số Câu hỏi</p>
-                <a href="/questions" class="btn btn-primary btn-sm mt-2">Quản lý câu hỏi</a>
+    <div class="lecturer-main">
+        <div class="ui-surface lecturer-topbar">
+            <div>
+                <h2 class="mb-1">Chào mừng Giảng viên, @name</h2>
+                <p class="text-muted mb-0">Professional Higher Education Dashboard</p>
             </div>
+            <span class="badge bg-success px-3 py-2">Lecturer</span>
         </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card h-100 shadow-sm border-0 bg-info bg-opacity-10 text-info">
-            <div class="card-body text-center py-4">
-                <i class="bi bi-file-earmark-text fs-1 mb-2"></i>
-                <h3 class="display-6 fw-bold">@ViewBag.TotalTests</h3>
-                <p class="card-text fw-bold">Bài thi đã tạo</p>
-                <a href="/tests" class="btn btn-info btn-sm text-white mt-2">Quản lý bài thi</a>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card h-100 shadow-sm border-0 bg-warning bg-opacity-10 text-warning">
-            <div class="card-body text-center py-4">
-                <i class="bi bi-clock-history fs-1 mb-2"></i>
-                <h3 class="display-6 fw-bold">@ViewBag.PendingQuestions</h3>
-                <p class="card-text fw-bold">Câu hỏi chờ duyệt</p>
-                <a href="/questions?Status=Pending" class="btn btn-warning btn-sm text-white mt-2">Xem danh sách</a>
-            </div>
-        </div>
-    </div>
-</div>
 
-<div class="row mt-4">
-    <div class="col-md-6">
-        <div class="card shadow-sm border-0">
-            <div class="card-header bg-white border-bottom-0 pt-4">
-                <h5 class="card-title"><i class="bi bi-lightning-charge me-2 text-primary"></i>Thao tác nhanh</h5>
+        <div class="row g-3 mt-1">
+            <div class="col-md-4">
+                <div class="ui-card h-100">
+                    <div class="small text-muted">Tổng số câu hỏi</div>
+                    <div class="display-5 fw-bold text-primary">@ViewBag.TotalQuestions</div>
+                    <a href="/Questions" class="btn btn-outline-primary mt-2">Quản lý câu hỏi</a>
+                </div>
             </div>
-            <div class="card-body">
-                <div class="list-group list-group-flush">
-                    <a href="/questions/create" class="list-group-item list-group-item-action border-0 px-0">
-                        <i class="bi bi-plus-circle me-2"></i>Tạo câu hỏi mới
-                    </a>
-                    <a href="/tests/create" class="list-group-item list-group-item-action border-0 px-0">
-                        <i class="bi bi-file-plus me-2"></i>Thiết kế bài thi mới
-                    </a>
-                    <a href="/reports" class="list-group-item list-group-item-action border-0 px-0">
-                        <i class="bi bi-bar-chart me-2"></i>Xem báo cáo học thuật
-                    </a>
+            <div class="col-md-4">
+                <div class="ui-card h-100">
+                    <div class="small text-muted">Bài thi đã tạo</div>
+                    <div class="display-5 fw-bold" style="color:var(--color-secondary)">@ViewBag.TotalTests</div>
+                    <a href="/Tests" class="btn btn-outline-primary mt-2">Quản lý bài thi</a>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="ui-card h-100">
+                    <div class="small text-muted">Câu hỏi chờ duyệt</div>
+                    <div class="display-5 fw-bold" style="color:var(--color-warning)">@ViewBag.PendingQuestions</div>
+                    <a href="/Questions?Status=Pending" class="btn btn-outline-primary mt-2">Xem danh sách</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mt-1">
+            <div class="col-lg-7">
+                <div class="ui-card h-100">
+                    <h5 class="fw-bold mb-3">Thao tác nhanh</h5>
+                    <div class="d-grid gap-2">
+                        <a href="/Questions/Create" class="btn btn-outline-secondary text-start">Tạo câu hỏi mới</a>
+                        <a href="/Tests/Create" class="btn btn-outline-secondary text-start">Thiết kế bài thi mới</a>
+                        <a href="/Reports" class="btn btn-outline-secondary text-start">Xem báo cáo học thuật</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="ui-card h-100">
+                    <h5 class="fw-bold mb-3">Chất lượng ngân hàng đề</h5>
+                    <div class="small text-muted mb-2">Tỷ lệ câu hỏi đã duyệt</div>
+                    <div class="progress" style="height:10px;">
+                        @{ 
+                            var total = (int?)ViewBag.TotalQuestions ?? 0;
+                            var pending = (int?)ViewBag.PendingQuestions ?? 0;
+                            var approved = Math.Max(0, total - pending);
+                            var approvedRate = total > 0 ? (approved * 100 / total) : 0;
+                        }
+                        <div class="progress-bar" role="progressbar" style="width:@approvedRate%; background:var(--color-success);"></div>
+                    </div>
+                    <div class="mt-2 fw-semibold">@approvedRate% đã duyệt</div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    .lecturer-shell {
+        display: grid;
+        grid-template-columns: 240px minmax(0, 1fr);
+        gap: 16px;
+        min-height: calc(100vh - 180px);
+    }
+    .lecturer-sidebar {
+        background: var(--color-primary);
+        border-radius: 8px;
+        padding: 16px 12px;
+        color: #fff;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .lecturer-brand { font-weight: 700; padding: 8px; }
+    .lecturer-link {
+        color: #dbeafe;
+        text-decoration: none;
+        border-radius: 6px;
+        padding: 10px;
+    }
+    .lecturer-link:hover,
+    .lecturer-link.active { background: rgba(255,255,255,0.18); color: #fff; }
+    .lecturer-topbar {
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    @@media (max-width: 992px) {
+        .lecturer-shell { grid-template-columns: 1fr; }
+    }
+</style>

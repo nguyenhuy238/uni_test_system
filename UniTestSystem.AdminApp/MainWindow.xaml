@@ -9,51 +9,99 @@
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource AppBackgroundBrush}"
         Foreground="{DynamicResource AppForegroundBrush}">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F4F7FB"/>
+        <SolidColorBrush x:Key="AppForegroundBrush" Color="#334155"/>
+        <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FFFFFF"/>
+
+        <Style x:Key="SidebarNavButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#E5EEFF"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="NavRoot"
+                                CornerRadius="4"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="NavRoot" Property="Background" Value="#4A6CA8"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="NavRoot" Property="Opacity" Value="0.86"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="SidebarColumn" Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
-        <Grid.Resources>
-            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F5F8FC"/>
-            <SolidColorBrush x:Key="AppForegroundBrush" Color="#1F2937"/>
-            <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FFFFFF"/>
-        </Grid.Resources>
+        <Border Grid.Row="0" Grid.Column="1" Margin="10,10,10,8" Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="8" Padding="12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Content="☰" Width="40" Height="36" Click="SidebarToggle_Click"/>
+                <TextBox Grid.Column="1" Margin="12,0" Height="36" VerticalContentAlignment="Center" Text="Search modules, schedules, users..." Foreground="#64748B"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding CurrentUserName}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <Border Background="#ECF3FF" CornerRadius="999" Padding="10,4">
+                        <TextBlock Text="{Binding CurrentUserRole}" Foreground="#365FA8" FontWeight="SemiBold"/>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
 
-        <!-- Menu Bar -->
-        <Menu Grid.Row="0">
-            <MenuItem Header="File">
-                <MenuItem Header="Exit" Click="Exit_Click"/>
-            </MenuItem>
-            <MenuItem Header="Actions">
-                <MenuItem Header="Refresh Data" Command="{Binding LoadDataCommand}"/>
-                <MenuItem Header="Toggle Dark/Light" Command="{Binding ToggleThemeCommand}"/>
-            </MenuItem>
-            <MenuItem Header="{Binding CurrentUserName, StringFormat='Welcome, {0}'}" IsEnabled="False" Foreground="DodgerBlue"/>
-            <MenuItem Header="{Binding CurrentUserRole, StringFormat='Role: {0}'}" IsEnabled="False"/>
-        </Menu>
-
-        <!-- Toolbar -->
-        <ToolBar Grid.Row="1">
-            <Button Content="Refresh" Command="{Binding LoadDataCommand}" Width="80" Height="30"/>
-            <Separator/>
-            <Button Content="+ Test" Command="{Binding AddTestCommand}" Width="80" Height="30" Background="#E3F2FD" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}"/>
-            <Button Content="+ User" Command="{Binding AddUserCommand}" Width="80" Height="30" Background="#F1F8E9" Visibility="{Binding CanManageUsersRoles, Converter={StaticResource BoolToVis}}"/>
-            <Button Content="+ Question" Command="{Binding AddQuestionCommand}" Width="80" Height="30" Background="#FFF3E0" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}"/>
-            <Separator/>
-            <Button Content="Export Excel" Command="{Binding ExportXlsxCommand}" Width="80" Height="30"/>
-            <Button Content="Export PDF" Command="{Binding ExportPdfCommand}" Width="80" Height="30"/>
-            <Separator/>
-            <Button Content="Export Periodic" Command="{Binding ExportPeriodicReportCommand}" Width="110" Height="30"/>
-            <Button Content="Dark/Light" Command="{Binding ToggleThemeCommand}" Width="90" Height="30"/>
-        </ToolBar>
+        <Border Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Margin="10" Background="#365FA8" CornerRadius="8" Padding="10" x:Name="SidebarPanel">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="UniTest Admin" Foreground="White" FontSize="18" FontWeight="Bold" Margin="8,6,8,16"/>
+                    <Button Content="Dashboard" Style="{StaticResource SidebarNavButton}" Tag="0" Click="NavigateTab_Click"/>
+                    <Button Content="Tests" Style="{StaticResource SidebarNavButton}" Tag="1" Click="NavigateTab_Click"/>
+                    <Button Content="Questions" Style="{StaticResource SidebarNavButton}" Tag="2" Click="NavigateTab_Click"/>
+                    <Button Content="Users &amp; Roles" Style="{StaticResource SidebarNavButton}" Tag="3" Click="NavigateTab_Click" Visibility="{Binding CanManageUsersRoles, Converter={StaticResource BoolToVis}}"/>
+                    <Button Content="Sessions" Style="{StaticResource SidebarNavButton}" Tag="4" Click="NavigateTab_Click" Visibility="{Binding CanManageAcademic, Converter={StaticResource BoolToVis}}"/>
+                    <Button Content="Faculties" Style="{StaticResource SidebarNavButton}" Tag="5" Click="NavigateTab_Click" Visibility="{Binding CanManageAcademic, Converter={StaticResource BoolToVis}}"/>
+                    <Button Content="Classes" Style="{StaticResource SidebarNavButton}" Tag="6" Click="NavigateTab_Click" Visibility="{Binding CanManageAcademic, Converter={StaticResource BoolToVis}}"/>
+                    <Button Content="Courses" Style="{StaticResource SidebarNavButton}" Tag="7" Click="NavigateTab_Click" Visibility="{Binding CanManageAcademic, Converter={StaticResource BoolToVis}}"/>
+                    <Button Content="Enrollments" Style="{StaticResource SidebarNavButton}" Tag="8" Click="NavigateTab_Click" Visibility="{Binding CanManageAcademic, Converter={StaticResource BoolToVis}}"/>
+                    <Button Content="Audit Log" Style="{StaticResource SidebarNavButton}" Tag="9" Click="NavigateTab_Click" Visibility="{Binding CanViewAudit, Converter={StaticResource BoolToVis}}"/>
+                    <Button Content="Exam Scheduling" Style="{StaticResource SidebarNavButton}" Tag="10" Click="NavigateTab_Click" Visibility="{Binding CanManageScheduling, Converter={StaticResource BoolToVis}}"/>
+                    <Button Content="Settings" Style="{StaticResource SidebarNavButton}" Tag="11" Click="NavigateTab_Click" Visibility="{Binding CanViewSettings, Converter={StaticResource BoolToVis}}"/>
+                    <Button Content="Backup/Restore" Style="{StaticResource SidebarNavButton}" Tag="12" Click="NavigateTab_Click" Visibility="{Binding CanViewMaintenance, Converter={StaticResource BoolToVis}}"/>
+                    <Separator Margin="6,10"/>
+                    <Button Content="Refresh Data" Style="{StaticResource SidebarNavButton}" Command="{Binding LoadDataCommand}"/>
+                    <Button Content="Toggle Theme" Style="{StaticResource SidebarNavButton}" Command="{Binding ToggleThemeCommand}"/>
+                    <Button Content="Exit" Style="{StaticResource SidebarNavButton}" Click="Exit_Click"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
 
         <!-- Main Content -->
-        <TabControl Grid.Row="2" x:Name="MainTabControl" Background="{DynamicResource PanelBackgroundBrush}" SelectionChanged="MainTabControl_SelectionChanged">
+        <TabControl Grid.Row="1" Grid.Column="1" Margin="10,0,10,10" x:Name="MainTabControl" Background="{DynamicResource PanelBackgroundBrush}" SelectionChanged="MainTabControl_SelectionChanged">
             <!-- Dashboard Tab -->
             <TabItem Header="Dashboard">
                 <ScrollViewer>
@@ -607,62 +655,110 @@
 
             <!-- Exam Scheduling Tab -->
             <TabItem Header="Exam Scheduling" Visibility="{Binding CanManageScheduling, Converter={StaticResource BoolToVis}}">
-                <Grid Margin="10">
+                <Grid Margin="14">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="2*"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <Grid Grid.Column="0" Margin="0,0,10,0">
+                    <Grid Grid.Column="0" Margin="0,0,12,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-                            <Button Content="Create Single" Command="{Binding CreateSingleScheduleCommand}" Width="100" Margin="0,0,8,0"/>
-                            <Button Content="Create Bulk Queue" Command="{Binding CreateBulkScheduleCommand}" Width="120" Margin="0,0,8,0"/>
-                            <Button Content="Export CSV" Command="{Binding ExportScheduleCsvCommand}" Width="90" Margin="0,0,8,0"/>
-                            <Button Content="Delete Selected" Command="{Binding DeleteScheduleCommand}" Width="110"/>
-                        </StackPanel>
+
+                        <Border Grid.Row="0" Background="{DynamicResource PanelBackgroundBrush}" Padding="12" CornerRadius="8" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="2*"/>
+                                    <ColumnDefinition Width="1.2*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Margin="0,0,10,0" Text="Search by test title, course, room..." Foreground="#64748B" VerticalContentAlignment="Center"/>
+                                <ComboBox Grid.Column="1" Margin="0,0,10,0">
+                                    <ComboBoxItem Content="All Types" IsSelected="True"/>
+                                    <ComboBoxItem Content="Midterm"/>
+                                    <ComboBoxItem Content="Final"/>
+                                    <ComboBoxItem Content="Quiz"/>
+                                </ComboBox>
+                                <Button Grid.Column="2" Content="Refresh" Command="{Binding LoadDataCommand}" Width="90"/>
+                            </Grid>
+                        </Border>
+
                         <DataGrid Grid.Row="1" ItemsSource="{Binding ExamSchedules}" SelectedItem="{Binding SelectedExamSchedule}" AutoGenerateColumns="False" IsReadOnly="True">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Course" Binding="{Binding Course.Name}" Width="*"/>
                                 <DataGridTextColumn Header="Test" Binding="{Binding Test.Title}" Width="*"/>
-                                <DataGridTextColumn Header="Room" Binding="{Binding Room}" Width="120"/>
-                                <DataGridTextColumn Header="Start" Binding="{Binding StartTime, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="150"/>
-                                <DataGridTextColumn Header="End" Binding="{Binding EndTime, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="150"/>
+                                <DataGridTextColumn Header="Room" Binding="{Binding Room}" Width="110"/>
+                                <DataGridTextColumn Header="Start" Binding="{Binding StartTime, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="160"/>
+                                <DataGridTextColumn Header="End" Binding="{Binding EndTime, StringFormat=\{0:yyyy-MM-dd HH:mm\}}" Width="160"/>
                                 <DataGridTextColumn Header="Type" Binding="{Binding ExamType}" Width="100"/>
                             </DataGrid.Columns>
                         </DataGrid>
+
+                        <Grid Grid.Row="2" Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                <Button Content="Create Single" Command="{Binding CreateSingleScheduleCommand}" Width="110" Margin="0,0,8,0"/>
+                                <Button Content="Create Bulk" Command="{Binding CreateBulkScheduleCommand}" Width="110" Margin="0,0,8,0"/>
+                                <Button Content="Export CSV" Command="{Binding ExportScheduleCsvCommand}" Width="100" Margin="0,0,8,0"/>
+                                <Button Content="Delete Selected" Command="{Binding DeleteScheduleCommand}" Width="120"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Content="&lt;" Width="32" Margin="0,0,6,0"/>
+                                <TextBlock Text="Page 1 / 1" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <Button Content="&gt;" Width="32"/>
+                            </StackPanel>
+                        </Grid>
                     </Grid>
 
-                    <ScrollViewer Grid.Column="1">
-                        <StackPanel>
-                            <TextBlock Text="Bulk Scheduling Form" FontSize="16" FontWeight="Bold" Margin="0,0,0,12"/>
-                            <Label Content="Test"/>
-                            <ComboBox ItemsSource="{Binding Tests}" SelectedValuePath="Id" DisplayMemberPath="Title" SelectedValue="{Binding SelectedScheduleTestId}" Margin="0,0,0,8"/>
-                            <Label Content="Course"/>
-                            <ComboBox ItemsSource="{Binding Courses}" SelectedValuePath="Id" DisplayMemberPath="Name" SelectedValue="{Binding SelectedScheduleCourseId}" Margin="0,0,0,8"/>
-                            <Label Content="Room"/>
-                            <TextBox Text="{Binding SelectedScheduleRoom, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
-                            <Label Content="Start Time"/>
-                            <TextBox Text="{Binding SelectedScheduleStartTime, StringFormat=\{0:yyyy-MM-dd HH:mm\}, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
-                            <Label Content="End Time"/>
-                            <TextBox Text="{Binding SelectedScheduleEndTime, StringFormat=\{0:yyyy-MM-dd HH:mm\}, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8"/>
-                            <Label Content="Exam Type"/>
-                            <TextBox Text="{Binding SelectedScheduleExamType, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12"/>
-                            <Button Content="+ Add To Queue" Command="{Binding AddScheduleDraftCommand}" Width="140" Margin="0,0,0,8"/>
-                            <Button Content="Remove Queue Item" Command="{Binding RemoveScheduleDraftCommand}" Width="140" Margin="0,0,0,12"/>
-                            <TextBlock Text="Queue" FontWeight="Bold" Margin="0,8,0,6"/>
-                            <DataGrid ItemsSource="{Binding ScheduleDrafts}" SelectedItem="{Binding SelectedScheduleDraft}" AutoGenerateColumns="False" Height="180">
-                                <DataGrid.Columns>
-                                    <DataGridTextColumn Header="CourseId" Binding="{Binding CourseId}" Width="*"/>
-                                    <DataGridTextColumn Header="TestId" Binding="{Binding TestId}" Width="*"/>
-                                    <DataGridTextColumn Header="Room" Binding="{Binding Room}" Width="80"/>
-                                </DataGrid.Columns>
-                            </DataGrid>
-                        </StackPanel>
-                    </ScrollViewer>
+                    <Border Grid.Column="1" Background="{DynamicResource PanelBackgroundBrush}" CornerRadius="8" Padding="14">
+                        <ScrollViewer>
+                            <StackPanel>
+                                <TextBlock Text="Exam Schedule Form" FontSize="18" FontWeight="Bold" Margin="0,0,0,12"/>
+
+                                <TextBlock Text="Test" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding Tests}" SelectedValuePath="Id" DisplayMemberPath="Title" SelectedValue="{Binding SelectedScheduleTestId}" Margin="0,0,0,10"/>
+
+                                <TextBlock Text="Course" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding Courses}" SelectedValuePath="Id" DisplayMemberPath="Name" SelectedValue="{Binding SelectedScheduleCourseId}" Margin="0,0,0,10"/>
+
+                                <TextBlock Text="Room" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding SelectedScheduleRoom, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                                <TextBlock Text="Start Time" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding SelectedScheduleStartTime, StringFormat=\{0:yyyy-MM-dd HH:mm\}, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                                <TextBlock Text="End Time" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                <TextBox Text="{Binding SelectedScheduleEndTime, StringFormat=\{0:yyyy-MM-dd HH:mm\}, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                                <TextBlock Text="Exam Type" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                <ComboBox SelectedValue="{Binding SelectedScheduleExamType}" Margin="0,0,0,12">
+                                    <ComboBoxItem Content="Midterm"/>
+                                    <ComboBoxItem Content="Final"/>
+                                    <ComboBoxItem Content="Quiz"/>
+                                </ComboBox>
+
+                                <WrapPanel Margin="0,0,0,10">
+                                    <Button Content="+ Add To Queue" Command="{Binding AddScheduleDraftCommand}" Width="130" Margin="0,0,8,0"/>
+                                    <Button Content="Remove Queue Item" Command="{Binding RemoveScheduleDraftCommand}" Width="140"/>
+                                </WrapPanel>
+
+                                <TextBlock Text="Queue" FontWeight="Bold" Margin="0,6,0,6"/>
+                                <DataGrid ItemsSource="{Binding ScheduleDrafts}" SelectedItem="{Binding SelectedScheduleDraft}" AutoGenerateColumns="False" Height="210">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="CourseId" Binding="{Binding CourseId}" Width="*"/>
+                                        <DataGridTextColumn Header="TestId" Binding="{Binding TestId}" Width="*"/>
+                                        <DataGridTextColumn Header="Room" Binding="{Binding Room}" Width="90"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
                 </Grid>
             </TabItem>
 
@@ -718,7 +814,7 @@
         </TabControl>
 
         <!-- Status Bar -->
-        <StatusBar Grid.Row="3">
+        <StatusBar Grid.Row="2" Grid.ColumnSpan="2">
             <StatusBarItem>
                 <TextBlock Text="{Binding StatusMessage}"/>
             </StatusBarItem>

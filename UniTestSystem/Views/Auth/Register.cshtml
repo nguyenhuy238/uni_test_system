@@ -3,55 +3,59 @@
     ViewData["Title"] = "Register";
 }
 
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white">
-                <h3 class="card-title mb-0">Đăng ký tài khoản</h3>
-            </div>
-            <div class="card-body">
-                <form method="post" action="/auth/register">
-                    <div class="mb-3">
-                        <label class="form-label">Họ và tên</label>
-                        <input id="regName" name="name" class="form-control" required placeholder="Nguyễn Văn A" />
-                        <div id="nameFeedback" class="invalid-feedback"></div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Email trường (@@edu.vn)</label>
-                        <input id="regEmail" name="email" type="email" class="form-control" required placeholder="sv@hcmut.edu.vn" />
-                        <div id="emailFeedback" class="invalid-feedback"></div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Vai trò</label>
-                        <select id="regRole" name="role" class="form-select">
-                            <option value="Student">Sinh viên</option>
-                            <option value="Lecturer">Giảng viên</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Mật khẩu</label>
-                        <input id="regPassword" name="password" type="password" class="form-control" required placeholder="Tối thiểu 8 ký tự, có chữ hoa/thường/số/đặc biệt" />
-                        <div id="passwordFeedback" class="invalid-feedback"></div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Xác nhận mật khẩu</label>
-                        <input id="regConfirmPassword" name="confirmPassword" type="password" class="form-control" required />
-                        <div id="confirmFeedback" class="invalid-feedback"></div>
-                    </div>
-                    
-                    @if (ViewBag.Error != null)
-                    {
-                        <div class="alert alert-danger">@ViewBag.Error</div>
-                    }
-
-                    <div class="d-grid gap-2">
-                        <button class="btn btn-primary btn-lg">Đăng ký</button>
-                        <a href="/auth/login" class="btn btn-link">Đã có tài khoản? Đăng nhập</a>
-                    </div>
-                </form>
-            </div>
+<div class="uts-auth-shell">
+    <aside class="uts-auth-visual">
+        <div>
+            <h2 class="fw-bold mb-3">Tạo tài khoản UniTestSystem</h2>
+            <p class="mb-2">Dành cho sinh viên và giảng viên trong môi trường đào tạo chính quy.</p>
+            <p class="mb-0 small">Hệ thống yêu cầu email học thuật `@@edu.vn` để đảm bảo định danh hợp lệ.</p>
         </div>
-    </div>
+    </aside>
+
+    <section class="uts-auth-form">
+        <h3 class="fw-bold mb-2">Đăng ký tài khoản</h3>
+        <p class="text-muted mb-4">Hoàn thiện thông tin để bắt đầu sử dụng hệ thống thi.</p>
+
+        <form method="post" action="/auth/register">
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Họ và tên</label>
+                <input id="regName" name="name" class="form-control" required placeholder="Nguyễn Văn A" />
+                <div id="nameFeedback" class="invalid-feedback"></div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Email trường (@@edu.vn)</label>
+                <input id="regEmail" name="email" type="email" class="form-control" required placeholder="sv@hcmut.edu.vn" />
+                <div id="emailFeedback" class="invalid-feedback"></div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Vai trò</label>
+                <select id="regRole" name="role" class="form-select">
+                    <option value="Student">Sinh viên</option>
+                    <option value="Lecturer">Giảng viên</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Mật khẩu</label>
+                <input id="regPassword" name="password" type="password" class="form-control" required placeholder="Tối thiểu 8 ký tự, có chữ hoa/thường/số/đặc biệt" />
+                <div id="passwordFeedback" class="invalid-feedback"></div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Xác nhận mật khẩu</label>
+                <input id="regConfirmPassword" name="confirmPassword" type="password" class="form-control" required />
+                <div id="confirmFeedback" class="invalid-feedback"></div>
+            </div>
+
+            @if (ViewBag.Error != null)
+            {
+                <div class="alert alert-danger">@ViewBag.Error</div>
+            }
+
+            <div class="d-grid gap-2">
+                <button class="btn btn-primary btn-lg">Đăng ký</button>
+                <a href="/auth/login" class="btn btn-link">Đã có tài khoản? Đăng nhập</a>
+            </div>
+        </form>
+    </section>
 </div>
 
 @section Scripts {
