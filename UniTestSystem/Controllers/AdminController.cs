@@ -3,27 +3,26 @@ using Microsoft.AspNetCore.Mvc;
 using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Application.Models;
-using UniTestSystem.Infrastructure.Persistence;
 
 namespace UniTestSystem.Controllers
 {
     [Authorize(Policy = PermissionCodes.Audit_View)]
     public class AdminController : Controller
     {
-        private readonly IServiceProvider _sp;
+        private readonly ISystemMaintenanceService _systemMaintenanceService;
         private readonly IRepository<Feedback> _feedbackRepo;
         private readonly IRepository<Session> _sessionRepo;
         private readonly IRepository<User> _userRepo;
         private readonly IRepository<Test> _testRepo;
 
         public AdminController(
-            IServiceProvider sp,
+            ISystemMaintenanceService systemMaintenanceService,
             IRepository<Feedback> feedbackRepo,
             IRepository<Session> sessionRepo,
             IRepository<User> userRepo,
             IRepository<Test> testRepo)
         {
-            _sp = sp;
+            _systemMaintenanceService = systemMaintenanceService;
             _feedbackRepo = feedbackRepo;
             _sessionRepo = sessionRepo;
             _userRepo = userRepo;
@@ -74,8 +73,8 @@ namespace UniTestSystem.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ResetData()
         {
-            await Seeder.ResetAllJsonFilesAsync(_sp, reseed: true);
-            TempData["Msg"] = "Đã reset TOÀN BỘ dữ liệu (Assignment, AuditLog, Feedback, Notification, PasswordReset, Question, Session, StudentClass, Test, User, ...).";
+            await _systemMaintenanceService.ResetDatabaseAsync(reseed: true);
+            TempData["Msg"] = "Đã reset toàn bộ cơ sở dữ liệu và seed lại dữ liệu mặc định.";
             return RedirectToAction(nameof(Dashboard));
         }
     }

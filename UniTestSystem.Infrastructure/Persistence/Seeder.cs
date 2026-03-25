@@ -41,12 +41,13 @@ namespace UniTestSystem.Infrastructure.Persistence
         // which is called in Program.cs right after Seeder.RunAsync
         }
 
-        public static async Task ResetAllJsonFilesAsync(IServiceProvider sp, bool reseed = true)
+        public static async Task ResetDatabaseAsync(IServiceProvider sp, bool reseed = true)
         {
             var db = sp.GetRequiredService<AppDbContext>();
             await db.Database.EnsureDeletedAsync();
             await db.Database.EnsureCreatedAsync();
             if (reseed) await RunAsync(sp);
         }
+
     }
 }
