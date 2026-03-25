@@ -229,6 +229,7 @@ app.MapGet("/", ctx =>
         var target = role switch
         {
             nameof(Role.Admin) => "/Admin/Dashboard",
+            nameof(Role.Staff) => "/Staff/Dashboard",
             nameof(Role.Lecturer) => "/Lecturer/Dashboard",
             nameof(Role.Student) => "/MyTests",
             _ => "/Home/Index"

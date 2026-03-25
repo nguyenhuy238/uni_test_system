@@ -23,6 +23,7 @@ namespace UniTestSystem.Controllers
                 return role switch
                 {
                     nameof(Role.Admin) => RedirectToAction("Dashboard", "Admin"),
+                    nameof(Role.Staff) => RedirectToAction("Dashboard", "Staff"),
                     nameof(Role.Lecturer) => RedirectToAction("Dashboard", "Lecturer"),
                     nameof(Role.Student) => RedirectToAction("Index", "MyTests"),
                     _ => View()

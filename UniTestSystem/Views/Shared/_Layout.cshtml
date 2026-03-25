@@ -21,6 +21,10 @@
                 brandController = "Admin";
                 brandAction = "Dashboard";
                 break;
+            case nameof(Role.Staff):
+                brandController = "Staff";
+                brandAction = "Dashboard";
+                break;
             case nameof(Role.Lecturer):
                 brandController = "Lecturer";
                 brandAction = "Dashboard";
@@ -89,7 +93,7 @@
                             <li class="nav-item"><a class="nav-link fw-semibold" asp-controller="Transcripts" asp-action="MyTranscript">Bảng điểm</a></li>
                         }
 
-                        @if (role == "Admin" || role == "Lecturer" || canViewOrg || canViewReports || canEditSettings || canManagePerms)
+                        @if (role == "Admin" || role == "Lecturer" || (role != "Staff" && (canViewOrg || canViewReports || canEditSettings || canManagePerms)))
                         {
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle" href="#" id="manageMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -134,6 +138,32 @@
                                         {
                                             <li><a class="dropdown-item" asp-controller="Roles" asp-action="Index">Phân quyền</a></li>
                                         }
+                                    }
+                                </ul>
+                            </li>
+                        }
+
+                        @if (isAuth && role == "Staff")
+                        {
+                            <li class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" id="staffMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    Staff
+                                </a>
+                                <ul class="dropdown-menu" aria-labelledby="staffMenu">
+                                    <li><a class="dropdown-item" asp-controller="Staff" asp-action="Dashboard">Staff Dashboard</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Users" asp-action="Index">Người dùng</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Transcripts" asp-action="Index">Bảng điểm sinh viên</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Exams" asp-action="Index">Lập lịch thi</a></li>
+                                    @if (canViewOrg)
+                                    {
+                                        <li><hr class="dropdown-divider" /></li>
+                                        <li><a class="dropdown-item" asp-controller="Faculties" asp-action="Index">Khoa</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Classes" asp-action="Index">Lớp</a></li>
+                                    }
+                                    @if (canViewReports)
+                                    {
+                                        <li><hr class="dropdown-divider" /></li>
+                                        <li><a class="dropdown-item" asp-controller="Reports" asp-action="Index">Báo cáo</a></li>
                                     }
                                 </ul>
                             </li>

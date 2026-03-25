@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace UniTestSystem.Controllers.Api;
 
 [ApiController]
-[Authorize(Policy = "RequireLecturerOrStaffOrAdmin")]
+[Authorize(Policy = PermissionCodes.Tests_View)]
 [Route("api/admin/tests")]
 public class AdminTestsController : ControllerBase
 {
@@ -33,7 +33,7 @@ public class AdminTestsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Policy = "RequireLecturerOrStaffOrAdmin")]
+    [Authorize(Policy = PermissionCodes.Tests_Create)]
     public async Task<IActionResult> Create([FromBody] Test test)
     {
         await _tests.InsertAsync(test);
@@ -41,7 +41,7 @@ public class AdminTestsController : ControllerBase
     }
 
     [HttpPut("{id}")]
-    [Authorize(Policy = "RequireLecturerOrStaffOrAdmin")]
+    [Authorize(Policy = PermissionCodes.Tests_Create)]
     public async Task<IActionResult> Update(string id, [FromBody] Test test)
     {
         var existing = await _tests.FirstOrDefaultAsync(x => x.Id == id);
@@ -53,7 +53,7 @@ public class AdminTestsController : ControllerBase
     }
 
     [HttpDelete("{id}")]
-    [Authorize(Policy = "RequireLecturerOrStaffOrAdmin")]
+    [Authorize(Policy = PermissionCodes.Tests_Create)]
     public async Task<IActionResult> Delete(string id)
     {
         await _tests.DeleteAsync(x => x.Id == id);
