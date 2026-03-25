@@ -10,6 +10,27 @@
     var isAuth = User?.Identity?.IsAuthenticated ?? false;
     var role = User?.FindFirst(ClaimTypes.Role)?.Value;
     var name = User?.Identity?.Name ?? "Guest";
+    var brandController = "Home";
+    var brandAction = "Index";
+
+    if (isAuth)
+    {
+        switch (role)
+        {
+            case nameof(Role.Admin):
+                brandController = "Admin";
+                brandAction = "Dashboard";
+                break;
+            case nameof(Role.Lecturer):
+                brandController = "Lecturer";
+                brandAction = "Dashboard";
+                break;
+            case nameof(Role.Student):
+                brandController = "MyTests";
+                brandAction = "Index";
+                break;
+        }
+    }
 
     // Settings
     var settings = SettingsService.GetAsync().GetAwaiter().GetResult();
@@ -42,7 +63,7 @@
     <header>
         <nav class="navbar navbar-expand-lg navbar-dark uts-app-navbar shadow-sm mb-3">
             <div class="container-fluid">
-                <a class="navbar-brand d-flex align-items-center gap-2" asp-area="" asp-controller="Home" asp-action="Index" title="@systemName">
+                <a class="navbar-brand d-flex align-items-center gap-2" asp-area="" asp-controller="@brandController" asp-action="@brandAction" title="@systemName">
                     @if (!string.IsNullOrWhiteSpace(logoUrl))
                     {
                         <img src="@logoUrl" alt="Logo" style="height:28px" />

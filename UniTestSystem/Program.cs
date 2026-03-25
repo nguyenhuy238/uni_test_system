@@ -223,6 +223,21 @@ app.Use(async (ctx, next) =>
 // Root
 app.MapGet("/", ctx =>
 {
+    if (ctx.User?.Identity?.IsAuthenticated == true)
+    {
+        var role = ctx.User.FindFirst(ClaimTypes.Role)?.Value;
+        var target = role switch
+        {
+            nameof(Role.Admin) => "/Admin/Dashboard",
+            nameof(Role.Lecturer) => "/Lecturer/Dashboard",
+            nameof(Role.Student) => "/MyTests",
+            _ => "/Home/Index"
+        };
+
+        ctx.Response.Redirect(target);
+        return Task.CompletedTask;
+    }
+
     ctx.Response.Redirect("/auth/login");
     return Task.CompletedTask;
 });

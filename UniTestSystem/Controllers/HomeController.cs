@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using UniTestSystem.Application.Models;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+using UniTestSystem.Domain;
 
 namespace UniTestSystem.Controllers
 {
@@ -15,6 +17,18 @@ namespace UniTestSystem.Controllers
 
         public IActionResult Index()
         {
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                var role = User.FindFirstValue(ClaimTypes.Role);
+                return role switch
+                {
+                    nameof(Role.Admin) => RedirectToAction("Dashboard", "Admin"),
+                    nameof(Role.Lecturer) => RedirectToAction("Dashboard", "Lecturer"),
+                    nameof(Role.Student) => RedirectToAction("Index", "MyTests"),
+                    _ => View()
+                };
+            }
+
             return View();
         }
 
