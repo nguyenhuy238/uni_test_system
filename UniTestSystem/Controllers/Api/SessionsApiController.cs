@@ -100,7 +100,9 @@ namespace UniTestSystem.Controllers.Api
 
         private async Task<bool> EnsureSessionDeviceAsync(Session session)
         {
-            var requestFp = _sessionDeviceGuard.GetRequestFingerprint(Request, HttpContext.Connection.RemoteIpAddress?.ToString());
+            var requestFp = _sessionDeviceGuard.GetRequestFingerprint(
+                Request.Headers["User-Agent"].ToString(),
+                HttpContext.Connection.RemoteIpAddress?.ToString());
             return await _sessionDeviceGuard.EnsureSessionDeviceAsync(
                 session.Id,
                 requestFp,

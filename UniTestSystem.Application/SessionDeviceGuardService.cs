@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.AspNetCore.Http;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Domain;
 
@@ -17,11 +16,11 @@ namespace UniTestSystem.Application
             _deviceRepo = deviceRepo;
         }
 
-        public string GetRequestFingerprint(HttpRequest request, string? ipAddress)
+        public string GetRequestFingerprint(string? userAgent, string? ipAddress)
         {
-            var userAgent = request.Headers["User-Agent"].ToString();
+            var normalizedUserAgent = userAgent ?? string.Empty;
             var ip = ipAddress ?? string.Empty;
-            var raw = $"ua:{userAgent}|ip:{ip}";
+            var raw = $"ua:{normalizedUserAgent}|ip:{ip}";
 
             return Sha256Hex(raw);
         }

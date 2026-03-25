@@ -46,7 +46,9 @@ namespace UniTestSystem.Controllers
             var allowed = await _assessSvc.GetAvailableTestIdsAsync(uid, DateTime.UtcNow);
             if (!allowed.Contains(id)) return Forbid();
 
-            var requestFp = _sessionDeviceGuard.GetRequestFingerprint(Request, HttpContext.Connection.RemoteIpAddress?.ToString());
+            var requestFp = _sessionDeviceGuard.GetRequestFingerprint(
+                Request.Headers["User-Agent"].ToString(),
+                HttpContext.Connection.RemoteIpAddress?.ToString());
             var hasOtherDeviceSession = await _sessionDeviceGuard.HasActiveSessionOnOtherDeviceAsync(uid, requestFp);
             if (hasOtherDeviceSession)
             {
@@ -262,7 +264,9 @@ namespace UniTestSystem.Controllers
 
         private async Task<bool> EnsureSessionDeviceAsync(Session session)
         {
-            var requestFp = _sessionDeviceGuard.GetRequestFingerprint(Request, HttpContext.Connection.RemoteIpAddress?.ToString());
+            var requestFp = _sessionDeviceGuard.GetRequestFingerprint(
+                Request.Headers["User-Agent"].ToString(),
+                HttpContext.Connection.RemoteIpAddress?.ToString());
             return await _sessionDeviceGuard.EnsureSessionDeviceAsync(
                 session.Id,
                 requestFp,

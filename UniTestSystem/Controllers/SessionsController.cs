@@ -59,7 +59,9 @@ namespace UniTestSystem.Controllers
                 if (!ok) return Forbid();
             }
 
-            var fingerprint = _sessionDeviceGuardService.GetRequestFingerprint(Request, HttpContext.Connection.RemoteIpAddress?.ToString());
+            var fingerprint = _sessionDeviceGuardService.GetRequestFingerprint(
+                Request.Headers["User-Agent"].ToString(),
+                HttpContext.Connection.RemoteIpAddress?.ToString());
             var hasOtherActiveDevice = await _sessionDeviceGuardService.HasActiveSessionOnOtherDeviceAsync(uid, fingerprint);
             if (hasOtherActiveDevice)
             {
@@ -120,7 +122,9 @@ namespace UniTestSystem.Controllers
             var uid = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (uid == null || !string.Equals(uid, s.UserId, StringComparison.Ordinal)) return Forbid();
 
-            var requestFp = _sessionDeviceGuardService.GetRequestFingerprint(Request, HttpContext.Connection.RemoteIpAddress?.ToString());
+            var requestFp = _sessionDeviceGuardService.GetRequestFingerprint(
+                Request.Headers["User-Agent"].ToString(),
+                HttpContext.Connection.RemoteIpAddress?.ToString());
             var deviceOk = await _sessionDeviceGuardService.EnsureSessionDeviceAsync(
                 s.Id,
                 requestFp,

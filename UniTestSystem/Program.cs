@@ -9,12 +9,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using UniTestSystem.Authorization;
 using UniTestSystem.Application;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Application.Models;
 using UniTestSystem.Domain;
 using UniTestSystem.Infrastructure.Persistence;
-using UniTestSystem.Infrastructure.Services;
+using UniTestSystem.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,11 +27,8 @@ builder.Services.AddControllersWithViews()
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
-// DB
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddApplicationServices();
+builder.Services.AddInfrastructureServices(builder.Configuration);
 
 // JWT Authentication for API calls
 builder.Services.AddAuthentication(options =>
@@ -180,58 +178,9 @@ builder.Services.AddScoped<IAuthorizationHandler, PermissionHandler>();
 // Upload limit
 builder.Services.Configure<FormOptions>(opt => { opt.MultipartBodyLengthLimit = 50L * 1024 * 1024; });
 
-// Repos (Switched to EF Core)
-builder.Services.AddScoped<IRepository<Student>, EfRepository<Student>>();
-builder.Services.AddScoped<IRepository<Lecturer>, EfRepository<Lecturer>>();
-builder.Services.AddScoped<IRepository<User>, EfRepository<User>>();
-builder.Services.AddScoped<IRepository<StudentClass>, EfRepository<StudentClass>>();
-builder.Services.AddScoped<IRepository<Question>, EfRepository<Question>>();
-builder.Services.AddScoped<IRepository<Test>, EfRepository<Test>>();
-builder.Services.AddScoped<IRepository<Assessment>, EfRepository<Assessment>>();
-builder.Services.AddScoped<IRepository<Session>, EfRepository<Session>>();
-builder.Services.AddScoped<IRepository<Feedback>, EfRepository<Feedback>>();
-builder.Services.AddScoped<IRepository<RolePermissionMapping>, EfRepository<RolePermissionMapping>>();
-builder.Services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
-builder.Services.AddScoped<IRepository<Faculty>, EfRepository<Faculty>>();
-builder.Services.AddScoped<IRepository<Option>, EfRepository<Option>>();
-builder.Services.AddScoped<IRepository<UserAnswer>, EfRepository<UserAnswer>>();
-builder.Services.AddScoped<IRepository<Result>, EfRepository<Result>>();
-
-// NEW academic repos
-builder.Services.AddScoped<IRepository<Course>, EfRepository<Course>>();
-builder.Services.AddScoped<IRepository<Enrollment>, EfRepository<Enrollment>>();
-builder.Services.AddScoped<IRepository<ExamSchedule>, EfRepository<ExamSchedule>>();
-builder.Services.AddScoped<IRepository<Transcript>, EfRepository<Transcript>>();
-
-// Services
-builder.Services.AddScoped<IAuditService, AuditService>();
-builder.Services.AddScoped<IQuestionService, QuestionService>();
-builder.Services.AddScoped<IQuestionExcelService, QuestionExcelService>();
-builder.Services.AddScoped<AuthService>();
-builder.Services.AddScoped<TestService>();
-builder.Services.AddScoped<AssessmentService>();
-builder.Services.AddScoped<ReportService>();
-builder.Services.AddScoped<PasswordResetService>();
-builder.Services.AddScoped<EmailVerificationService>();
-builder.Services.AddScoped<ExamAccessTokenService>();
-
-builder.Services.AddScoped<ISettingsService, SettingsService>();
-builder.Services.AddScoped<IPermissionService, PermissionService>();
-builder.Services.AddScoped<IExportService, ExportService>();
-builder.Services.AddScoped<IAuditReaderService, AuditReaderService>();
-builder.Services.AddScoped<IGradingService, GradingService>();
-builder.Services.AddScoped<IExamScheduleService, ExamScheduleService>();
-builder.Services.AddScoped<ITranscriptService, TranscriptService>();
-builder.Services.AddScoped<ITestGenerationService, TestGenerationService>();
-builder.Services.AddScoped<IAcademicService, AcademicService>();
-builder.Services.AddScoped<IBulkImportService, BulkImportService>();
-
 // Options
 builder.Services.Configure<AppOptions>(builder.Configuration.GetSection("App"));
 builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
-
-builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
-builder.Services.AddSingleton<INotificationService, NotificationService>();
 
 var app = builder.Build();
 
