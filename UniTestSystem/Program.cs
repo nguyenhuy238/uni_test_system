@@ -1,18 +1,23 @@
 using System.Text;
 using System.Security;
 using System.Security.Claims;
+using System.Globalization;
+using System.IdentityModel.Tokens.Jwt;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using UniTestSystem.Authorization;
 using UniTestSystem.Application;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Application.Models;
+using UniTestSystem.Configuration;
 using UniTestSystem.Domain;
 using UniTestSystem.Infrastructure.Persistence;
 using UniTestSystem.Infrastructure;
@@ -29,6 +34,65 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
+
+var authRateLimitOptions = builder.Configuration
+    .GetSection("RateLimiting:AuthPolicies")
+    .Get<SecurityRateLimitingOptions>() ?? new SecurityRateLimitingOptions();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = (context, _) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            var seconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
+            context.HttpContext.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
+        }
+
+        return ValueTask.CompletedTask;
+    };
+
+    options.AddPolicy("auth-login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ResolveClientIp(context),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = authRateLimitOptions.Login.PermitLimit,
+                Window = TimeSpan.FromSeconds(authRateLimitOptions.Login.WindowSeconds),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = authRateLimitOptions.Login.QueueLimit,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy("auth-forgot", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ResolveClientIp(context),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = authRateLimitOptions.Forgot.PermitLimit,
+                Window = TimeSpan.FromSeconds(authRateLimitOptions.Forgot.WindowSeconds),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = authRateLimitOptions.Forgot.QueueLimit,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy("auth-reset", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ResolveClientIp(context),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = authRateLimitOptions.Reset.PermitLimit,
+                Window = TimeSpan.FromSeconds(authRateLimitOptions.Reset.WindowSeconds),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = authRateLimitOptions.Reset.QueueLimit,
+                AutoReplenishment = true
+            }));
+});
 
 // JWT Authentication for API calls
 builder.Services.AddAuthentication(options =>
@@ -129,6 +193,21 @@ builder.Services.AddAuthentication(options =>
                     return;
                 }
 
+                var jti = principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value
+                          ?? principal?.FindFirst("jti")?.Value;
+                if (string.IsNullOrWhiteSpace(jti))
+                {
+                    context.Fail("Missing token identifier.");
+                    return;
+                }
+
+                var blacklist = context.HttpContext.RequestServices.GetRequiredService<ITokenBlacklistService>();
+                if (await blacklist.IsRevokedAsync(jti))
+                {
+                    context.Fail("Token has been revoked.");
+                    return;
+                }
+
                 var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
                 var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId);
                 if (user == null || !user.IsActive)
@@ -141,6 +220,20 @@ builder.Services.AddAuthentication(options =>
                 if (!string.Equals(roleClaim, user.Role.ToString(), StringComparison.OrdinalIgnoreCase))
                 {
                     context.Fail("User role has changed.");
+                    return;
+                }
+
+                var sid = principal?.FindFirst("sid")?.Value;
+                if (string.IsNullOrWhiteSpace(sid))
+                {
+                    return;
+                }
+
+                var session = await db.UserSessions.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.Id == sid && x.UserId == userId);
+                if (session == null || session.IsRevoked || (session.ExpiresAt.HasValue && session.ExpiresAt <= DateTime.UtcNow))
+                {
+                    context.Fail("Session has been revoked or expired.");
                 }
             }
         };
@@ -189,10 +282,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger(); app.UseSwaggerUI();
 }
 
+app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseRouting();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -259,3 +354,8 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+static string ResolveClientIp(HttpContext context)
+{
+    return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+}

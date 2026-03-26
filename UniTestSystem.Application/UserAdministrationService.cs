@@ -94,13 +94,20 @@ public sealed class UserAdministrationService : IUserAdministrationService
             x.Id != (excludeUserId ?? string.Empty));
     }
 
-    public async Task<bool> AssignRoleAsync(string userId, Role role)
+    public async Task<bool> AssignRoleAsync(string userId, Role role, string revokedByIp)
     {
         var user = await _userRepo.FirstOrDefaultAsync(x => x.Id == userId);
         if (user == null) return false;
 
+        var oldRole = user.Role;
         user.Role = role;
         await _userRepo.UpsertAsync(x => x.Id == user.Id, user);
+
+        if (oldRole != role)
+        {
+            await _authService.InvalidateAllAuthSessionsAsync(user.Id, revokedByIp);
+        }
+
         return true;
     }
 

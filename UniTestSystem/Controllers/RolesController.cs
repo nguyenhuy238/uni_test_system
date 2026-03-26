@@ -53,7 +53,8 @@ namespace UniTestSystem.Controllers
 
             var u = await _userAdministrationService.GetUserByIdAsync(userId);
             if (u == null) { TempData["Err"] = "User không tồn tại."; return RedirectToAction(nameof(Index)); }
-            await _userAdministrationService.AssignRoleAsync(userId, role);
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "system";
+            await _userAdministrationService.AssignRoleAsync(userId, role, ip);
             TempData["Msg"] = $"Đã gán role {role} cho {u.Name}.";
             return RedirectToAction(nameof(Index));
         }

@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Configuration;
+using System.Collections.Concurrent;
+using System.Globalization;
 using System.Security.Claims;
 using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
@@ -14,17 +16,24 @@ namespace UniTestSystem.Application
         private readonly IRepository<RefreshToken> _refreshTokens;
         private readonly IRepository<UserSession> _userSessions;
         private readonly IConfiguration _cfg;
+        private readonly ITokenBlacklistService _tokenBlacklistService;
+        private static readonly ConcurrentDictionary<string, TrackedAccessToken> _trackedAccessTokens = new(StringComparer.Ordinal);
+        private static readonly ConcurrentDictionary<string, HashSet<string>> _trackedTokensByUser = new(StringComparer.Ordinal);
+        private static readonly ConcurrentDictionary<string, HashSet<string>> _trackedTokensBySession = new(StringComparer.Ordinal);
+        private static readonly object _trackedTokensLock = new();
 
         public AuthService(
             IRepository<User> users, 
             IRepository<RefreshToken> refreshTokens,
             IRepository<UserSession> userSessions,
-            IConfiguration cfg)
+            IConfiguration cfg,
+            ITokenBlacklistService tokenBlacklistService)
         {
             _users = users;
             _refreshTokens = refreshTokens;
             _userSessions = userSessions;
             _cfg = cfg;
+            _tokenBlacklistService = tokenBlacklistService;
         }
 
         public async Task<User?> ValidateLoginAsync(string email, string password)
@@ -114,11 +123,13 @@ namespace UniTestSystem.Application
             return true;
         }
 
-        public string GenerateJwtToken(User u)
+        public string GenerateJwtToken(User u, string? sessionId = null)
         {
             var jwtKey = _cfg["Jwt:Key"] ?? throw new InvalidOperationException("JWT Secret Key is missing from configuration.");
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+            var expiresAt = DateTime.UtcNow.AddMinutes(ParseJwtExpiryMinutes());
+            var jti = Guid.NewGuid().ToString("N");
 
             var claims = new List<Claim>
             {
@@ -126,16 +137,22 @@ namespace UniTestSystem.Application
                 new(ClaimTypes.Name, u.Name),
                 new(ClaimTypes.Email, u.Email),
                 new(ClaimTypes.Role, u.Role.ToString()),
+                new(JwtRegisteredClaimNames.Jti, jti)
             };
+            if (!string.IsNullOrWhiteSpace(sessionId))
+            {
+                claims.Add(new Claim("sid", sessionId));
+            }
 
             var token = new JwtSecurityToken(
                 issuer: _cfg["Jwt:Issuer"],
                 audience: _cfg["Jwt:Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(double.Parse(_cfg["Jwt:ExpireMinutes"] ?? "1440")),
+                expires: expiresAt,
                 signingCredentials: creds
             );
 
+            TrackAccessToken(u.Id, jti, expiresAt, sessionId);
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
@@ -212,6 +229,7 @@ namespace UniTestSystem.Application
                 s.IsRevoked = true;
                 s.RevokedAt = DateTime.UtcNow;
                 await _userSessions.UpdateAsync(s);
+                await RevokeTrackedAccessTokensBySessionAsync(sessionId);
             }
         }
 
@@ -223,7 +241,10 @@ namespace UniTestSystem.Application
                 s.IsRevoked = true;
                 s.RevokedAt = DateTime.UtcNow;
                 await _userSessions.UpdateAsync(s);
+                await RevokeTrackedAccessTokensBySessionAsync(s.Id);
             }
+
+            await RevokeTrackedAccessTokensByUserAsync(userId);
         }
 
         public async Task RevokeAllRefreshTokensAsync(string userId, string revokedByIp)
@@ -241,6 +262,242 @@ namespace UniTestSystem.Application
         {
             await RevokeAllSessionsAsync(userId);
             await RevokeAllRefreshTokensAsync(userId, revokedByIp);
+            await RevokeTrackedAccessTokensByUserAsync(userId);
+        }
+
+        public async Task<bool> RevokeAccessTokenAsync(ClaimsPrincipal? principal)
+        {
+            if (principal?.Identity?.IsAuthenticated != true)
+            {
+                return false;
+            }
+
+            if (!TryGetTokenIdentity(principal, out var tokenIdentity))
+            {
+                return false;
+            }
+
+            if (tokenIdentity.ExpiresAt <= DateTimeOffset.UtcNow)
+            {
+                RemoveTrackedAccessToken(tokenIdentity.Jti);
+                return false;
+            }
+
+            await _tokenBlacklistService.RevokeAsync(tokenIdentity.Jti, tokenIdentity.ExpiresAt);
+            RemoveTrackedAccessToken(tokenIdentity.Jti);
+            return true;
+        }
+
+        private static bool TryGetTokenIdentity(ClaimsPrincipal principal, out TokenIdentity tokenIdentity)
+        {
+            tokenIdentity = default;
+
+            var jti = principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value
+                      ?? principal.FindFirst("jti")?.Value;
+            if (string.IsNullOrWhiteSpace(jti))
+            {
+                return false;
+            }
+
+            var expValue = principal.FindFirst(JwtRegisteredClaimNames.Exp)?.Value
+                           ?? principal.FindFirst("exp")?.Value;
+            if (!long.TryParse(expValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var expUnix))
+            {
+                return false;
+            }
+
+            tokenIdentity = new TokenIdentity
+            {
+                Jti = jti,
+                ExpiresAt = DateTimeOffset.FromUnixTimeSeconds(expUnix)
+            };
+            return true;
+        }
+
+        private double ParseJwtExpiryMinutes()
+        {
+            var raw = _cfg["Jwt:ExpireMinutes"];
+            if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var minutes) && minutes > 0)
+            {
+                return minutes;
+            }
+
+            return 1440;
+        }
+
+        private async Task RevokeTrackedAccessTokensByUserAsync(string userId)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return;
+            }
+
+            var tokenIds = GetTrackedTokenIdsByUser(userId);
+            foreach (var tokenId in tokenIds)
+            {
+                if (TryGetTrackedToken(tokenId, out var token) && token is not null && token.ExpiresAt > DateTimeOffset.UtcNow)
+                {
+                    await _tokenBlacklistService.RevokeAsync(tokenId, token.ExpiresAt);
+                }
+                RemoveTrackedAccessToken(tokenId);
+            }
+        }
+
+        private async Task RevokeTrackedAccessTokensBySessionAsync(string sessionId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId))
+            {
+                return;
+            }
+
+            var tokenIds = GetTrackedTokenIdsBySession(sessionId);
+            foreach (var tokenId in tokenIds)
+            {
+                if (TryGetTrackedToken(tokenId, out var token) && token is not null && token.ExpiresAt > DateTimeOffset.UtcNow)
+                {
+                    await _tokenBlacklistService.RevokeAsync(tokenId, token.ExpiresAt);
+                }
+                RemoveTrackedAccessToken(tokenId);
+            }
+        }
+
+        private static void TrackAccessToken(string userId, string jti, DateTime expiresAtUtc, string? sessionId)
+        {
+            PruneExpiredTrackedTokens();
+
+            var trackedToken = new TrackedAccessToken
+            {
+                UserId = userId,
+                SessionId = sessionId,
+                ExpiresAt = new DateTimeOffset(expiresAtUtc, TimeSpan.Zero)
+            };
+
+            lock (_trackedTokensLock)
+            {
+                _trackedAccessTokens[jti] = trackedToken;
+                AddIndex(_trackedTokensByUser, userId, jti);
+                if (!string.IsNullOrWhiteSpace(sessionId))
+                {
+                    AddIndex(_trackedTokensBySession, sessionId, jti);
+                }
+            }
+        }
+
+        private static void AddIndex(ConcurrentDictionary<string, HashSet<string>> index, string key, string jti)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return;
+            }
+
+            if (!index.TryGetValue(key, out var bucket))
+            {
+                bucket = new HashSet<string>(StringComparer.Ordinal);
+                index[key] = bucket;
+            }
+
+            bucket.Add(jti);
+        }
+
+        private static List<string> GetTrackedTokenIdsByUser(string userId)
+        {
+            lock (_trackedTokensLock)
+            {
+                if (_trackedTokensByUser.TryGetValue(userId, out var bucket))
+                {
+                    return bucket.ToList();
+                }
+            }
+
+            return new List<string>();
+        }
+
+        private static List<string> GetTrackedTokenIdsBySession(string sessionId)
+        {
+            lock (_trackedTokensLock)
+            {
+                if (_trackedTokensBySession.TryGetValue(sessionId, out var bucket))
+                {
+                    return bucket.ToList();
+                }
+            }
+
+            return new List<string>();
+        }
+
+        private static bool TryGetTrackedToken(string jti, out TrackedAccessToken? token)
+        {
+            lock (_trackedTokensLock)
+            {
+                return _trackedAccessTokens.TryGetValue(jti, out token);
+            }
+        }
+
+        private static void RemoveTrackedAccessToken(string jti)
+        {
+            lock (_trackedTokensLock)
+            {
+                RemoveTrackedAccessTokenCore(jti);
+            }
+        }
+
+        private static void RemoveTrackedAccessTokenCore(string jti)
+        {
+            if (!_trackedAccessTokens.TryRemove(jti, out var token))
+            {
+                return;
+            }
+
+            RemoveFromIndex(_trackedTokensByUser, token.UserId, jti);
+            if (!string.IsNullOrWhiteSpace(token.SessionId))
+            {
+                RemoveFromIndex(_trackedTokensBySession, token.SessionId, jti);
+            }
+        }
+
+        private static void RemoveFromIndex(ConcurrentDictionary<string, HashSet<string>> index, string key, string jti)
+        {
+            if (!index.TryGetValue(key, out var bucket))
+            {
+                return;
+            }
+
+            bucket.Remove(jti);
+            if (bucket.Count == 0)
+            {
+                index.TryRemove(key, out _);
+            }
+        }
+
+        private static void PruneExpiredTrackedTokens()
+        {
+            var now = DateTimeOffset.UtcNow;
+
+            lock (_trackedTokensLock)
+            {
+                var expiredJtis = _trackedAccessTokens
+                    .Where(x => x.Value.ExpiresAt <= now)
+                    .Select(x => x.Key)
+                    .ToList();
+
+                foreach (var expiredJti in expiredJtis)
+                {
+                    RemoveTrackedAccessTokenCore(expiredJti);
+                }
+            }
+        }
+
+        private sealed class TrackedAccessToken
+        {
+            public string UserId { get; init; } = "";
+            public string? SessionId { get; init; }
+            public DateTimeOffset ExpiresAt { get; init; }
+        }
+
+        private struct TokenIdentity
+        {
+            public string Jti { get; init; }
+            public DateTimeOffset ExpiresAt { get; init; }
         }
     }
 }

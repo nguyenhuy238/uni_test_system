@@ -10,7 +10,7 @@ public interface IUserAdministrationService
     Task<Student?> GetStudentByIdAsync(string id);
     Task<Lecturer?> GetLecturerByIdAsync(string id);
     Task<bool> EmailExistsAsync(string email, string? excludeUserId = null);
-    Task<bool> AssignRoleAsync(string userId, Role role);
+    Task<bool> AssignRoleAsync(string userId, Role role, string revokedByIp);
     Task<bool> CreateRawAsync(User user);
     Task<bool> UpdateRawAsync(string id, User user);
     Task<bool> DeleteRawAsync(string id);

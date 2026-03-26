@@ -13,6 +13,7 @@ public static class InfrastructureServiceCollectionExtensions
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddHttpContextAccessor();
+        services.AddMemoryCache();
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
 
@@ -23,6 +24,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IQuestionExcelService, QuestionExcelService>();
         services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<ISystemMaintenanceService, SystemMaintenanceService>();
+        services.AddSingleton<ITokenBlacklistService, InMemoryTokenBlacklistService>();
 
         services.AddSingleton<IEmailSender, SmtpEmailSender>();
         services.AddSingleton<INotificationService, NotificationService>();

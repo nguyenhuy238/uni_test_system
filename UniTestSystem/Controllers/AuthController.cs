@@ -1,8 +1,10 @@
 using UniTestSystem.Application;
 using UniTestSystem.Domain;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace UniTestSystem.Controllers
 {
@@ -32,13 +34,17 @@ namespace UniTestSystem.Controllers
             return View();
         }
 
+        [EnableRateLimiting("auth-login")]
         [HttpPost("/api/auth/login")]
         public async Task<IActionResult> LoginApi([FromBody] LoginRequest request)
         {
             var u = await _auth.ValidateAsync(request.Email, request.Password);
             if (u == null) return Unauthorized(new { message = "Sai email hoặc mật khẩu (hoặc tài khoản bị khóa)" });
 
-            var token = _auth.GenerateJwtToken(u);
+            var userAgent = Request.Headers["User-Agent"].ToString();
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
+            var session = await _auth.CreateUserSessionAsync(u.Id, userAgent, ipAddress);
+            var token = _auth.GenerateJwtToken(u, session.Id);
             var refreshToken = await _auth.GenerateRefreshTokenAsync(u.Id, HttpContext.Connection.RemoteIpAddress?.ToString() ?? "");
             
             return Ok(new { 
@@ -74,6 +80,7 @@ namespace UniTestSystem.Controllers
             public string RefreshToken { get; set; } = "";
         }
 
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPost("/api/auth/logout")]
         public async Task<IActionResult> LogoutApi([FromBody] RefreshRequest request)
         {
@@ -83,6 +90,13 @@ namespace UniTestSystem.Controllers
                     request.RefreshToken,
                     HttpContext.Connection.RemoteIpAddress?.ToString() ?? "");
             }
+
+            var sid = User.FindFirst("sid")?.Value;
+            if (!string.IsNullOrWhiteSpace(sid))
+            {
+                await _auth.RevokeSessionAsync(sid);
+            }
+            await _auth.RevokeAccessTokenAsync(User);
 
             return Ok(new { message = "Logged out and refresh token revoked." });
         }
@@ -188,6 +202,7 @@ namespace UniTestSystem.Controllers
             return RedirectToAction(nameof(Login));
         }
 
+        [EnableRateLimiting("auth-login")]
         [HttpPost("/auth/login")]
         public async Task<IActionResult> LoginPost(string email, string password, bool rememberMe, string? returnUrl = null)
         {
@@ -228,7 +243,12 @@ namespace UniTestSystem.Controllers
         [Authorize, HttpPost("/auth/logout")]
         public async Task<IActionResult> Logout()
         {
-            // Optional: Revoke current session if we track session ID in claims
+            var sid = User.FindFirst("sid")?.Value;
+            if (!string.IsNullOrWhiteSpace(sid))
+            {
+                await _auth.RevokeSessionAsync(sid);
+            }
+            await _auth.RevokeAccessTokenAsync(User);
             await HttpContext.SignOutAsync("cookie");
             return RedirectToAction("Login");
         }
@@ -241,6 +261,7 @@ namespace UniTestSystem.Controllers
         [HttpGet("/auth/forgot")]
         public IActionResult Forgot() => View();
 
+        [EnableRateLimiting("auth-forgot")]
         [HttpPost("/auth/forgot")]
         public async Task<IActionResult> ForgotPost(string email)
         {
@@ -276,6 +297,7 @@ namespace UniTestSystem.Controllers
             return View();
         }
 
+        [EnableRateLimiting("auth-reset")]
         [HttpPost("/auth/reset")]
         public async Task<IActionResult> ResetPost(string token, string password, string confirm)
         {

@@ -1,11 +1,7 @@
 using UniTestSystem.Application;
 using UniTestSystem.Domain;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.RateLimiting;
 using DomainUser = UniTestSystem.Domain.User;
 
 namespace UniTestSystem.Controllers.Api.User;
@@ -15,14 +11,13 @@ namespace UniTestSystem.Controllers.Api.User;
 public class UserAuthController : ControllerBase
 {
     private readonly AuthService _authService;
-    private readonly IConfiguration _config;
 
-    public UserAuthController(AuthService authService, IConfiguration config)
+    public UserAuthController(AuthService authService)
     {
         _authService = authService;
-        _config = config;
     }
 
+    [EnableRateLimiting("auth-login")]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
@@ -33,7 +28,10 @@ public class UserAuthController : ControllerBase
         if (user.Role != Role.Student)
             return Forbid(); // Only Users can login via this endpoint
 
-        var token = GenerateJwtToken(user);
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
+        var userAgent = Request.Headers["User-Agent"].ToString();
+        var session = await _authService.CreateUserSessionAsync(user.Id, userAgent, ipAddress);
+        var token = _authService.GenerateJwtToken(user, session.Id);
         return Ok(new { 
             token, 
             user = new { 
@@ -61,7 +59,10 @@ public class UserAuthController : ControllerBase
         };
 
         await _authService.CreateUserAsync(user);
-        var token = GenerateJwtToken(user);
+        var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
+        var userAgent = Request.Headers["User-Agent"].ToString();
+        var session = await _authService.CreateUserSessionAsync(user.Id, userAgent, ipAddress);
+        var token = _authService.GenerateJwtToken(user, session.Id);
         
         return Created("", new { 
             token, 
@@ -74,29 +75,6 @@ public class UserAuthController : ControllerBase
         });
     }
 
-    private string GenerateJwtToken(DomainUser user)
-    {
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"] ?? "default_secret_key_1234567890123456"));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, user.Id),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Name, user.Name),
-            new Claim(ClaimTypes.Role, user.Role.ToString())
-        };
-
-        var token = new JwtSecurityToken(
-            issuer: _config["Jwt:Issuer"],
-            audience: _config["Jwt:Audience"],
-            claims: claims,
-            expires: DateTime.UtcNow.AddDays(7),
-            signingCredentials: creds
-        );
-
-        return new JwtSecurityTokenHandler().WriteToken(token);
-    }
 }
 
 public class LoginRequest
