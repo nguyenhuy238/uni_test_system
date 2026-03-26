@@ -172,6 +172,10 @@ public class QuestionsController : Controller
         var res = await _xlsx.ImportAsync(s, User.Identity?.Name ?? "hr");
 
         TempData["Msg"] = $"Imported {res.Success}/{res.Total}. Skipped: {res.Skipped}. Errors: {res.Errors.Count}";
+        if (res.Errors.Any())
+            TempData["Err"] = $"Import có lỗi: {res.Errors.Count} dòng thất bại.";
+        else if (res.SkippedReasons.Any())
+            TempData["Info"] = $"Có {res.SkippedReasons.Count} dòng bị bỏ qua.";
         if (res.Errors.Any() || res.SkippedReasons.Any())
             TempData["ErrDetail"] = string.Join("\n", res.Errors.Concat(res.SkippedReasons));
         return RedirectToAction(nameof(Index));

@@ -214,6 +214,14 @@
                 @err <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
         }
+        @if (TempData["ErrDetail"] is string errDetail)
+        {
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                <div class="fw-semibold mb-1">Chi tiết lỗi import</div>
+                <pre class="mb-0 small" style="white-space: pre-wrap; max-height: 280px; overflow: auto;">@errDetail</pre>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
         @if (TempData["Info"] is string inf)
         {
             <div class="alert alert-info alert-dismissible fade show" role="alert">
