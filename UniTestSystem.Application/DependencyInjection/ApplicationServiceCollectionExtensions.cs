@@ -16,6 +16,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<EmailVerificationService>();
         services.AddScoped<ExamAccessTokenService>();
         services.AddScoped<SessionDeviceGuardService>();
+        services.AddScoped<ISessionService, SessionService>();
 
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<IExportService, ExportService>();
