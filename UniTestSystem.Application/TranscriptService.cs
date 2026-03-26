@@ -19,6 +19,9 @@ namespace UniTestSystem.Application
         private readonly IRepository<StudentClass> _classRepo;
         private readonly IRepository<Faculty> _facultyRepo;
         private readonly IRepository<AuditEntry> _auditRepo;
+        private readonly IRepository<User> _userRepo;
+        private readonly IExportService _exportService;
+        private readonly ISettingsService _settingsService;
 
         public TranscriptService(
             IRepository<Enrollment> enrollmentRepo,
@@ -27,7 +30,10 @@ namespace UniTestSystem.Application
             IRepository<Student> studentRepo,
             IRepository<StudentClass> classRepo,
             IRepository<Faculty> facultyRepo,
-            IRepository<AuditEntry> auditRepo)
+            IRepository<AuditEntry> auditRepo,
+            IRepository<User> userRepo,
+            IExportService exportService,
+            ISettingsService settingsService)
         {
             _enrollmentRepo = enrollmentRepo;
             _transcriptRepo = transcriptRepo;
@@ -36,6 +42,221 @@ namespace UniTestSystem.Application
             _classRepo = classRepo;
             _facultyRepo = facultyRepo;
             _auditRepo = auditRepo;
+            _userRepo = userRepo;
+            _exportService = exportService;
+            _settingsService = settingsService;
+        }
+
+        public async Task<TranscriptAdminPageResult> GetAdminTranscriptPageAsync(TranscriptAdminQuery query)
+        {
+            var facultyId = query.FacultyId;
+            var classId = query.ClassId;
+            var semester = query.Semester;
+
+            var rows = await GetAdminTranscriptRowsAsync(facultyId, classId, semester);
+            var faculties = (await _facultyRepo.GetAllAsync(x => !x.IsDeleted))
+                .OrderBy(x => x.Name)
+                .Select(x => new TranscriptLookupResult
+                {
+                    Id = x.Id,
+                    Name = x.Name
+                })
+                .ToList();
+
+            var classes = (await _classRepo.GetAllAsync(x => !x.IsDeleted))
+                .OrderBy(x => x.Name)
+                .Select(x => new TranscriptLookupResult
+                {
+                    Id = x.Id,
+                    Name = x.Name
+                })
+                .ToList();
+
+            var semesters = await GetAvailableSemestersAsync();
+            var schoolLocked = await IsSchoolTranscriptLockedAsync();
+            var facultyLockMap = await GetFacultyTranscriptLockMapAsync();
+            var selectedFacultyLocked = false;
+            if (!string.IsNullOrWhiteSpace(facultyId))
+                selectedFacultyLocked = facultyLockMap.TryGetValue(facultyId, out var locked) && locked;
+
+            return new TranscriptAdminPageResult
+            {
+                Rows = rows,
+                Faculties = faculties,
+                Classes = classes,
+                Semesters = semesters,
+                SchoolTranscriptLocked = schoolLocked,
+                FacultyTranscriptLockMap = facultyLockMap,
+                SelectedFacultyTranscriptLocked = selectedFacultyLocked
+            };
+        }
+
+        public async Task<StudentTranscriptDetailsResult?> GetStudentTranscriptDetailsAsync(string studentId, string? semester = null)
+        {
+            if (string.IsNullOrWhiteSpace(studentId))
+                return null;
+
+            var allGrades = await GetStudentGradesAsync(studentId);
+            var summary = await GetStudentTranscriptSummaryAsync(studentId);
+            var user = await _userRepo.FirstOrDefaultAsync(x => x.Id == studentId);
+            if (user == null && summary == null && allGrades.Count == 0)
+                return null;
+
+            var grades = string.IsNullOrWhiteSpace(semester)
+                ? allGrades
+                : allGrades
+                    .Where(x => string.Equals(x.Semester, semester, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+            var schoolLocked = await IsSchoolTranscriptLockedAsync();
+            var student = await _studentRepo.FirstOrDefaultAsync(x => x.Id == studentId);
+            var facultyLocked = false;
+            string? facultyName = null;
+            if (!string.IsNullOrWhiteSpace(student?.StudentClassId))
+            {
+                var studentClass = await _classRepo.FirstOrDefaultAsync(x => x.Id == student.StudentClassId);
+                if (!string.IsNullOrWhiteSpace(studentClass?.FacultyId))
+                {
+                    facultyLocked = await IsFacultyTranscriptLockedAsync(studentClass.FacultyId);
+                    facultyName = (await _facultyRepo.FirstOrDefaultAsync(x => x.Id == studentClass.FacultyId))?.Name;
+                }
+            }
+
+            var semesters = allGrades
+                .Select(x => x.Semester)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x)
+                .ToList();
+
+            return new StudentTranscriptDetailsResult
+            {
+                StudentId = studentId,
+                StudentName = user?.Name ?? studentId,
+                Summary = summary,
+                Grades = grades,
+                Semester = semester,
+                Semesters = semesters,
+                IsTranscriptLocked = schoolLocked || facultyLocked,
+                SchoolLocked = schoolLocked,
+                FacultyLocked = facultyLocked,
+                FacultyLockName = facultyName
+            };
+        }
+
+        public async Task<TranscriptExportResult> ExportAdminTranscriptOverviewXlsxAsync(TranscriptAdminQuery query)
+        {
+            var rows = await GetAdminTranscriptRowsAsync(query.FacultyId, query.ClassId, query.Semester);
+            var facultyName = await ResolveFacultyNameAsync(query.FacultyId);
+            var className = await ResolveClassNameAsync(query.ClassId);
+            return new TranscriptExportResult
+            {
+                Content = _exportService.ExportTranscriptOverviewExcel(rows, facultyName, className, query.Semester),
+                ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                FileName = $"transcripts-{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx"
+            };
+        }
+
+        public async Task<TranscriptExportResult> ExportAdminTranscriptOverviewPdfAsync(TranscriptAdminQuery query)
+        {
+            var rows = await GetAdminTranscriptRowsAsync(query.FacultyId, query.ClassId, query.Semester);
+            var facultyName = await ResolveFacultyNameAsync(query.FacultyId);
+            var className = await ResolveClassNameAsync(query.ClassId);
+            var settings = await _settingsService.GetAsync();
+            return new TranscriptExportResult
+            {
+                Content = _exportService.ExportTranscriptOverviewPdf(rows, settings, facultyName, className, query.Semester),
+                ContentType = "application/pdf",
+                FileName = $"transcripts-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf"
+            };
+        }
+
+        public async Task<TranscriptExportResult> ExportStudentTranscriptXlsxAsync(string studentId, string? semester = null)
+        {
+            var data = await BuildStudentExportDataAsync(studentId, semester);
+            return new TranscriptExportResult
+            {
+                Content = _exportService.ExportStudentTranscriptExcel(data.Grades, data.Summary, data.StudentName, studentId),
+                ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                FileName = $"student-transcript-{studentId}.xlsx"
+            };
+        }
+
+        public async Task<TranscriptExportResult> ExportStudentTranscriptPdfAsync(string studentId, string? semester = null)
+        {
+            var data = await BuildStudentExportDataAsync(studentId, semester);
+            var settings = await _settingsService.GetAsync();
+            return new TranscriptExportResult
+            {
+                Content = _exportService.ExportStudentTranscriptPdf(data.Grades, data.Summary, data.StudentName, studentId, settings),
+                ContentType = "application/pdf",
+                FileName = $"student-transcript-{studentId}.pdf"
+            };
+        }
+
+        public async Task<TranscriptExportResult> ExportMyTranscriptXlsxAsync(string studentId)
+        {
+            var data = await BuildStudentExportDataAsync(studentId, semester: null);
+            return new TranscriptExportResult
+            {
+                Content = _exportService.ExportStudentTranscriptExcel(data.Grades, data.Summary, data.StudentName, studentId),
+                ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                FileName = $"my-transcript-{studentId}.xlsx"
+            };
+        }
+
+        public async Task<TranscriptExportResult> ExportMyTranscriptPdfAsync(string studentId)
+        {
+            var data = await BuildStudentExportDataAsync(studentId, semester: null);
+            var settings = await _settingsService.GetAsync();
+            return new TranscriptExportResult
+            {
+                Content = _exportService.ExportStudentTranscriptPdf(data.Grades, data.Summary, data.StudentName, studentId, settings),
+                ContentType = "application/pdf",
+                FileName = $"my-transcript-{studentId}.pdf"
+            };
+        }
+
+        public async Task<FinalizeGradeResult> FinalizeGradeAsync(FinalizeGradeCommand command)
+        {
+            try
+            {
+                decimal resolvedFinalScore;
+                if (command.ExamScore.HasValue || command.AssignmentScore.HasValue)
+                {
+                    if (!command.ExamScore.HasValue || !command.AssignmentScore.HasValue)
+                        throw new Exception("Both exam score and assignment score are required when weighted formula is used.");
+
+                    resolvedFinalScore = CalculateWeightedFinalScore(
+                        command.AssignmentScore.Value,
+                        command.ExamScore.Value,
+                        command.AssignmentWeight ?? 30m,
+                        command.ExamWeight ?? 70m);
+                }
+                else if (command.FinalScore.HasValue)
+                {
+                    resolvedFinalScore = command.FinalScore.Value;
+                }
+                else
+                {
+                    throw new Exception("Final score is required.");
+                }
+
+                await FinalizeCourseGradeAsync(command.EnrollmentId, resolvedFinalScore);
+                return new FinalizeGradeResult
+                {
+                    Success = true,
+                    ResolvedFinalScore = resolvedFinalScore
+                };
+            }
+            catch (Exception ex)
+            {
+                return new FinalizeGradeResult
+                {
+                    Success = false,
+                    ErrorMessage = ex.Message
+                };
+            }
         }
 
         public async Task<Transcript> CalculateGPAAsync(string studentId)
@@ -262,6 +483,32 @@ namespace UniTestSystem.Application
         public async Task<Transcript?> GetStudentTranscriptSummaryAsync(string studentId)
         {
             return await _transcriptRepo.FirstOrDefaultAsync(x => x.StudentId == studentId && !x.IsDeleted);
+        }
+
+        private async Task<(List<Enrollment> Grades, Transcript? Summary, string StudentName)> BuildStudentExportDataAsync(string studentId, string? semester)
+        {
+            var all = await GetStudentGradesAsync(studentId);
+            var grades = string.IsNullOrWhiteSpace(semester)
+                ? all
+                : all.Where(x => string.Equals(x.Semester, semester, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            var summary = await GetStudentTranscriptSummaryAsync(studentId);
+            var user = await _userRepo.FirstOrDefaultAsync(x => x.Id == studentId);
+            return (grades, summary, user?.Name ?? studentId);
+        }
+
+        private async Task<string?> ResolveFacultyNameAsync(string? facultyId)
+        {
+            if (string.IsNullOrWhiteSpace(facultyId))
+                return null;
+            return (await _facultyRepo.FirstOrDefaultAsync(x => x.Id == facultyId))?.Name;
+        }
+
+        private async Task<string?> ResolveClassNameAsync(string? classId)
+        {
+            if (string.IsNullOrWhiteSpace(classId))
+                return null;
+            return (await _classRepo.FirstOrDefaultAsync(x => x.Id == classId))?.Name;
         }
 
         private static string GetFacultyScope(string facultyId) => $"faculty:{facultyId}";

@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using UniTestSystem.Application;
 using UniTestSystem.Application.Interfaces;
-using UniTestSystem.Domain;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc.Rendering;
 
@@ -12,29 +10,11 @@ namespace UniTestSystem.Controllers
     public class TranscriptsController : Controller
     {
         private readonly ITranscriptService _transcriptService;
-        private readonly IEntityStore<Faculty> _facultyRepo;
-        private readonly IEntityStore<StudentClass> _classRepo;
-        private readonly IEntityStore<Student> _studentRepo;
-        private readonly IEntityStore<User> _userRepo;
-        private readonly IExportService _exportService;
-        private readonly ISettingsService _settingsService;
 
         public TranscriptsController(
-            ITranscriptService transcriptService,
-            IEntityStore<Faculty> facultyRepo,
-            IEntityStore<StudentClass> classRepo,
-            IEntityStore<Student> studentRepo,
-            IEntityStore<User> userRepo,
-            IExportService exportService,
-            ISettingsService settingsService)
+            ITranscriptService transcriptService)
         {
             _transcriptService = transcriptService;
-            _facultyRepo = facultyRepo;
-            _classRepo = classRepo;
-            _studentRepo = studentRepo;
-            _userRepo = userRepo;
-            _exportService = exportService;
-            _settingsService = settingsService;
         }
 
         // Student View
@@ -54,11 +34,8 @@ namespace UniTestSystem.Controllers
         public async Task<IActionResult> ExportMyTranscriptXlsx()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var grades = await _transcriptService.GetStudentGradesAsync(userId);
-            var summary = await _transcriptService.GetStudentTranscriptSummaryAsync(userId);
-            var user = await _userRepo.FirstOrDefaultAsync(x => x.Id == userId);
-            var bytes = _exportService.ExportStudentTranscriptExcel(grades, summary, user?.Name ?? userId, userId);
-            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"my-transcript-{userId}.xlsx");
+            var file = await _transcriptService.ExportMyTranscriptXlsxAsync(userId);
+            return File(file.Content, file.ContentType, file.FileName);
         }
 
         [Authorize(Roles = "Student")]
@@ -66,112 +43,94 @@ namespace UniTestSystem.Controllers
         public async Task<IActionResult> ExportMyTranscriptPdf()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var grades = await _transcriptService.GetStudentGradesAsync(userId);
-            var summary = await _transcriptService.GetStudentTranscriptSummaryAsync(userId);
-            var user = await _userRepo.FirstOrDefaultAsync(x => x.Id == userId);
-            var settings = await _settingsService.GetAsync();
-            var bytes = _exportService.ExportStudentTranscriptPdf(grades, summary, user?.Name ?? userId, userId, settings);
-            return File(bytes, "application/pdf", $"my-transcript-{userId}.pdf");
+            var file = await _transcriptService.ExportMyTranscriptPdfAsync(userId);
+            return File(file.Content, file.ContentType, file.FileName);
         }
 
         // Admin/Staff View
         [Authorize(Policy = "RequireStaffOrAdmin")]
         public async Task<IActionResult> Index(string? facultyId = null, string? classId = null, string? semester = null)
         {
-            await PrepareFiltersAsync(facultyId, classId, semester);
-            await PrepareLockStateAsync(facultyId);
-            var rows = await _transcriptService.GetAdminTranscriptRowsAsync(facultyId, classId, semester);
-            return View(rows);
+            var page = await _transcriptService.GetAdminTranscriptPageAsync(new TranscriptAdminQuery
+            {
+                FacultyId = facultyId,
+                ClassId = classId,
+                Semester = semester
+            });
+
+            ViewBag.Faculties = new SelectList(page.Faculties, "Id", "Name", facultyId);
+            ViewBag.Classes = new SelectList(page.Classes, "Id", "Name", classId);
+            ViewBag.Semesters = new SelectList(page.Semesters, semester);
+            ViewBag.SelectedFacultyId = facultyId;
+            ViewBag.SelectedClassId = classId;
+            ViewBag.SelectedSemester = semester;
+            ViewBag.SchoolTranscriptLocked = page.SchoolTranscriptLocked;
+            ViewBag.FacultyTranscriptLockMap = page.FacultyTranscriptLockMap;
+            ViewBag.SelectedFacultyTranscriptLocked = page.SelectedFacultyTranscriptLocked;
+
+            return View(page.Rows);
         }
 
         // Admin/Staff View details of a specific student
         [Authorize(Policy = "RequireStaffOrAdmin")]
         public async Task<IActionResult> Details(string id, string? semester = null)
         {
-            var all = await _transcriptService.GetStudentGradesAsync(id);
-            var grades = string.IsNullOrWhiteSpace(semester)
-                ? all
-                : all.Where(x => string.Equals(x.Semester, semester, StringComparison.OrdinalIgnoreCase)).ToList();
-            var summary = await _transcriptService.GetStudentTranscriptSummaryAsync(id);
-            var user = await _userRepo.FirstOrDefaultAsync(x => x.Id == id);
-            
-            ViewBag.StudentId = id;
-            ViewBag.StudentName = user?.Name ?? id;
-            ViewBag.Summary = summary;
-            ViewBag.Semester = semester;
-            ViewBag.Semesters = new SelectList(await _transcriptService.GetAvailableSemestersAsync(), semester);
+            var details = await _transcriptService.GetStudentTranscriptDetailsAsync(id, semester);
+            if (details == null) return NotFound();
 
-            var schoolLocked = await _transcriptService.IsSchoolTranscriptLockedAsync();
-            var student = await _studentRepo.FirstOrDefaultAsync(x => x.Id == id);
-            var facultyLocked = false;
-            string? facultyName = null;
-            if (!string.IsNullOrWhiteSpace(student?.StudentClassId))
-            {
-                var studentClass = await _classRepo.FirstOrDefaultAsync(x => x.Id == student.StudentClassId);
-                if (!string.IsNullOrWhiteSpace(studentClass?.FacultyId))
-                {
-                    facultyLocked = await _transcriptService.IsFacultyTranscriptLockedAsync(studentClass.FacultyId);
-                    facultyName = (await _facultyRepo.FirstOrDefaultAsync(x => x.Id == studentClass.FacultyId))?.Name;
-                }
-            }
+            ViewBag.StudentId = details.StudentId;
+            ViewBag.StudentName = details.StudentName;
+            ViewBag.Summary = details.Summary;
+            ViewBag.Semester = details.Semester;
+            ViewBag.Semesters = new SelectList(details.Semesters, details.Semester);
+            ViewBag.IsTranscriptLocked = details.IsTranscriptLocked;
+            ViewBag.SchoolLocked = details.SchoolLocked;
+            ViewBag.FacultyLocked = details.FacultyLocked;
+            ViewBag.FacultyLockName = details.FacultyLockName;
 
-            ViewBag.IsTranscriptLocked = schoolLocked || facultyLocked;
-            ViewBag.SchoolLocked = schoolLocked;
-            ViewBag.FacultyLocked = facultyLocked;
-            ViewBag.FacultyLockName = facultyName;
-            return View(grades);
+            return View(details.Grades);
         }
 
         [Authorize(Policy = "RequireStaffOrAdmin")]
         [HttpGet("/transcripts/export/xlsx")]
         public async Task<IActionResult> ExportXlsx(string? facultyId = null, string? classId = null, string? semester = null)
         {
-            var rows = await _transcriptService.GetAdminTranscriptRowsAsync(facultyId, classId, semester);
-            var faculty = string.IsNullOrWhiteSpace(facultyId) ? null : await _facultyRepo.FirstOrDefaultAsync(x => x.Id == facultyId);
-            var studentClass = string.IsNullOrWhiteSpace(classId) ? null : await _classRepo.FirstOrDefaultAsync(x => x.Id == classId);
-            var bytes = _exportService.ExportTranscriptOverviewExcel(rows, faculty?.Name, studentClass?.Name, semester);
-            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"transcripts-{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+            var file = await _transcriptService.ExportAdminTranscriptOverviewXlsxAsync(new TranscriptAdminQuery
+            {
+                FacultyId = facultyId,
+                ClassId = classId,
+                Semester = semester
+            });
+            return File(file.Content, file.ContentType, file.FileName);
         }
 
         [Authorize(Policy = "RequireStaffOrAdmin")]
         [HttpGet("/transcripts/export/pdf")]
         public async Task<IActionResult> ExportPdf(string? facultyId = null, string? classId = null, string? semester = null)
         {
-            var rows = await _transcriptService.GetAdminTranscriptRowsAsync(facultyId, classId, semester);
-            var faculty = string.IsNullOrWhiteSpace(facultyId) ? null : await _facultyRepo.FirstOrDefaultAsync(x => x.Id == facultyId);
-            var studentClass = string.IsNullOrWhiteSpace(classId) ? null : await _classRepo.FirstOrDefaultAsync(x => x.Id == classId);
-            var settings = await _settingsService.GetAsync();
-            var bytes = _exportService.ExportTranscriptOverviewPdf(rows, settings, faculty?.Name, studentClass?.Name, semester);
-            return File(bytes, "application/pdf", $"transcripts-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf");
+            var file = await _transcriptService.ExportAdminTranscriptOverviewPdfAsync(new TranscriptAdminQuery
+            {
+                FacultyId = facultyId,
+                ClassId = classId,
+                Semester = semester
+            });
+            return File(file.Content, file.ContentType, file.FileName);
         }
 
         [Authorize(Policy = "RequireStaffOrAdmin")]
         [HttpGet("/transcripts/{id}/export/xlsx")]
         public async Task<IActionResult> ExportStudentXlsx(string id, string? semester = null)
         {
-            var all = await _transcriptService.GetStudentGradesAsync(id);
-            var grades = string.IsNullOrWhiteSpace(semester)
-                ? all
-                : all.Where(x => string.Equals(x.Semester, semester, StringComparison.OrdinalIgnoreCase)).ToList();
-            var summary = await _transcriptService.GetStudentTranscriptSummaryAsync(id);
-            var user = await _userRepo.FirstOrDefaultAsync(x => x.Id == id);
-            var bytes = _exportService.ExportStudentTranscriptExcel(grades, summary, user?.Name ?? id, id);
-            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"student-transcript-{id}.xlsx");
+            var file = await _transcriptService.ExportStudentTranscriptXlsxAsync(id, semester);
+            return File(file.Content, file.ContentType, file.FileName);
         }
 
         [Authorize(Policy = "RequireStaffOrAdmin")]
         [HttpGet("/transcripts/{id}/export/pdf")]
         public async Task<IActionResult> ExportStudentPdf(string id, string? semester = null)
         {
-            var all = await _transcriptService.GetStudentGradesAsync(id);
-            var grades = string.IsNullOrWhiteSpace(semester)
-                ? all
-                : all.Where(x => string.Equals(x.Semester, semester, StringComparison.OrdinalIgnoreCase)).ToList();
-            var summary = await _transcriptService.GetStudentTranscriptSummaryAsync(id);
-            var user = await _userRepo.FirstOrDefaultAsync(x => x.Id == id);
-            var settings = await _settingsService.GetAsync();
-            var bytes = _exportService.ExportStudentTranscriptPdf(grades, summary, user?.Name ?? id, id, settings);
-            return File(bytes, "application/pdf", $"student-transcript-{id}.pdf");
+            var file = await _transcriptService.ExportStudentTranscriptPdfAsync(id, semester);
+            return File(file.Content, file.ContentType, file.FileName);
         }
 
         // Admin/Staff/Lecturer: Finalize a grade
@@ -186,36 +145,20 @@ namespace UniTestSystem.Controllers
             decimal? assignmentWeight,
             string returnUrl)
         {
-            try
+            var result = await _transcriptService.FinalizeGradeAsync(new FinalizeGradeCommand
             {
-                decimal resolvedFinalScore;
-                if (examScore.HasValue || assignmentScore.HasValue)
-                {
-                    if (!examScore.HasValue || !assignmentScore.HasValue)
-                        throw new Exception("Both exam score and assignment score are required when weighted formula is used.");
+                EnrollmentId = enrollmentId,
+                FinalScore = finalScore,
+                ExamScore = examScore,
+                AssignmentScore = assignmentScore,
+                ExamWeight = examWeight,
+                AssignmentWeight = assignmentWeight
+            });
 
-                    resolvedFinalScore = _transcriptService.CalculateWeightedFinalScore(
-                        assignmentScore.Value,
-                        examScore.Value,
-                        assignmentWeight ?? 30m,
-                        examWeight ?? 70m);
-                }
-                else if (finalScore.HasValue)
-                {
-                    resolvedFinalScore = finalScore.Value;
-                }
-                else
-                {
-                    throw new Exception("Final score is required.");
-                }
-
-                await _transcriptService.FinalizeCourseGradeAsync(enrollmentId, resolvedFinalScore);
-                TempData["Msg"] = $"Saved final score: {resolvedFinalScore:0.00}";
-            }
-            catch (Exception ex)
-            {
-                TempData["Err"] = ex.Message;
-            }
+            if (result.Success)
+                TempData["Msg"] = $"Saved final score: {result.ResolvedFinalScore:0.00}";
+            else
+                TempData["Err"] = result.ErrorMessage;
 
             if (string.IsNullOrWhiteSpace(returnUrl) || !Url.IsLocalUrl(returnUrl))
                 returnUrl = "/Transcripts/Index";
@@ -277,34 +220,6 @@ namespace UniTestSystem.Controllers
             await _transcriptService.UnlockFacultyTranscriptAsync(facultyId, actor, note);
             TempData["Msg"] = "Faculty transcript lock removed.";
             return RedirectToLocalOrIndex(returnUrl);
-        }
-
-        private async Task PrepareFiltersAsync(string? facultyId, string? classId, string? semester)
-        {
-            var faculties = await _facultyRepo.GetAllAsync(x => !x.IsDeleted);
-            var classes = await _classRepo.GetAllAsync(x => !x.IsDeleted);
-            var semesters = await _transcriptService.GetAvailableSemestersAsync();
-
-            ViewBag.Faculties = new SelectList(faculties.OrderBy(f => f.Name), "Id", "Name", facultyId);
-            ViewBag.Classes = new SelectList(classes.OrderBy(c => c.Name), "Id", "Name", classId);
-            ViewBag.Semesters = new SelectList(semesters, semester);
-            ViewBag.SelectedFacultyId = facultyId;
-            ViewBag.SelectedClassId = classId;
-            ViewBag.SelectedSemester = semester;
-        }
-
-        private async Task PrepareLockStateAsync(string? selectedFacultyId)
-        {
-            var schoolLocked = await _transcriptService.IsSchoolTranscriptLockedAsync();
-            var facultyLockMap = await _transcriptService.GetFacultyTranscriptLockMapAsync();
-
-            var selectedFacultyLocked = false;
-            if (!string.IsNullOrWhiteSpace(selectedFacultyId))
-                selectedFacultyLocked = facultyLockMap.TryGetValue(selectedFacultyId, out var locked) && locked;
-
-            ViewBag.SchoolTranscriptLocked = schoolLocked;
-            ViewBag.FacultyTranscriptLockMap = facultyLockMap;
-            ViewBag.SelectedFacultyTranscriptLocked = selectedFacultyLocked;
         }
 
         private IActionResult RedirectToLocalOrIndex(string? returnUrl)

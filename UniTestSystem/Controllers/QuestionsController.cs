@@ -11,23 +11,17 @@ public class QuestionsController : Controller
 {
     private readonly IQuestionService _svc;
     private readonly IQuestionExcelService _xlsx;
-    private readonly IEntityStore<Question> _qRepo;
-    private readonly IEntityStore<AuditEntry> _auditRepo;
     private readonly IWebHostEnvironment _env;
     private readonly IConfiguration _cfg;
 
     public QuestionsController(
         IQuestionService svc,
         IQuestionExcelService xlsx,
-        IEntityStore<Question> qRepo,
-        IEntityStore<AuditEntry> auditRepo,
         IWebHostEnvironment env,
         IConfiguration cfg)
     {
         _svc = svc;
         _xlsx = xlsx;
-        _qRepo = qRepo;
-        _auditRepo = auditRepo;
         _env = env;
         _cfg = cfg;
     }
@@ -69,12 +63,19 @@ public class QuestionsController : Controller
     {
         try
         {
-            NormalizeQuestionFieldsFromForm(q, Options, CorrectKeys, MatchingPairsRaw, DragTokens, DragSlotsRaw, TagsCsv);
+            var media = mediaFiles?.Any() == true ? await SaveMediaAsync(mediaFiles) : null;
+            var id = await _svc.CreateFromFormAsync(new QuestionFormCommand
+            {
+                Question = q,
+                Options = Options,
+                CorrectKeys = CorrectKeys,
+                MatchingPairsRaw = MatchingPairsRaw,
+                DragTokens = DragTokens,
+                DragSlotsRaw = DragSlotsRaw,
+                TagsCsv = TagsCsv,
+                NewMedia = media
+            }, User.Identity?.Name ?? "hr");
 
-            if (mediaFiles?.Any() == true)
-                q.Media = await SaveMediaAsync(mediaFiles);
-
-            var id = await _svc.CreateAsync(q, User.Identity?.Name ?? "hr");
             return RedirectToAction(nameof(Edit), new { id });
         }
         catch (Exception ex)
@@ -89,19 +90,11 @@ public class QuestionsController : Controller
     [HttpGet("/Questions/Edit/{id}")]
     public async Task<IActionResult> Edit(string id)
     {
-        var q = await _svc.GetAsync(id);
-        if (q == null) return NotFound();
+        var editData = await _svc.GetEditDataAsync(id);
+        if (editData == null) return NotFound();
 
-        var versions = (await _auditRepo.GetAllAsync(a =>
-                a.EntityName == "Question" &&
-                a.EntityId == id &&
-                (a.After != null || a.Before != null)))
-            .OrderByDescending(a => a.At)
-            .Take(20)
-            .ToList();
-
-        ViewBag.QuestionVersions = versions;
-        return View(q);
+        ViewBag.QuestionVersions = editData.Versions;
+        return View(editData.Question);
     }
 
     // POST: /Questions/Edit/{id}
@@ -124,33 +117,20 @@ public class QuestionsController : Controller
 
         try
         {
-            // đảm bảo q.Id có giá trị (từ hidden hoặc route)
-            if (string.IsNullOrWhiteSpace(q.Id)) q.Id = id;
-
-            var original = await _svc.GetAsync(q.Id);
-            if (original == null)
+            var media = mediaFiles?.Any() == true ? await SaveMediaAsync(mediaFiles) : null;
+            var (success, reason) = await _svc.UpdateFromFormAsync(new QuestionFormCommand
             {
-                ModelState.AddModelError("", "Not found");
-                return View(q);
-            }
+                Id = id,
+                Question = q,
+                Options = Options,
+                CorrectKeys = CorrectKeys,
+                MatchingPairsRaw = MatchingPairsRaw,
+                DragTokens = DragTokens,
+                DragSlotsRaw = DragSlotsRaw,
+                TagsCsv = TagsCsv,
+                NewMedia = media
+            }, User.Identity?.Name ?? "hr");
 
-            NormalizeQuestionFieldsFromForm(q, Options, CorrectKeys, MatchingPairsRaw, DragTokens, DragSlotsRaw, TagsCsv);
-
-            // giữ audit cũ
-            q.CreatedAt = original.CreatedAt;
-            q.CreatedBy = original.CreatedBy;
-
-            // merge media cũ + mới
-            var mergedMedia = (original.Media ?? new List<MediaFile>()).ToList();
-            if (mediaFiles?.Any() == true)
-            {
-                var newly = await SaveMediaAsync(mediaFiles);
-                var exists = new HashSet<string>(mergedMedia.Select(m => m.Url), StringComparer.OrdinalIgnoreCase);
-                foreach (var m in newly) if (exists.Add(m.Url)) mergedMedia.Add(m);
-            }
-            q.Media = mergedMedia;
-
-            var (success, reason) = await _svc.UpdateAsync(q, User.Identity?.Name ?? "hr");
             if (!success)
             {
                 ModelState.AddModelError("", reason ?? "Update failed");
@@ -201,7 +181,7 @@ public class QuestionsController : Controller
     [HttpGet]
     public async Task<FileResult> ExportExcel()
     {
-        var all = await _qRepo.GetAllAsync();
+        var all = await _svc.GetAllAsync();
         var bytes = await _xlsx.ExportAsync(all);
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "QuestionBank.xlsx");
     }
@@ -267,93 +247,25 @@ public class QuestionsController : Controller
     [HttpPost]
     public async Task<IActionResult> DeleteMedia(string questionId, string mediaId)
     {
-        var q = await _svc.GetAsync(questionId);
-        if (q == null) return NotFound();
-
-        var m = q.Media.FirstOrDefault(x => x.Id == mediaId);
-        if (m == null) return RedirectToAction(nameof(Edit), new { id = questionId });
-
-        try
+        var result = await _svc.RemoveMediaAsync(questionId, mediaId, User.Identity?.Name ?? "hr");
+        if (!result.Success)
         {
-            var physical = Path.Combine(_env.WebRootPath, m.Url.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
-            if (System.IO.File.Exists(physical))
-                System.IO.File.Delete(physical);
+            TempData["Err"] = result.Reason ?? "Không thể xóa file";
+            return RedirectToAction(nameof(Edit), new { id = questionId });
         }
-        catch { /* ignore */ }
 
-        q.Media.RemoveAll(x => x.Id == mediaId);
-        var (ok, reason) = await _svc.UpdateAsync(q, User.Identity?.Name ?? "hr");
-        if (!ok) TempData["Err"] = reason ?? "Không thể xóa file";
+        if (!string.IsNullOrWhiteSpace(result.MediaUrl))
+        {
+            try
+            {
+                var physical = Path.Combine(_env.WebRootPath, result.MediaUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+                if (System.IO.File.Exists(physical))
+                    System.IO.File.Delete(physical);
+            }
+            catch { /* ignore */ }
+        }
 
         return RedirectToAction(nameof(Edit), new { id = questionId });
-    }
-
-    // Helpers
-    private static void NormalizeQuestionFieldsFromForm(
-        Question q,
-        List<string>? optionsRaw,
-        string? correctKeys,
-        string? matchingPairsRaw,
-        string? dragTokens,
-        string? dragSlotsRaw,
-        string? tagsCsv)
-    {
-        // 1. Parse correct keys
-        var correctSet = string.IsNullOrWhiteSpace(correctKeys)
-            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            : correctKeys.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        // 2. Map options
-        if (q.Type == QType.MCQ || q.Type == QType.TrueFalse)
-        {
-            var rawStrings = q.Type == QType.TrueFalse
-                ? new List<string> { "True", "False" }
-                : (optionsRaw ?? new List<string>())
-                    .SelectMany(line => (line ?? "").Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
-                    .Select(s => s.Trim())
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .ToList();
-
-            q.Options = rawStrings.Select(s => new Option
-            {
-                Content = s,
-                IsCorrect = correctSet.Contains(s)
-            }).ToList();
-        }
-
-        if (!string.IsNullOrWhiteSpace(tagsCsv))
-            q.Tags = tagsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-
-        if (q.Type == QType.Matching)
-        {
-            q.MatchingPairs = new();
-            var lines = (matchingPairsRaw ?? "").Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (var raw in lines)
-            {
-                var parts = raw.Split('|', StringSplitOptions.TrimEntries);
-                if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0]) && !string.IsNullOrWhiteSpace(parts[1]))
-                    q.MatchingPairs.Add(new MatchPair(parts[0], parts[1]));
-            }
-        }
-
-        if (q.Type == QType.DragDrop)
-        {
-            var tokens = string.IsNullOrWhiteSpace(dragTokens)
-                ? new List<string>()
-                : dragTokens.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-
-            var slots = new List<DragSlot>();
-            var lines = (dragSlotsRaw ?? "").Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (var raw in lines)
-            {
-                var parts = raw.Split('=', StringSplitOptions.TrimEntries);
-                if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0]))
-                    slots.Add(new DragSlot(parts[0], parts[1]));
-            }
-            q.DragDrop = new DragDropConfig { Tokens = tokens, Slots = slots };
-        }
-
     }
 
     private async Task<List<MediaFile>> SaveMediaAsync(List<IFormFile> files)
