@@ -17,12 +17,31 @@ public sealed class SessionRequestContext
     public string? IpAddress { get; set; }
 }
 
-public sealed class SessionServiceResult<T>
+public sealed class SessionServiceResult<T> : IResult
 {
     public SessionServiceStatus Status { get; set; }
     public string? ErrorCode { get; set; }
     public string? Message { get; set; }
     public T? Data { get; set; }
+
+    public bool IsSuccess => Status == SessionServiceStatus.Success;
+    public bool IsFailure => !IsSuccess;
+
+    public int StatusCode => Status switch
+    {
+        SessionServiceStatus.Success => 200,
+        SessionServiceStatus.NotFound => 404,
+        SessionServiceStatus.Forbidden => 403,
+        SessionServiceStatus.Conflict => 409,
+        SessionServiceStatus.BadRequest => 400,
+        _ => 500
+    };
+
+    public string? Error => Message;
+
+    public IReadOnlyCollection<string> Errors => string.IsNullOrWhiteSpace(Message)
+        ? Array.Empty<string>()
+        : new[] { Message! };
 }
 
 public sealed class StartSessionCommand

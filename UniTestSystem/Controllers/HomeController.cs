@@ -39,9 +39,32 @@ namespace UniTestSystem.Controllers
         }
 
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-        public IActionResult Error()
+        [Route("Home/Error/{statusCode?}")]
+        public IActionResult Error(int? statusCode = null)
         {
-            return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+            var resolvedStatusCode = statusCode ?? HttpContext.Response.StatusCode;
+
+            if (resolvedStatusCode < 400)
+            {
+                resolvedStatusCode = StatusCodes.Status500InternalServerError;
+            }
+
+            var message = resolvedStatusCode switch
+            {
+                StatusCodes.Status404NotFound => "The resource you requested was not found.",
+                StatusCodes.Status401Unauthorized => "You are not authorized to access this resource.",
+                StatusCodes.Status403Forbidden => "Access to this resource is forbidden.",
+                _ => "An internal server error occurred while processing your request."
+            };
+
+            Response.StatusCode = resolvedStatusCode;
+
+            return View(new ErrorViewModel
+            {
+                RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier,
+                StatusCode = resolvedStatusCode,
+                Message = message
+            });
         }
     }
 }

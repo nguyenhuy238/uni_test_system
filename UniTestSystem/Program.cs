@@ -19,6 +19,7 @@ using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Application.Models;
 using UniTestSystem.Configuration;
 using UniTestSystem.Domain;
+using UniTestSystem.Middleware;
 using UniTestSystem.Infrastructure.Persistence;
 using UniTestSystem.Infrastructure;
 
@@ -277,6 +278,15 @@ builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email
 
 var app = builder.Build();
 
+app.UseGlobalExceptionMiddleware();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseWhen(
+        context => !GlobalExceptionMiddleware.IsApiRequest(context),
+        branch => branch.UseExceptionHandler("/Home/Error"));
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger(); app.UseSwaggerUI();
@@ -285,6 +295,9 @@ if (app.Environment.IsDevelopment())
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseStaticFiles();
+app.UseWhen(
+    context => !GlobalExceptionMiddleware.IsApiRequest(context),
+    branch => branch.UseStatusCodePagesWithReExecute("/Home/Error/{0}"));
 
 app.UseRouting();
 app.UseRateLimiter();
