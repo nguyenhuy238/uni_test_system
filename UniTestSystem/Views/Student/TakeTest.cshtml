@@ -10,10 +10,19 @@
         <section class="exam-question-panel ui-surface">
             <header class="exam-question-header">
                 <h5 class="mb-0 fw-bold" id="testTitle">Loading test...</h5>
-                <div class="exam-progress-pill">
-                    Question <span id="currentQNum">0</span> / <span id="totalQNum">0</span>
+                <div class="exam-header-badges">
+                    <div id="syncStatusBadge" class="exam-sync-pill sync-ok">
+                        <span class="sync-dot"></span>
+                        <span id="syncStatusText">Đã lưu</span>
+                    </div>
+                    <div class="exam-progress-pill">
+                        Question <span id="currentQNum">0</span> / <span id="totalQNum">0</span>
+                    </div>
                 </div>
             </header>
+            <div id="offlineBanner" class="exam-offline-banner d-none">
+                Bạn đang offline. Câu trả lời được lưu tạm và sẽ tự động đồng bộ khi có mạng.
+            </div>
 
             <div class="exam-question-body" id="questionContainer">
                 <div class="text-center py-5" id="loader">
@@ -79,36 +88,241 @@
 @section Scripts {
     <script>
         const TEST_ID = '@testId';
+        const AUTO_SAVE_INTERVAL_MS = 30000;
+        const SAVE_TIMEOUT_MS = 8000;
+        const MAX_RETRY_COUNT = 5;
+        const DEVICE_FP_KEY = 'unitest_device_fp';
+
         let sessionId = '';
         let questions = [];
         let currentIndex = 0;
-        let userAnswers = {}; // { questionId: value }
+        let userAnswers = {};
+        let dirtyAnswerTimestamps = {};
         let timerSeconds = 0;
         let timerInterval;
+        let autoSaveInterval;
+        let isSubmitting = false;
+        let isDrainingQueue = false;
+        let queueSyncRequested = false;
+        let submittedConflictNotified = false;
 
         $(document).ready(function() {
             initAntiCheat();
+            bindConnectivityEvents();
             startTest();
         });
 
-        // --- 1. CORE LOGIC ---
+        function getDeviceFingerprint() {
+            let fp = localStorage.getItem(DEVICE_FP_KEY);
+            if (!fp) {
+                fp = (crypto?.randomUUID?.() ?? `${Date.now()}_${Math.random()}`).toString();
+                localStorage.setItem(DEVICE_FP_KEY, fp);
+            }
+            return fp;
+        }
+
+        function authFetch(url, options = {}) {
+            const headers = Object.assign({}, options.headers || {}, {
+                'X-Device-Fingerprint': getDeviceFingerprint()
+            });
+            return fetch(url, { ...options, headers });
+        }
+
+        function getDraftStorageKey() {
+            return sessionId ? `examDraft_${sessionId}` : '';
+        }
+
+        function getQueueStorageKey() {
+            return sessionId ? `offlineQueue_${sessionId}` : '';
+        }
+
+        function parseSafeJson(raw, fallback) {
+            try {
+                const parsed = JSON.parse(raw);
+                return parsed ?? fallback;
+            } catch (_) {
+                return fallback;
+            }
+        }
+
+        const DraftStore = {
+            save() {
+                const key = getDraftStorageKey();
+                if (!key) return;
+
+                const payload = {
+                    sessionId,
+                    answers: { ...userAnswers },
+                    questionTimestamps: { ...dirtyAnswerTimestamps },
+                    lastUpdated: new Date().toISOString()
+                };
+                localStorage.setItem(key, JSON.stringify(payload));
+            },
+            load() {
+                const key = getDraftStorageKey();
+                if (!key) return null;
+                return parseSafeJson(localStorage.getItem(key), null);
+            },
+            clear() {
+                const key = getDraftStorageKey();
+                if (!key) return;
+                localStorage.removeItem(key);
+            }
+        };
+
+        const OfflineQueue = {
+            load() {
+                const key = getQueueStorageKey();
+                if (!key) return [];
+                const queue = parseSafeJson(localStorage.getItem(key), []);
+                if (!Array.isArray(queue)) return [];
+                return queue.filter(x => x && x.sessionId === sessionId && x.questionId);
+            },
+            save(queue) {
+                const key = getQueueStorageKey();
+                if (!key) return;
+                localStorage.setItem(key, JSON.stringify(queue || []));
+            },
+            clear() {
+                const key = getQueueStorageKey();
+                if (!key) return;
+                localStorage.removeItem(key);
+            }
+        };
+
+        function getQueueStats() {
+            const queue = OfflineQueue.load();
+            const pendingCount = queue.filter(x => !x.failed).length;
+            const failedCount = queue.filter(x => !!x.failed).length;
+            return { queue, pendingCount, failedCount };
+        }
+
+        function setSyncStatus(cssClass, text) {
+            const badge = $('#syncStatusBadge');
+            badge.removeClass('sync-ok sync-pending sync-error').addClass(cssClass);
+            $('#syncStatusText').text(text);
+        }
+
+        function updateSyncStatusIndicator() {
+            const { pendingCount, failedCount } = getQueueStats();
+            const offline = !navigator.onLine;
+
+            if (failedCount > 0) {
+                setSyncStatus('sync-error', `Đồng bộ lỗi - ${failedCount} câu cần kiểm tra`);
+            } else if (offline && pendingCount > 0) {
+                setSyncStatus('sync-error', `Mất kết nối - ${pendingCount} câu chưa lưu`);
+            } else if (pendingCount > 0) {
+                setSyncStatus('sync-pending', `Đang lưu offline... (${pendingCount} câu chưa đồng bộ)`);
+            } else if (offline) {
+                setSyncStatus('sync-pending', 'Đang offline');
+            } else {
+                setSyncStatus('sync-ok', 'Đã lưu');
+            }
+
+            $('#offlineBanner').toggleClass('d-none', !offline);
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.textContent = message;
+            toast.style.position = 'fixed';
+            toast.style.right = '16px';
+            toast.style.bottom = '16px';
+            toast.style.zIndex = '9999';
+            toast.style.padding = '10px 14px';
+            toast.style.borderRadius = '8px';
+            toast.style.boxShadow = '0 6px 20px rgba(0,0,0,.15)';
+            toast.style.maxWidth = '56ch';
+            toast.style.border = type === 'warn' ? '1px solid #fca5a5' : '1px solid #93c5fd';
+            toast.style.background = type === 'warn' ? '#fef2f2' : '#eff6ff';
+            toast.style.color = type === 'warn' ? '#991b1b' : '#1e3a8a';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3800);
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        function bindConnectivityEvents() {
+            window.addEventListener('online', async () => {
+                updateSyncStatusIndicator();
+                showToast('Đã có kết nối. Hệ thống đang đồng bộ câu trả lời.');
+                await flushDirtyAnswers();
+                await drainOfflineQueue();
+            });
+
+            window.addEventListener('offline', () => {
+                updateSyncStatusIndicator();
+                showToast('Mất kết nối. Câu trả lời sẽ được lưu tạm trên trình duyệt.', 'warn');
+            });
+
+            window.addEventListener('beforeunload', () => {
+                if (!sessionId) return;
+                DraftStore.save();
+            });
+        }
+
+        function restoreDraftAndQueue() {
+            const draft = DraftStore.load();
+            let restored = false;
+
+            if (draft && draft.answers && typeof draft.answers === 'object') {
+                userAnswers = { ...userAnswers, ...draft.answers };
+                restored = Object.keys(draft.answers).length > 0;
+            }
+
+            if (draft && draft.questionTimestamps && typeof draft.questionTimestamps === 'object') {
+                dirtyAnswerTimestamps = { ...dirtyAnswerTimestamps, ...draft.questionTimestamps };
+            }
+
+            const queue = OfflineQueue.load();
+            queue
+                .sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')))
+                .forEach(entry => {
+                    userAnswers[entry.questionId] = entry.answerId ?? '';
+                    dirtyAnswerTimestamps[entry.questionId] = entry.timestamp ?? new Date().toISOString();
+                });
+
+            if (restored) {
+                showToast('Đã khôi phục câu trả lời từ lần làm trước.');
+            }
+        }
 
         function startTest() {
             $.ajax({
                 url: `/api/tests/${TEST_ID}/start`,
                 method: 'POST',
-                success: function(res) {
+                success: async function(res) {
                     sessionId = res.sessionId;
-                    questions = res.questions;
-                    timerSeconds = res.remainingMinutes * 60;
-                    
+                    questions = res.questions || [];
+                    timerSeconds = Math.max(0, (res.remainingMinutes || 0) * 60);
+
+                    restoreDraftAndQueue();
+
                     $('#testTitle').text('Online Examination');
                     $('#totalQNum').text(questions.length);
                     $('#loader').remove();
-                    
+
                     renderPalette();
-                    showQuestion(0);
+                    if (questions.length > 0) {
+                        showQuestion(0);
+                    } else {
+                        $('#questionContainer').html('<div class="alert alert-warning">No questions found for this session.</div>');
+                    }
                     startTimer();
+                    startAutoSave();
+                    updateSyncStatusIndicator();
+
+                    if (navigator.onLine) {
+                        await flushDirtyAnswers();
+                        await drainOfflineQueue();
+                    }
                 },
                 error: function(err) {
                     $('#questionContainer').html(`
@@ -122,12 +336,13 @@
         }
 
         function showQuestion(index) {
+            if (!questions.length) return;
             currentIndex = index;
             const q = questions[index];
-            
+
             $('#currentQNum').text(index + 1);
             $('#prevBtn').prop('disabled', index === 0);
-            
+
             if (index === questions.length - 1) {
                 $('#nextBtn').addClass('d-none');
                 $('#submitBtn').removeClass('d-none');
@@ -138,10 +353,11 @@
             }
 
             let html = `<div class="mb-4"><h4 class="fw-bold exam-question">${q.content}</h4></div>`;
-            
+
             if (q.type === 'MCQ' || q.type === 'TrueFalse') {
+                const options = Array.isArray(q.options) ? q.options : [];
                 html += '<div class="exam-option-list">';
-                q.options.forEach(opt => {
+                options.forEach(opt => {
                     const isChecked = userAnswers[q.id] === opt.content ? 'checked' : '';
                     html += `
                         <label class="exam-option-item cursor-pointer">
@@ -151,7 +367,7 @@
                 });
                 html += '</div>';
             } else if (q.type === 'Essay') {
-                const val = userAnswers[q.id] || '';
+                const val = escapeHtml(userAnswers[q.id] || '');
                 html += `<textarea class="form-control shadow-sm exam-essay" rows="10" placeholder="Type your answer here..." oninput="saveAnswer('${q.id}', this.value)">${val}</textarea>`;
             }
 
@@ -161,7 +377,15 @@
 
         function saveAnswer(qid, val) {
             userAnswers[qid] = val;
+            dirtyAnswerTimestamps[qid] = new Date().toISOString();
+            DraftStore.save();
+
+            if (!navigator.onLine) {
+                enqueueAnswerForSync(qid, val, dirtyAnswerTimestamps[qid]);
+            }
+
             updatePaletteActive();
+            updateSyncStatusIndicator();
         }
 
         function nextQuestion() {
@@ -184,7 +408,7 @@
             questions.forEach((q, i) => {
                 const btn = $(`#pal_${i}`);
                 btn.removeClass('is-current is-answered');
-                
+
                 if (i === currentIndex) {
                     btn.addClass('is-current');
                 } else if (userAnswers[q.id]) {
@@ -194,20 +418,299 @@
         }
 
         function startTimer() {
+            if (timerInterval) return;
+            renderTimer();
             timerInterval = setInterval(() => {
                 timerSeconds--;
                 if (timerSeconds <= 0) {
+                    timerSeconds = 0;
                     clearInterval(timerInterval);
+                    timerInterval = null;
                     autoSubmit();
                 }
-                const m = Math.floor(timerSeconds / 60);
-                const s = timerSeconds % 60;
-                $('#timer').text(`${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
-                
+                renderTimer();
+
                 if (timerSeconds < 300) { // Red timer if < 5 mins
                     $('#timerWrap').addClass('time-critical');
                 }
             }, 1000);
+        }
+
+        function renderTimer() {
+            const m = Math.floor(timerSeconds / 60);
+            const s = timerSeconds % 60;
+            $('#timer').text(`${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+        }
+
+        function startAutoSave() {
+            if (autoSaveInterval) {
+                clearInterval(autoSaveInterval);
+            }
+
+            autoSaveInterval = setInterval(async () => {
+                await flushDirtyAnswers();
+                await drainOfflineQueue();
+            }, AUTO_SAVE_INTERVAL_MS);
+        }
+
+        function stopAutoSave() {
+            if (autoSaveInterval) {
+                clearInterval(autoSaveInterval);
+                autoSaveInterval = null;
+            }
+        }
+
+        async function saveAnswersToServer(answers, questionTimestamps, clientTimestamp) {
+            const controller = new AbortController();
+            const timeoutHandle = setTimeout(() => controller.abort(), SAVE_TIMEOUT_MS);
+            try {
+                return await authFetch(`/api/tests/sessions/${sessionId}/save-answer`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        answers,
+                        clientTimestamp,
+                        questionClientTimestamps: questionTimestamps
+                    }),
+                    signal: controller.signal
+                });
+            } finally {
+                clearTimeout(timeoutHandle);
+            }
+        }
+
+        function removeQueueEntriesByTimestampMap(questionTimestampMap) {
+            const queue = OfflineQueue.load().filter(entry => {
+                const syncTs = questionTimestampMap[entry.questionId];
+                if (!syncTs) return true;
+                return String(entry.timestamp || '') > String(syncTs);
+            });
+            OfflineQueue.save(queue);
+        }
+
+        function enqueueAnswerForSync(questionId, answerValue, timestamp, keepRetry = false) {
+            if (!questionId) return;
+            const queue = OfflineQueue.load();
+            const existing = queue.find(x => x.questionId === questionId);
+
+            if (existing && existing.timestamp === timestamp && existing.answerId === (answerValue ?? '')) {
+                return;
+            }
+
+            const filtered = queue.filter(x => x.questionId !== questionId);
+            filtered.push({
+                sessionId,
+                questionId,
+                answerId: answerValue ?? '',
+                timestamp: timestamp ?? new Date().toISOString(),
+                retryCount: keepRetry && existing ? Number(existing.retryCount || 0) : 0
+            });
+            OfflineQueue.save(filtered);
+            updateSyncStatusIndicator();
+        }
+
+        function markQueueEntryRetry(entry, forceFail) {
+            const queue = OfflineQueue.load();
+            const idx = queue.findIndex(x =>
+                x.questionId === entry.questionId &&
+                x.timestamp === entry.timestamp);
+            if (idx < 0) return;
+
+            const current = queue[idx];
+            current.retryCount = Number(current.retryCount || 0) + 1;
+            if (forceFail || current.retryCount >= MAX_RETRY_COUNT) {
+                current.failed = true;
+                showToast(`Không thể đồng bộ câu ${current.questionId} sau ${current.retryCount} lần thử.`, 'warn');
+            }
+
+            queue[idx] = current;
+            OfflineQueue.save(queue);
+            updateSyncStatusIndicator();
+        }
+
+        function markAllPendingAsFailed() {
+            const queue = OfflineQueue.load().map(entry => {
+                if (entry.failed) return entry;
+                return {
+                    ...entry,
+                    failed: true,
+                    retryCount: Math.max(Number(entry.retryCount || 0), MAX_RETRY_COUNT)
+                };
+            });
+            OfflineQueue.save(queue);
+            updateSyncStatusIndicator();
+        }
+
+        function removeQueueEntry(entry) {
+            const queue = OfflineQueue.load().filter(x =>
+                !(x.questionId === entry.questionId && x.timestamp === entry.timestamp));
+            OfflineQueue.save(queue);
+            updateSyncStatusIndicator();
+        }
+
+        async function flushDirtyAnswers() {
+            if (!sessionId || isSubmitting) return;
+
+            const dirtyEntries = Object.entries(dirtyAnswerTimestamps);
+            if (!dirtyEntries.length) return;
+
+            if (!navigator.onLine) {
+                dirtyEntries.forEach(([qid, ts]) => {
+                    enqueueAnswerForSync(qid, userAnswers[qid] ?? '', ts);
+                });
+                return;
+            }
+
+            const answersPayload = {};
+            const timestampsPayload = {};
+            dirtyEntries.forEach(([qid, ts]) => {
+                answersPayload[qid] = userAnswers[qid] ?? '';
+                timestampsPayload[qid] = ts;
+            });
+            const newestTimestamp = dirtyEntries.map(x => x[1]).sort().slice(-1)[0];
+
+            try {
+                const response = await saveAnswersToServer(answersPayload, timestampsPayload, newestTimestamp);
+
+                if (response.ok) {
+                    dirtyEntries.forEach(([qid, ts]) => {
+                        if (dirtyAnswerTimestamps[qid] === ts) {
+                            delete dirtyAnswerTimestamps[qid];
+                        }
+                    });
+                    removeQueueEntriesByTimestampMap(timestampsPayload);
+                    DraftStore.save();
+                    updateSyncStatusIndicator();
+                    return;
+                }
+
+                if (response.status === 409) {
+                    let message = 'Phiên làm bài đã được nộp trên thiết bị khác.';
+                    try {
+                        const payload = await response.json();
+                        message = payload?.message || message;
+                    } catch (_) {}
+                    showToast(message, 'warn');
+                    markAllPendingAsFailed();
+                    return;
+                }
+
+                const nonRetryable = response.status >= 400 && response.status < 500;
+                dirtyEntries.forEach(([qid, ts]) => {
+                    enqueueAnswerForSync(qid, userAnswers[qid] ?? '', ts);
+                });
+                if (nonRetryable) {
+                    dirtyEntries.forEach(([qid, ts]) => {
+                        markQueueEntryRetry({ questionId: qid, timestamp: ts }, true);
+                    });
+                }
+            } catch (_) {
+                dirtyEntries.forEach(([qid, ts]) => {
+                    enqueueAnswerForSync(qid, userAnswers[qid] ?? '', ts);
+                });
+            }
+
+            updateSyncStatusIndicator();
+        }
+
+        async function processQueueEntry(entry) {
+            try {
+                const response = await saveAnswersToServer(
+                    { [entry.questionId]: entry.answerId ?? '' },
+                    { [entry.questionId]: entry.timestamp },
+                    entry.timestamp
+                );
+
+                if (response.ok) {
+                    removeQueueEntry(entry);
+                    if (dirtyAnswerTimestamps[entry.questionId] === entry.timestamp) {
+                        delete dirtyAnswerTimestamps[entry.questionId];
+                    }
+                    DraftStore.save();
+                    return 'success';
+                }
+
+                if (response.status === 409) {
+                    let code = '';
+                    let message = 'Phiên làm bài đã được nộp trên thiết bị khác.';
+                    try {
+                        const payload = await response.json();
+                        code = payload?.code || '';
+                        message = payload?.message || message;
+                    } catch (_) {}
+
+                    markQueueEntryRetry(entry, true);
+                    if (code === 'SESSION_ALREADY_SUBMITTED') {
+                        markAllPendingAsFailed();
+                    }
+                    if (!submittedConflictNotified) {
+                        submittedConflictNotified = true;
+                        showToast(message, 'warn');
+                    }
+                    return 'stop';
+                }
+
+                const nonRetryable = response.status >= 400 && response.status < 500;
+                markQueueEntryRetry(entry, nonRetryable);
+                return 'stop';
+            } catch (_) {
+                markQueueEntryRetry(entry, false);
+                return 'stop';
+            }
+        }
+
+        async function drainOfflineQueue() {
+            if (!sessionId || !navigator.onLine) {
+                updateSyncStatusIndicator();
+                return;
+            }
+
+            if (isDrainingQueue) {
+                queueSyncRequested = true;
+                return;
+            }
+
+            isDrainingQueue = true;
+            try {
+                while (navigator.onLine) {
+                    const next = OfflineQueue.load().find(x => !x.failed);
+                    if (!next) break;
+
+                    const state = await processQueueEntry(next);
+                    if (state !== 'success') break;
+                }
+            } finally {
+                isDrainingQueue = false;
+                updateSyncStatusIndicator();
+                if (queueSyncRequested) {
+                    queueSyncRequested = false;
+                    setTimeout(drainOfflineQueue, 300);
+                }
+            }
+        }
+
+        async function ensureQueueSyncedBeforeSubmit() {
+            if (!navigator.onLine) {
+                showToast('Không thể nộp bài khi đang offline. Vui lòng kết nối mạng để đồng bộ.', 'warn');
+                return false;
+            }
+
+            await flushDirtyAnswers();
+            await drainOfflineQueue();
+
+            const { pendingCount, failedCount } = getQueueStats();
+            if (pendingCount > 0 || failedCount > 0) {
+                showToast('Còn câu trả lời chưa đồng bộ. Vui lòng đợi đồng bộ xong trước khi nộp.', 'warn');
+                return false;
+            }
+
+            return true;
+        }
+
+        function clearSessionLocalData() {
+            DraftStore.clear();
+            OfflineQueue.clear();
+            dirtyAnswerTimestamps = {};
         }
 
         function confirmSubmit() {
@@ -216,34 +719,53 @@
             }
         }
 
-        function submitTest() {
-            clearInterval(timerInterval);
-            $.ajax({
-                url: `/api/tests/sessions/${sessionId}/submit`,
-                method: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ answers: userAnswers }),
-                success: function(res) {
-                    window.location.href = `/Student/ResultDetail/${res.id}`;
-                },
-                error: function(err) {
-                    alert('Submission failed. Please check your connection.');
+        async function submitTest() {
+            if (isSubmitting || !sessionId) return;
+
+            isSubmitting = true;
+            $('#submitBtn').prop('disabled', true);
+
+            try {
+                const canSubmit = await ensureQueueSyncedBeforeSubmit();
+                if (!canSubmit) return;
+
+                const response = await authFetch(`/api/tests/sessions/${sessionId}/submit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ answers: userAnswers })
+                });
+
+                if (!response.ok) {
+                    if (response.status === 409) {
+                        showToast('Phiên làm bài đã được nộp ở thiết bị khác.', 'warn');
+                        return;
+                    }
+
+                    showToast('Nộp bài thất bại. Vui lòng thử lại.', 'warn');
+                    return;
                 }
-            });
+
+                const result = await response.json();
+                clearInterval(timerInterval);
+                stopAutoSave();
+                clearSessionLocalData();
+                window.location.href = `/Student/ResultDetail/${result.id}`;
+            } catch (_) {
+                showToast('Nộp bài thất bại do lỗi mạng.', 'warn');
+            } finally {
+                isSubmitting = false;
+                $('#submitBtn').prop('disabled', false);
+            }
         }
 
         function autoSubmit() {
-            alert('Time is up! Your test will be submitted automatically.');
+            showToast('Hết giờ làm bài. Hệ thống đang tự động nộp bài.', 'warn');
             submitTest();
         }
 
-        // --- 2. ANTI-CHEAT LOGIC ---
-
         function initAntiCheat() {
-            // Disable right click
             document.addEventListener('contextmenu', e => e.preventDefault());
 
-            // Disable Copy/Paste
             document.addEventListener('copy', e => {
                 e.preventDefault();
                 logCheatEvent('Copy', 'Attempted to copy content');
@@ -261,17 +783,14 @@
                 new bootstrap.Modal('#cheatModal').show();
             });
 
-            // Detect Shortcuts
             document.addEventListener('keydown', e => {
-                // F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
                 if (e.keyCode == 123 || 
                     (e.ctrlKey && e.shiftKey && (e.keyCode == 73 || e.keyCode == 74)) || 
                     (e.ctrlKey && e.keyCode == 85)) {
                     e.preventDefault();
                     logCheatEvent('DevTools', 'Attempted to open Developer Tools');
                 }
-                
-                // PrintScreen (Basic)
+
                 if (e.keyCode == 44) {
                     logCheatEvent('PrintScreen', 'Print screen detected');
                 }
@@ -285,7 +804,7 @@
                 method: 'POST',
                 contentType: 'application/json',
                 data: JSON.stringify({ actionType: type, detail: detail }),
-                global: false // Don't trigger global loading spinners
+                global: false
             });
         }
     </script>
@@ -310,12 +829,61 @@
             align-items: center;
             gap: 12px;
         }
+        .exam-header-badges {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
         .exam-progress-pill {
             background: #dbeafe;
             color: var(--color-primary);
             border-radius: 999px;
             padding: 6px 12px;
             font-size: 0.875rem;
+            font-weight: 600;
+        }
+        .exam-sync-pill {
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid transparent;
+        }
+        .sync-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            flex: 0 0 8px;
+        }
+        .sync-ok {
+            background: #dcfce7;
+            color: #166534;
+            border-color: #bbf7d0;
+        }
+        .sync-ok .sync-dot { background: #16a34a; }
+        .sync-pending {
+            background: #fef9c3;
+            color: #854d0e;
+            border-color: #fde68a;
+        }
+        .sync-pending .sync-dot { background: #ca8a04; }
+        .sync-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fecaca;
+        }
+        .sync-error .sync-dot { background: #dc2626; }
+        .exam-offline-banner {
+            border-bottom: 1px solid #fecaca;
+            background: #fef2f2;
+            color: #991b1b;
+            padding: 9px 20px;
+            font-size: 0.85rem;
             font-weight: 600;
         }
         .exam-question-body { padding: 24px; flex: 1; overflow: auto; }
@@ -382,6 +950,10 @@
                 grid-template-columns: 1fr;
                 padding: 12px;
                 gap: 12px;
+            }
+            .exam-question-header {
+                align-items: flex-start;
+                flex-direction: column;
             }
             .exam-question-panel { min-height: auto; }
             .exam-right-panel { position: static !important; top: auto; }
