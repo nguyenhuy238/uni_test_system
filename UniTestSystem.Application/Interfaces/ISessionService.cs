@@ -93,6 +93,8 @@ public sealed class SaveAnswerCommand
     public string SessionId { get; set; } = string.Empty;
     public string UserId { get; set; } = string.Empty;
     public Dictionary<string, string?> Answers { get; set; } = new();
+    public DateTime? ClientTimestamp { get; set; }
+    public Dictionary<string, DateTime?> QuestionClientTimestamps { get; set; } = new();
     public SessionRequestContext RequestContext { get; set; } = new();
 }
 

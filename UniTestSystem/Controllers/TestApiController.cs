@@ -68,10 +68,27 @@ namespace UniTestSystem.Controllers
         // ====================== SUBMIT ======================
         public class SubmitPayload { public Dictionary<string, string?> Answers { get; set; } = new(); }
 
-        public class SaveDraftPayload { public Dictionary<string, string?> Answers { get; set; } = new(); }
+        public class SaveAnswerPayload
+        {
+            public Dictionary<string, string?> Answers { get; set; } = new();
+            public DateTime? ClientTimestamp { get; set; }
+            public Dictionary<string, DateTime?> QuestionClientTimestamps { get; set; } = new();
+        }
+
+        [HttpPost("sessions/{sid}/save-answer")]
+        [HttpPost("/sessions/{sid}/save-answer")]
+        public async Task<IActionResult> SaveAnswer(string sid, [FromBody] SaveAnswerPayload p)
+        {
+            return await SaveAnswerCoreAsync(sid, p);
+        }
 
         [HttpPost("sessions/{sid}/save-draft")]
-        public async Task<IActionResult> SaveDraft(string sid, [FromBody] SaveDraftPayload p)
+        public async Task<IActionResult> SaveDraft(string sid, [FromBody] SaveAnswerPayload p)
+        {
+            return await SaveAnswerCoreAsync(sid, p);
+        }
+
+        private async Task<IActionResult> SaveAnswerCoreAsync(string sid, SaveAnswerPayload p)
         {
             var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrWhiteSpace(uid)) return Forbid();
@@ -81,12 +98,23 @@ namespace UniTestSystem.Controllers
                 SessionId = sid,
                 UserId = uid,
                 Answers = p.Answers,
+                ClientTimestamp = p.ClientTimestamp,
+                QuestionClientTimestamps = p.QuestionClientTimestamps,
                 RequestContext = BuildRequestContext()
             });
 
             if (result.Status == SessionServiceStatus.NotFound) return NotFound();
             if (result.Status == SessionServiceStatus.Forbidden) return Forbid();
-            if (result.Status == SessionServiceStatus.Conflict) return Conflict(new { message = "Session is bound to another device." });
+            if (result.Status == SessionServiceStatus.Conflict)
+            {
+                var message = result.ErrorCode switch
+                {
+                    "SESSION_ALREADY_SUBMITTED" => "Session was already submitted.",
+                    "SESSION_BOUND_OTHER_DEVICE" => "Session is bound to another device.",
+                    _ => "Cannot save answer."
+                };
+                return Conflict(new { message, code = result.ErrorCode });
+            }
             if (result.Status == SessionServiceStatus.BadRequest) return BadRequest(new { message = "Session is not active" });
             if (result.Data == null) return BadRequest(new { message = result.Message ?? "Cannot save draft." });
 

@@ -202,6 +202,11 @@ public class SessionService : ISessionService
 
         if (session.Status != SessionStatus.InProgress)
         {
+            if (SubmittedStatuses.Contains(session.Status))
+            {
+                return Failure<SaveAnswerData>(SessionServiceStatus.Conflict, "SESSION_ALREADY_SUBMITTED", "Session has already been submitted.");
+            }
+
             return Failure<SaveAnswerData>(SessionServiceStatus.BadRequest, "SESSION_NOT_ACTIVE", "Session is not active.");
         }
 
@@ -218,6 +223,15 @@ public class SessionService : ISessionService
             }
 
             if (!questionMap.TryGetValue(studentAnswer.QuestionId, out var question))
+            {
+                continue;
+            }
+
+            var effectiveClientTimestamp = command.QuestionClientTimestamps.TryGetValue(studentAnswer.QuestionId, out var perQuestionTimestamp)
+                ? NormalizeToUtc(perQuestionTimestamp)
+                : NormalizeToUtc(command.ClientTimestamp);
+
+            if (effectiveClientTimestamp.HasValue && studentAnswer.AnsweredAt >= effectiveClientTimestamp.Value)
             {
                 continue;
             }
@@ -249,7 +263,7 @@ public class SessionService : ISessionService
                     break;
             }
 
-            studentAnswer.AnsweredAt = now;
+            studentAnswer.AnsweredAt = effectiveClientTimestamp ?? now;
             updatedCount++;
         }
 
@@ -601,6 +615,22 @@ public class SessionService : ISessionService
             : 0;
         var consumed = Math.Max(0, session.ConsumedSeconds + Math.Max(0, runningDelta));
         return Math.Max(0, total - consumed);
+    }
+
+    private static DateTime? NormalizeToUtc(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        var timestamp = value.Value;
+        return timestamp.Kind switch
+        {
+            DateTimeKind.Utc => timestamp,
+            DateTimeKind.Local => timestamp.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(timestamp, DateTimeKind.Utc)
+        };
     }
 
     private static SessionServiceResult<T> Success<T>(T data)
