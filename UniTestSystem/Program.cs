@@ -359,6 +359,9 @@ app.MapControllers();
 Directory.CreateDirectory(Path.Combine(app.Environment.WebRootPath ?? "wwwroot", "uploads", "logo"));
 using (var scope = app.Services.CreateScope())
 {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+
     await Seeder.RunAsync(scope.ServiceProvider);
 
     // Ensure default permissions exist

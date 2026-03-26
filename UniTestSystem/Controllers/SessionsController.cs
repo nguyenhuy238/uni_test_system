@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System;
 using System.Security.Claims;
 using UniTestSystem.Application.Interfaces;
 
@@ -37,7 +38,22 @@ namespace UniTestSystem.Controllers
             });
 
             if (result.Status == SessionServiceStatus.NotFound) return NotFound();
-            if (result.Status == SessionServiceStatus.Forbidden) return Forbid();
+            if (result.Status == SessionServiceStatus.Forbidden)
+            {
+                if (string.Equals(result.ErrorCode, "SCHEDULE_MANUALLY_LOCKED", StringComparison.Ordinal))
+                {
+                    TempData["Err"] = "Lịch thi tạm thời bị khóa bởi quản trị viên. Vui lòng liên hệ phòng thi.";
+                    return RedirectToAction("MyExams", "Exams");
+                }
+
+                if (string.Equals(result.ErrorCode, "SCHEDULE_OUTSIDE_WINDOW", StringComparison.Ordinal))
+                {
+                    TempData["Err"] = "Hiện chưa đến hoặc đã quá thời gian làm bài theo lịch thi.";
+                    return RedirectToAction("MyExams", "Exams");
+                }
+
+                return Forbid();
+            }
             if (result.Status == SessionServiceStatus.Conflict)
             {
                 TempData["Err"] = result.ErrorCode switch

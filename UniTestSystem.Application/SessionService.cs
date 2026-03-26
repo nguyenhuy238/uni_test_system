@@ -17,6 +17,7 @@ public class SessionService : ISessionService
     private readonly IRepository<User> _userRepo;
     private readonly IRepository<Question> _questionRepo;
     private readonly IRepository<SessionLog> _sessionLogRepo;
+    private readonly IRepository<ExamSchedule> _examScheduleRepo;
     private readonly TestService _testService;
     private readonly AssessmentService _assessmentService;
     private readonly ExamAccessTokenService _examAccessTokenService;
@@ -29,6 +30,7 @@ public class SessionService : ISessionService
         IRepository<User> userRepo,
         IRepository<Question> questionRepo,
         IRepository<SessionLog> sessionLogRepo,
+        IRepository<ExamSchedule> examScheduleRepo,
         TestService testService,
         AssessmentService assessmentService,
         ExamAccessTokenService examAccessTokenService,
@@ -40,6 +42,7 @@ public class SessionService : ISessionService
         _userRepo = userRepo;
         _questionRepo = questionRepo;
         _sessionLogRepo = sessionLogRepo;
+        _examScheduleRepo = examScheduleRepo;
         _testService = testService;
         _assessmentService = assessmentService;
         _examAccessTokenService = examAccessTokenService;
@@ -72,6 +75,12 @@ public class SessionService : ISessionService
 
         if (!string.IsNullOrWhiteSpace(command.ScheduleId))
         {
+            var schedule = await _examScheduleRepo.FirstOrDefaultAsync(s => s.Id == command.ScheduleId && !s.IsDeleted);
+            if (schedule == null || !string.Equals(schedule.TestId, command.TestId, StringComparison.Ordinal))
+            {
+                return Failure<StartSessionData>(SessionServiceStatus.Forbidden, "SCHEDULE_INVALID", "Schedule is invalid.");
+            }
+
             var validToken = _examAccessTokenService.Validate(
                 command.AccessToken ?? string.Empty,
                 command.UserId,
@@ -81,6 +90,22 @@ public class SessionService : ISessionService
             if (!validToken)
             {
                 return Failure<StartSessionData>(SessionServiceStatus.Forbidden, "ACCESS_TOKEN_INVALID", "Invalid access token.");
+            }
+
+            if (schedule.IsManuallyLocked)
+            {
+                return Failure<StartSessionData>(
+                    SessionServiceStatus.Forbidden,
+                    "SCHEDULE_MANUALLY_LOCKED",
+                    "Lịch thi tạm thời bị khóa bởi quản trị viên. Vui lòng liên hệ phòng thi.");
+            }
+
+            if (now < schedule.StartTime || now > schedule.EndTime)
+            {
+                return Failure<StartSessionData>(
+                    SessionServiceStatus.Forbidden,
+                    "SCHEDULE_OUTSIDE_WINDOW",
+                    "Exam schedule is outside the allowed time window.");
             }
         }
 

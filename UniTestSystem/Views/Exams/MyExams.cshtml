@@ -31,6 +31,9 @@
                                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3">
                                     @item.ExamType
                                 </span>
+                                <span class="badge @(item.IsManuallyLocked ? "bg-danger-subtle text-danger border border-danger-subtle" : "bg-success-subtle text-success border border-success-subtle")">
+                                    @(item.IsManuallyLocked ? "🔒 Đang khóa" : "🟢 Đang mở")
+                                </span>
                                 <span class="text-muted small fw-bold">
                                     <i class="bi bi-geo-alt me-1"></i> @item.Room
                                 </span>
@@ -60,7 +63,13 @@
                             @{
                                 var isNow = DateTime.UtcNow >= item.StartTime && DateTime.UtcNow <= item.EndTime;
                             }
-                            @if (isNow)
+                            @if (item.IsManuallyLocked)
+                            {
+                                <button class="btn btn-outline-danger w-100" disabled>
+                                    <i class="bi bi-lock-fill me-1"></i> Lịch thi tạm khóa
+                                </button>
+                            }
+                            else if (isNow)
                             {
                                 var token = accessTokens.TryGetValue(item.Id, out var t) ? t : "";
                                 <a href="/mytests/start/@item.TestId?scheduleId=@item.Id&accessToken=@Uri.EscapeDataString(token)" class="btn btn-success w-100 shadow-sm">

@@ -10,17 +10,20 @@ namespace UniTestSystem.Application
         private readonly IRepository<Enrollment> _enrollmentRepo;
         private readonly IRepository<Course> _courseRepo;
         private readonly IConfiguration _configuration;
+        private readonly IAuditService _auditService;
 
         public ExamScheduleService(
             IRepository<ExamSchedule> scheduleRepo,
             IRepository<Enrollment> enrollmentRepo,
             IRepository<Course> courseRepo,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IAuditService auditService)
         {
             _scheduleRepo = scheduleRepo;
             _enrollmentRepo = enrollmentRepo;
             _courseRepo = courseRepo;
             _configuration = configuration;
+            _auditService = auditService;
         }
 
         public async Task<List<ExamSchedule>> GetAllSchedulesAsync()
@@ -87,6 +90,82 @@ namespace UniTestSystem.Application
             schedule.IsDeleted = true;
             schedule.UpdatedAt = DateTime.UtcNow;
             await _scheduleRepo.UpdateAsync(schedule);
+            return true;
+        }
+
+        public async Task<bool> LockScheduleAsync(string scheduleId, string staffId)
+        {
+            var schedule = await _scheduleRepo.FirstOrDefaultAsync(s => s.Id == scheduleId && !s.IsDeleted);
+            if (schedule == null)
+            {
+                return false;
+            }
+
+            if (schedule.IsManuallyLocked)
+            {
+                return true;
+            }
+
+            var before = new
+            {
+                schedule.IsManuallyLocked,
+                schedule.UpdatedAt
+            };
+
+            schedule.IsManuallyLocked = true;
+            schedule.UpdatedAt = DateTime.UtcNow;
+            await _scheduleRepo.UpdateAsync(schedule);
+
+            await _auditService.LogAsync(
+                string.IsNullOrWhiteSpace(staffId) ? "unknown" : staffId,
+                "ExamSchedule.Lock",
+                nameof(ExamSchedule),
+                schedule.Id,
+                before,
+                new
+                {
+                    schedule.IsManuallyLocked,
+                    schedule.UpdatedAt
+                });
+
+            return true;
+        }
+
+        public async Task<bool> UnlockScheduleAsync(string scheduleId, string staffId)
+        {
+            var schedule = await _scheduleRepo.FirstOrDefaultAsync(s => s.Id == scheduleId && !s.IsDeleted);
+            if (schedule == null)
+            {
+                return false;
+            }
+
+            if (!schedule.IsManuallyLocked)
+            {
+                return true;
+            }
+
+            var before = new
+            {
+                schedule.IsManuallyLocked,
+                schedule.UpdatedAt
+            };
+
+            schedule.IsManuallyLocked = false;
+            schedule.UpdatedAt = DateTime.UtcNow;
+            await _scheduleRepo.UpdateAsync(schedule);
+
+            await _auditService.LogAsync(
+                string.IsNullOrWhiteSpace(staffId) ? "unknown" : staffId,
+                "ExamSchedule.Unlock",
+                nameof(ExamSchedule),
+                schedule.Id,
+                before,
+                new
+                {
+                    schedule.IsManuallyLocked,
+                    schedule.UpdatedAt
+                });
+
             return true;
         }
 

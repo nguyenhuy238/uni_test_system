@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Domain;
 
@@ -12,10 +13,12 @@ namespace UniTestSystem.Controllers.Api.Admin;
 public class AdminExamSchedulesController : ControllerBase
 {
     private readonly IExamScheduleService _scheduleService;
+    private readonly IExamScheduleExportService _exportService;
 
-    public AdminExamSchedulesController(IExamScheduleService scheduleService)
+    public AdminExamSchedulesController(IExamScheduleService scheduleService, IExamScheduleExportService exportService)
     {
         _scheduleService = scheduleService;
+        _exportService = exportService;
     }
 
     [HttpGet]
@@ -97,6 +100,78 @@ public class AdminExamSchedulesController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{id}/lock")]
+    public async Task<IActionResult> Lock(string id)
+    {
+        var staffId = ResolveActor();
+        var ok = await _scheduleService.LockScheduleAsync(id, staffId);
+        if (!ok)
+        {
+            return NotFound();
+        }
+
+        return Ok(new { message = "Schedule locked." });
+    }
+
+    [HttpPost("{id}/unlock")]
+    public async Task<IActionResult> Unlock(string id)
+    {
+        var staffId = ResolveActor();
+        var ok = await _scheduleService.UnlockScheduleAsync(id, staffId);
+        if (!ok)
+        {
+            return NotFound();
+        }
+
+        return Ok(new { message = "Schedule unlocked." });
+    }
+
+    [HttpGet("{id}/export/pdf")]
+    public async Task<IActionResult> ExportPdfById(string id)
+    {
+        var file = await _exportService.ExportSchedulePdfAsync(id);
+        if (file == null)
+        {
+            return NotFound();
+        }
+
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
+    [HttpGet("{id}/export/excel")]
+    public async Task<IActionResult> ExportExcelById(string id)
+    {
+        var file = await _exportService.ExportScheduleExcelAsync(id);
+        if (file == null)
+        {
+            return NotFound();
+        }
+
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
+    [HttpPost("export/zip")]
+    public async Task<IActionResult> ExportZip([FromBody] BulkExportExamScheduleRequest request)
+    {
+        if (request.ScheduleIds == null || request.ScheduleIds.Count == 0)
+        {
+            return BadRequest(new { message = "scheduleIds is required." });
+        }
+
+        if (!TryParseFormat(request.Format, out var format))
+        {
+            return BadRequest(new { message = "format must be 'pdf' or 'excel'." });
+        }
+
+        var file = await _exportService.ExportSchedulesZipAsync(request.ScheduleIds, format);
+        if (file == null)
+        {
+            return NotFound(new { message = "No schedules were exported." });
+        }
+
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
     [HttpGet("export/csv")]
     public async Task<IActionResult> ExportCsv()
     {
@@ -124,6 +199,32 @@ public class AdminExamSchedulesController : ControllerBase
     {
         var safe = (value ?? string.Empty).Replace("\"", "\"\"");
         return $"\"{safe}\"";
+    }
+
+    private string ResolveActor()
+    {
+        return User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.Identity?.Name
+            ?? "unknown";
+    }
+
+    private static bool TryParseFormat(string? raw, out ExamScheduleExportFormat format)
+    {
+        if (string.Equals(raw, "pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            format = ExamScheduleExportFormat.Pdf;
+            return true;
+        }
+
+        if (string.Equals(raw, "excel", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(raw, "xlsx", StringComparison.OrdinalIgnoreCase))
+        {
+            format = ExamScheduleExportFormat.Excel;
+            return true;
+        }
+
+        format = default;
+        return false;
     }
 }
 
@@ -162,4 +263,10 @@ public class BulkCreateExamScheduleResultItem
     public string Room { get; set; } = "";
     public bool Success { get; set; }
     public string? Error { get; set; }
+}
+
+public class BulkExportExamScheduleRequest
+{
+    public List<string> ScheduleIds { get; set; } = new();
+    public string Format { get; set; } = "pdf";
 }

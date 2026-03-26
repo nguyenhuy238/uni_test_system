@@ -286,6 +286,9 @@ namespace UniTestSystem.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsManuallyLocked")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Room")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
