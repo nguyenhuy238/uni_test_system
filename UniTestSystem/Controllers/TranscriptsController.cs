@@ -71,6 +71,48 @@ namespace UniTestSystem.Controllers
             return View(page.Rows);
         }
 
+        [Authorize(Policy = "RequireStaffOrAdmin")]
+        [HttpGet("/transcripts/year-end")]
+        public async Task<IActionResult> YearEnd(string? academicYear = null, string? facultyId = null)
+        {
+            var defaultYear = $"{DateTime.UtcNow.Year}-{DateTime.UtcNow.Year + 1}";
+            var selectedAcademicYear = string.IsNullOrWhiteSpace(academicYear) ? defaultYear : academicYear.Trim();
+
+            var preview = await _transcriptService.PreviewYearEndAsync(selectedAcademicYear, facultyId);
+            var lookupPage = await _transcriptService.GetAdminTranscriptPageAsync(new TranscriptAdminQuery());
+
+            ViewBag.Faculties = new SelectList(lookupPage.Faculties, "Id", "Name", facultyId);
+            ViewBag.SelectedFacultyId = facultyId;
+            ViewBag.SelectedAcademicYear = selectedAcademicYear;
+
+            return View(preview);
+        }
+
+        [Authorize(Policy = "RequireStaffOrAdmin")]
+        [HttpPost("/transcripts/year-end/finalize")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> FinalizeYearEnd(string academicYear, string? facultyId, string? returnUrl)
+        {
+            var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "system";
+            var result = await _transcriptService.FinalizeYearEndAsync(academicYear, facultyId, actor);
+
+            if (result.Success)
+            {
+                TempData["Msg"] = $"Year-end finalized for {result.AcademicYear}. Finalized students: {result.FinalizedStudents}.";
+            }
+            else
+            {
+                TempData["Err"] = result.Messages.Any()
+                    ? string.Join(" ", result.Messages)
+                    : "Year-end finalization cannot proceed because prerequisites are not satisfied.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
+                return Redirect(returnUrl);
+
+            return RedirectToAction(nameof(YearEnd), new { academicYear, facultyId });
+        }
+
         // Admin/Staff View details of a specific student
         [Authorize(Policy = "RequireStaffOrAdmin")]
         public async Task<IActionResult> Details(string id, string? semester = null)

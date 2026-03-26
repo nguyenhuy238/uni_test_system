@@ -11,7 +11,10 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<AuthService>();
         services.AddScoped<TestService>();
         services.AddScoped<AssessmentService>();
-        services.AddScoped<ReportService>();
+        services.AddScoped<IFacultyReportService, FacultyReportService>();
+        services.AddScoped<IDashboardReportService, DashboardReportService>();
+        services.AddScoped<IQuestionAnalyticsService, QuestionAnalyticsService>();
+        services.AddScoped<ILecturerPerformanceService, LecturerPerformanceService>();
         services.AddScoped<PasswordResetService>();
         services.AddScoped<EmailVerificationService>();
         services.AddScoped<ExamAccessTokenService>();
@@ -19,7 +22,6 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<ISessionService, SessionService>();
 
         services.AddScoped<IPermissionService, PermissionService>();
-        services.AddScoped<IExportService, ExportService>();
         services.AddScoped<IGradingService, GradingService>();
         services.AddScoped<IExamScheduleService, ExamScheduleService>();
         services.AddScoped<ITranscriptService, TranscriptService>();

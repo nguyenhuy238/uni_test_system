@@ -93,6 +93,7 @@
                     <Button Content="Exam Scheduling" Style="{StaticResource SidebarNavButton}" Tag="10" Click="NavigateTab_Click" Visibility="{Binding CanManageScheduling, Converter={StaticResource BoolToVis}}"/>
                     <Button Content="Settings" Style="{StaticResource SidebarNavButton}" Tag="11" Click="NavigateTab_Click" Visibility="{Binding CanViewSettings, Converter={StaticResource BoolToVis}}"/>
                     <Button Content="Backup/Restore" Style="{StaticResource SidebarNavButton}" Tag="12" Click="NavigateTab_Click" Visibility="{Binding CanViewMaintenance, Converter={StaticResource BoolToVis}}"/>
+                    <Button Content="Year-End" Style="{StaticResource SidebarNavButton}" Tag="13" Click="NavigateTab_Click" Visibility="{Binding CanManageAcademic, Converter={StaticResource BoolToVis}}"/>
                     <Separator Margin="6,10"/>
                     <Button Content="Refresh Data" Style="{StaticResource SidebarNavButton}" Command="{Binding LoadDataCommand}"/>
                     <Button Content="Toggle Theme" Style="{StaticResource SidebarNavButton}" Command="{Binding ToggleThemeCommand}"/>
@@ -779,6 +780,14 @@
                         <Label Content="Current Academic Year"/>
                         <TextBox Text="{Binding SystemSettings.CurrentAcademicYear, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
 
+                        <Label Content="Warning GPA Threshold"/>
+                        <TextBox Text="{Binding SystemSettings.WarningGpaThreshold, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                        <Label Content="Fail GPA Threshold"/>
+                        <TextBox Text="{Binding SystemSettings.FailGpaThreshold, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10"/>
+
+                        <CheckBox Content="Treat Outstanding Debt As Fail" IsChecked="{Binding SystemSettings.TreatOutstandingDebtAsFail}" Margin="0,0,0,10"/>
+
                         <Label Content="Logo URL"/>
                         <TextBox Text="{Binding SystemSettings.LogoUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,20"/>
 
@@ -811,6 +820,82 @@
                             <DataGridTextColumn Header="Path" Binding="{Binding FullName}" Width="2*"/>
                         </DataGrid.Columns>
                     </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <!-- Year-End Tab -->
+            <TabItem Header="Year-End" Visibility="{Binding CanManageAcademic, Converter={StaticResource BoolToVis}}">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <WrapPanel Grid.Row="0" Margin="0,0,0,10">
+                        <TextBlock Text="Academic Year" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBox Width="140" Text="{Binding YearEndAcademicYear, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,10,0"/>
+                        <TextBlock Text="Faculty" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox Width="240" ItemsSource="{Binding Faculties}" SelectedValuePath="Id" DisplayMemberPath="Name" SelectedValue="{Binding YearEndFacultyId}" Margin="0,0,10,0"/>
+                        <Button Content="Preview" Command="{Binding PreviewYearEndCommand}" Width="90" Margin="0,0,8,0"/>
+                        <Button Content="Finalize" Command="{Binding FinalizeYearEndCommand}" Width="100" Background="#DC2626" Foreground="White" BorderThickness="0"/>
+                    </WrapPanel>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+                        <Border Background="#E2E8F0" CornerRadius="4" Padding="8" Margin="0,0,8,0">
+                            <TextBlock Text="{Binding YearEndPreview.TotalStudents, StringFormat=Students: {0}}"/>
+                        </Border>
+                        <Border Background="#FEE2E2" CornerRadius="4" Padding="8" Margin="0,0,8,0">
+                            <TextBlock Text="{Binding YearEndWarningStudents.Count, StringFormat=Warning/Fail: {0}}"/>
+                        </Border>
+                        <Border Background="#DBEAFE" CornerRadius="4" Padding="8">
+                            <TextBlock Text="{Binding YearEndPreview.Prerequisites.IsReady, StringFormat=Ready: {0}}"/>
+                        </Border>
+                    </StackPanel>
+
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <DataGrid Grid.Column="0" ItemsSource="{Binding YearEndStudents}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Student" Binding="{Binding StudentName}" Width="*"/>
+                                <DataGridTextColumn Header="ID" Binding="{Binding StudentId}" Width="130"/>
+                                <DataGridTextColumn Header="Faculty" Binding="{Binding FacultyName}" Width="150"/>
+                                <DataGridTextColumn Header="Class" Binding="{Binding ClassName}" Width="120"/>
+                                <DataGridTextColumn Header="GPA 4.0" Binding="{Binding YearEndGpa4, StringFormat=\{0:0.00\}}" Width="90"/>
+                                <DataGridTextColumn Header="GPA 10" Binding="{Binding YearEndGpa10, StringFormat=\{0:0.00\}}" Width="90"/>
+                                <DataGridTextColumn Header="Credits" Binding="{Binding TotalCreditsEarned}" Width="80"/>
+                                <DataGridTextColumn Header="Status" Binding="{Binding AcademicStatus}" Width="90"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                            <TextBlock Text="Prerequisites" FontWeight="Bold" Margin="0,0,0,8"/>
+                            <TextBlock Text="{Binding YearEndPreview.Prerequisites.AllExamSchedulesCompleted, StringFormat=Exam schedules completed: {0}}" Margin="0,0,0,4"/>
+                            <TextBlock Text="{Binding YearEndPreview.Prerequisites.AllEssaysGraded, StringFormat=Essays graded: {0}}" Margin="0,0,0,4"/>
+                            <TextBlock Text="{Binding YearEndPreview.Prerequisites.SemesterTranscriptsLocked, StringFormat=Semester locked: {0}}" Margin="0,0,0,8"/>
+                            <TextBlock Text="Missing items" FontWeight="Bold" Margin="0,8,0,6"/>
+                            <ItemsControl ItemsSource="{Binding YearEndPreview.Prerequisites.MissingItems}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="Warning/Fail Students" FontWeight="Bold" Margin="0,10,0,6"/>
+                            <DataGrid ItemsSource="{Binding YearEndWarningStudents}" AutoGenerateColumns="False" IsReadOnly="True" Height="220">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Student" Binding="{Binding StudentName}" Width="*"/>
+                                    <DataGridTextColumn Header="GPA" Binding="{Binding YearEndGpa4, StringFormat=\{0:0.00\}}" Width="70"/>
+                                    <DataGridTextColumn Header="Status" Binding="{Binding AcademicStatus}" Width="80"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </Grid>
                 </Grid>
             </TabItem>
         </TabControl>

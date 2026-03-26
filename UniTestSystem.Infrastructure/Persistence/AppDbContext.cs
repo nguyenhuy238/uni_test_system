@@ -400,6 +400,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<SystemSettings>(entity =>
         {
             entity.ToTable("SystemSettings");
+            entity.Property(e => e.WarningGpaThreshold).HasColumnType("decimal(4,2)");
+            entity.Property(e => e.FailGpaThreshold).HasColumnType("decimal(4,2)");
         });
 
         modelBuilder.Entity<Enrollment>(entity =>
@@ -446,6 +448,10 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("Transcript");
             entity.Property(e => e.GPA).HasColumnType("decimal(3,2)");
+            entity.Property(e => e.YearEndGpa4).HasColumnType("decimal(3,2)");
+            entity.Property(e => e.YearEndGpa10).HasColumnType("decimal(4,2)");
+            entity.Property(e => e.AcademicStatus).HasColumnType("nvarchar(16)");
+            entity.HasIndex(e => new { e.StudentId, e.AcademicYear });
             
             entity.HasOne(d => d.Student)
                 .WithMany()

@@ -23,6 +23,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IAuditReaderService, AuditReaderService>();
         services.AddScoped<IQuestionExcelService, QuestionExcelService>();
         services.AddScoped<IExamScheduleExportService, ExamScheduleExportService>();
+        services.AddScoped<IReportExportService, ReportExportService>();
+        services.AddScoped<IBulkImportSpreadsheetReader, BulkImportSpreadsheetReader>();
         services.AddScoped<ISettingsService, SettingsService>();
         services.AddScoped<ISystemMaintenanceService, SystemMaintenanceService>();
         services.AddSingleton<ITokenBlacklistService, InMemoryTokenBlacklistService>();

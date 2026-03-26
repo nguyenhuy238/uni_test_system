@@ -39,6 +39,9 @@ namespace UniTestSystem.AdminApp.ViewModels
         private string _selectedExportPeriod = "Monthly";
         private string _selectedExportFormat = "xlsx";
         private bool _isDarkTheme;
+        private string _yearEndAcademicYear = $"{DateTime.Now.Year}-{DateTime.Now.Year + 1}";
+        private string _yearEndFacultyId = "";
+        private YearEndPreviewModel _yearEndPreview = new();
 
         // UI Helpers for nested collections
         private ObservableCollection<OptionWrapper> _selectedQuestionOptions = new();
@@ -79,6 +82,8 @@ namespace UniTestSystem.AdminApp.ViewModels
             BackupFiles = new ObservableCollection<BackupFileInfo>();
             PeriodOptions = new ObservableCollection<string> { "Weekly", "Monthly", "Quarterly" };
             ExportFormatOptions = new ObservableCollection<string> { "xlsx", "pdf" };
+            YearEndStudents = new ObservableCollection<YearEndStudentSummaryModel>();
+            YearEndWarningStudents = new ObservableCollection<YearEndStudentSummaryModel>();
 
             LoadDataCommand = new RelayCommand(async () => await LoadDataAsync());
             
@@ -141,6 +146,8 @@ namespace UniTestSystem.AdminApp.ViewModels
             CreateBulkScheduleCommand = new RelayCommand(async () => await CreateBulkSchedulesAsync(), () => CanManageScheduling && ScheduleDrafts.Count > 0);
             DeleteScheduleCommand = new RelayCommand(async () => await DeleteScheduleAsync(), () => CanManageScheduling && SelectedExamSchedule != null);
             ExportScheduleCsvCommand = new RelayCommand(async () => await ExportScheduleCsvAsync(), () => CanManageScheduling);
+            PreviewYearEndCommand = new RelayCommand(async () => await PreviewYearEndAsync(), () => CanManageAcademic);
+            FinalizeYearEndCommand = new RelayCommand(async () => await FinalizeYearEndAsync(), () => CanManageAcademic && YearEndPreview.Prerequisites.IsReady && YearEndStudents.Count > 0);
             ToggleThemeCommand = new RelayCommand(() => { IsDarkTheme = !IsDarkTheme; StatusMessage = IsDarkTheme ? "Dark mode enabled." : "Light mode enabled."; });
 
             // Load data automatically on startup
@@ -160,6 +167,8 @@ namespace UniTestSystem.AdminApp.ViewModels
         public ObservableCollection<ExamSchedule> ExamSchedules { get; }
         public ObservableCollection<ExamScheduleDraft> ScheduleDrafts { get; }
         public ObservableCollection<BackupFileInfo> BackupFiles { get; }
+        public ObservableCollection<YearEndStudentSummaryModel> YearEndStudents { get; }
+        public ObservableCollection<YearEndStudentSummaryModel> YearEndWarningStudents { get; }
         public ObservableCollection<string> PeriodOptions { get; }
         public ObservableCollection<string> ExportFormatOptions { get; }
 
@@ -352,6 +361,24 @@ namespace UniTestSystem.AdminApp.ViewModels
             set { _isDarkTheme = value; OnPropertyChanged(); }
         }
 
+        public string YearEndAcademicYear
+        {
+            get => _yearEndAcademicYear;
+            set { _yearEndAcademicYear = value; OnPropertyChanged(); }
+        }
+
+        public string YearEndFacultyId
+        {
+            get => _yearEndFacultyId;
+            set { _yearEndFacultyId = value; OnPropertyChanged(); }
+        }
+
+        public YearEndPreviewModel YearEndPreview
+        {
+            get => _yearEndPreview;
+            set { _yearEndPreview = value; OnPropertyChanged(); }
+        }
+
         public RelayCommand LoadDataCommand { get; }
         public RelayCommand AddTestCommand { get; }
         public RelayCommand SaveTestCommand { get; }
@@ -386,6 +413,8 @@ namespace UniTestSystem.AdminApp.ViewModels
         public RelayCommand CreateBulkScheduleCommand { get; }
         public RelayCommand DeleteScheduleCommand { get; }
         public RelayCommand ExportScheduleCsvCommand { get; }
+        public RelayCommand PreviewYearEndCommand { get; }
+        public RelayCommand FinalizeYearEndCommand { get; }
         public RelayCommand ToggleThemeCommand { get; }
 
         public RelayCommand ImportStudentsCommand { get; }
@@ -909,6 +938,83 @@ namespace UniTestSystem.AdminApp.ViewModels
                 StatusMessage = $"Exam schedules exported: {fileName}";
             }
             catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+        }
+
+        private async Task PreviewYearEndAsync()
+        {
+            if (string.IsNullOrWhiteSpace(YearEndAcademicYear))
+            {
+                StatusMessage = "Academic year is required for preview.";
+                return;
+            }
+
+            try
+            {
+                StatusMessage = "Loading year-end preview...";
+                var preview = await _apiService.GetYearEndPreviewAsync(
+                    YearEndAcademicYear.Trim(),
+                    string.IsNullOrWhiteSpace(YearEndFacultyId) ? null : YearEndFacultyId);
+
+                if (preview == null)
+                {
+                    StatusMessage = "Failed to load year-end preview.";
+                    return;
+                }
+
+                YearEndPreview = preview;
+                YearEndStudents.Clear();
+                foreach (var row in preview.Students)
+                {
+                    YearEndStudents.Add(row);
+                }
+
+                YearEndWarningStudents.Clear();
+                foreach (var row in preview.WarningStudents)
+                {
+                    YearEndWarningStudents.Add(row);
+                }
+
+                CommandManager.InvalidateRequerySuggested();
+                StatusMessage = $"Year-end preview loaded. Students: {preview.TotalStudents}. Warning/Fail: {preview.WarningStudents.Count}.";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error: {ex.Message}";
+            }
+        }
+
+        private async Task FinalizeYearEndAsync()
+        {
+            if (string.IsNullOrWhiteSpace(YearEndAcademicYear))
+            {
+                StatusMessage = "Academic year is required for finalization.";
+                return;
+            }
+
+            try
+            {
+                StatusMessage = "Finalizing year-end...";
+                var result = await _apiService.FinalizeYearEndAsync(
+                    YearEndAcademicYear.Trim(),
+                    string.IsNullOrWhiteSpace(YearEndFacultyId) ? null : YearEndFacultyId);
+
+                if (result == null)
+                {
+                    StatusMessage = "Year-end finalization failed.";
+                    return;
+                }
+
+                StatusMessage = result.Success
+                    ? $"Year-end finalized for {result.AcademicYear}. Students: {result.FinalizedStudents}."
+                    : (result.Messages.FirstOrDefault() ?? "Year-end finalization rejected.");
+
+                await PreviewYearEndAsync();
+                CommandManager.InvalidateRequerySuggested();
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error: {ex.Message}";
+            }
         }
 
         private async Task LoadBackupsAsync()

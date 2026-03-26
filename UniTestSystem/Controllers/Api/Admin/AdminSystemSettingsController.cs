@@ -32,6 +32,11 @@ public class AdminSystemSettingsController : ControllerBase
         current.SystemName = string.IsNullOrWhiteSpace(request.SystemName) ? current.SystemName : request.SystemName.Trim();
         current.CurrentSemester = request.CurrentSemester?.Trim();
         current.CurrentAcademicYear = request.CurrentAcademicYear?.Trim();
+        current.WarningGpaThreshold = request.WarningGpaThreshold > 0 ? request.WarningGpaThreshold : current.WarningGpaThreshold;
+        current.FailGpaThreshold = request.FailGpaThreshold > 0 ? request.FailGpaThreshold : current.FailGpaThreshold;
+        if (current.WarningGpaThreshold < current.FailGpaThreshold)
+            current.WarningGpaThreshold = current.FailGpaThreshold;
+        current.TreatOutstandingDebtAsFail = request.TreatOutstandingDebtAsFail;
         current.LogoUrl = request.LogoUrl?.Trim();
         current.UpdatedBy = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
@@ -45,5 +50,8 @@ public class UpdateSystemSettingsRequest
     public string? SystemName { get; set; }
     public string? CurrentSemester { get; set; }
     public string? CurrentAcademicYear { get; set; }
+    public decimal WarningGpaThreshold { get; set; }
+    public decimal FailGpaThreshold { get; set; }
+    public bool TreatOutstandingDebtAsFail { get; set; } = true;
     public string? LogoUrl { get; set; }
 }

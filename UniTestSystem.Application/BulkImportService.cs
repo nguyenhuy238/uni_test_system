@@ -1,6 +1,5 @@
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Domain;
-using ClosedXML.Excel;
 using BCrypt.Net;
 
 namespace UniTestSystem.Application;
@@ -11,39 +10,40 @@ public class BulkImportService : IBulkImportService
     private readonly IRepository<Student> _studentRepo;
     private readonly IRepository<Course> _courseRepo;
     private readonly IRepository<StudentClass> _classRepo;
+    private readonly IBulkImportSpreadsheetReader _spreadsheetReader;
 
     public BulkImportService(
         IRepository<User> userRepo,
         IRepository<Student> studentRepo,
         IRepository<Course> courseRepo,
-        IRepository<StudentClass> classRepo)
+        IRepository<StudentClass> classRepo,
+        IBulkImportSpreadsheetReader spreadsheetReader)
     {
         _userRepo = userRepo;
         _studentRepo = studentRepo;
         _courseRepo = courseRepo;
         _classRepo = classRepo;
+        _spreadsheetReader = spreadsheetReader;
     }
 
     public async Task<ImportResult> ImportStudentsAsync(Stream fileStream, string? defaultClassId = null)
     {
         var result = new ImportResult();
-        using var workbook = new XLWorkbook(fileStream);
-        var worksheet = workbook.Worksheet(1);
-        var rows = worksheet.RowsUsed().Skip(1); // Skip header
+        var rows = _spreadsheetReader.ReadStudents(fileStream);
 
         foreach (var row in rows)
         {
             result.Total++;
             try
             {
-                var name = row.Cell(1).Value.ToString().Trim();
-                var email = row.Cell(2).Value.ToString().Trim();
-                var code = row.Cell(3).Value.ToString().Trim();
-                var major = row.Cell(4).Value.ToString().Trim();
+                var name = row.Name;
+                var email = row.Email;
+                var code = row.StudentCode;
+                var major = row.Major;
 
                 if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(email))
                 {
-                    result.Errors.Add($"Row {row.RowNumber()}: Name and Email are required.");
+                    result.Errors.Add($"Row {row.RowNumber}: Name and Email are required.");
                     continue;
                 }
 
@@ -51,7 +51,7 @@ public class BulkImportService : IBulkImportService
                 if (existing != null)
                 {
                     result.Skipped++;
-                    result.SkippedReasons.Add($"Row {row.RowNumber()}: Email {email} already exists.");
+                    result.SkippedReasons.Add($"Row {row.RowNumber}: Email {email} already exists.");
                     continue;
                 }
 
@@ -73,7 +73,7 @@ public class BulkImportService : IBulkImportService
             }
             catch (Exception ex)
             {
-                result.Errors.Add($"Row {row.RowNumber()}: {ex.Message}");
+                result.Errors.Add($"Row {row.RowNumber}: {ex.Message}");
             }
         }
 
@@ -83,23 +83,21 @@ public class BulkImportService : IBulkImportService
     public async Task<ImportResult> ImportCoursesAsync(Stream fileStream)
     {
         var result = new ImportResult();
-        using var workbook = new XLWorkbook(fileStream);
-        var worksheet = workbook.Worksheet(1);
-        var rows = worksheet.RowsUsed().Skip(1); // Skip header
+        var rows = _spreadsheetReader.ReadCourses(fileStream);
 
         foreach (var row in rows)
         {
             result.Total++;
             try
             {
-                var name = row.Cell(1).Value.ToString().Trim();
-                var code = row.Cell(2).Value.ToString().Trim();
-                var creditsStr = row.Cell(3).Value.ToString().Trim();
-                var area = row.Cell(4).Value.ToString().Trim();
+                var name = row.Name;
+                var code = row.Code;
+                var creditsStr = row.CreditsText;
+                var area = row.SubjectArea;
 
                 if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(code))
                 {
-                    result.Errors.Add($"Row {row.RowNumber()}: Name and Code are required.");
+                    result.Errors.Add($"Row {row.RowNumber}: Name and Code are required.");
                     continue;
                 }
 
@@ -107,7 +105,7 @@ public class BulkImportService : IBulkImportService
                 if (existing != null)
                 {
                     result.Skipped++;
-                    result.SkippedReasons.Add($"Row {row.RowNumber()}: Course code {code} already exists.");
+                    result.SkippedReasons.Add($"Row {row.RowNumber}: Course code {code} already exists.");
                     continue;
                 }
 
@@ -128,7 +126,7 @@ public class BulkImportService : IBulkImportService
             }
             catch (Exception ex)
             {
-                result.Errors.Add($"Row {row.RowNumber()}: {ex.Message}");
+                result.Errors.Add($"Row {row.RowNumber}: {ex.Message}");
             }
         }
 

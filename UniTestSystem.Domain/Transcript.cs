@@ -11,6 +11,15 @@ namespace UniTestSystem.Domain
 
         public decimal GPA { get; set; } = 0;
         public int TotalCredits { get; set; } = 0;
+        public string? AcademicYear { get; set; }
+        public decimal? YearEndGpa4 { get; set; }
+        public decimal? YearEndGpa10 { get; set; }
+        public int? YearEndTotalCreditsEarned { get; set; }
+        public string? AcademicStatus { get; set; }
+        public bool IsYearEndFinalized { get; set; }
+        public bool IsYearEndLocked { get; set; }
+        public DateTime? YearEndFinalizedAt { get; set; }
+        public string? YearEndFinalizedBy { get; set; }
 
         [System.ComponentModel.DataAnnotations.Timestamp]
         public byte[] RowVersion { get; set; } = Array.Empty<byte>();
