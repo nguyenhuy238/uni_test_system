@@ -3,6 +3,7 @@ using UniTestSystem.Application;
 using UniTestSystem.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using System;
 using System.Linq;
 using System.Collections.Generic;
@@ -16,13 +17,16 @@ namespace UniTestSystem.Controllers
     {
         private readonly ITestAdministrationService _testAdministrationService;
         private readonly IQuestionService _questionService;
+        private readonly IAcademicService _academicService;
 
         public TestsController(
             ITestAdministrationService testAdministrationService,
-            IQuestionService questionService)
+            IQuestionService questionService,
+            IAcademicService academicService)
         {
             _testAdministrationService = testAdministrationService;
             _questionService = questionService;
+            _academicService = academicService;
         }
 
         // ---------- Index ----------
@@ -69,7 +73,9 @@ namespace UniTestSystem.Controllers
             if (int.TryParse(q("RandomMCQ"), out var r1)) model.RandomMCQ = r1;
             if (int.TryParse(q("RandomTF"), out var r2)) model.RandomTF = r2;
             if (int.TryParse(q("RandomEssay"), out var r3)) model.RandomEssay = r3;
+            if (!string.IsNullOrWhiteSpace(q("CourseId"))) model.CourseId = q("CourseId");
 
+            await PopulateCoursesAsync(model.CourseId);
             return View(model);
         }
 
@@ -89,6 +95,11 @@ namespace UniTestSystem.Controllers
             {
                 if (t.RandomMCQ + t.RandomTF + t.RandomEssay <= 0)
                     ModelState.AddModelError("", "Vui lòng chọn ít nhất 1 câu hỏi hoặc cấu hình số lượng random > 0");
+            }
+
+            if (string.IsNullOrWhiteSpace(t.CourseId))
+            {
+                ModelState.AddModelError(nameof(t.CourseId), "Vui lòng chọn Course trước khi tạo test.");
             }
 
             if (!ModelState.IsValid)
@@ -114,6 +125,7 @@ namespace UniTestSystem.Controllers
                     Filter = f,
                     Page = paged,
                     Title = t.Title,
+                    CourseId = t.CourseId,
                     DurationMinutes = t.DurationMinutes,
                     PassScore = t.PassScore,
                     SubjectIdFilter = t.SubjectIdFilter,
@@ -122,6 +134,7 @@ namespace UniTestSystem.Controllers
                     RandomEssay = t.RandomEssay,
                     SelectedQuestionIds = SelectedQuestionIds ?? new List<string>()
                 };
+                await PopulateCoursesAsync(vm.CourseId);
                 return View(vm);
             }
 
@@ -154,6 +167,7 @@ namespace UniTestSystem.Controllers
             {
                 Id = t.Id,
                 Title = t.Title,
+                CourseId = t.CourseId,
                 DurationMinutes = t.DurationMinutes,
                 PassScore = t.PassScore,
                 ShuffleQuestions = t.ShuffleQuestions,
@@ -177,7 +191,9 @@ namespace UniTestSystem.Controllers
             if (int.TryParse(q("RandomMCQ"), out var r1)) vm.RandomMCQ = r1;
             if (int.TryParse(q("RandomTF"), out var r2)) vm.RandomTF = r2;
             if (int.TryParse(q("RandomEssay"), out var r3)) vm.RandomEssay = r3;
+            if (!string.IsNullOrWhiteSpace(q("CourseId"))) vm.CourseId = q("CourseId");
 
+            await PopulateCoursesAsync(vm.CourseId);
             return View(vm);
         }
 
@@ -194,6 +210,11 @@ namespace UniTestSystem.Controllers
                 (vm.RandomMCQ + vm.RandomTF + vm.RandomEssay <= 0))
             {
                 ModelState.AddModelError("", "Chọn ít nhất 1 câu hỏi hoặc cấu hình random > 0.");
+            }
+
+            if (string.IsNullOrWhiteSpace(vm.CourseId))
+            {
+                ModelState.AddModelError(nameof(vm.CourseId), "Vui lòng chọn Course trước khi lưu.");
             }
 
             if (!ModelState.IsValid)
@@ -215,6 +236,7 @@ namespace UniTestSystem.Controllers
                 vm.Filter = f;
                 vm.Page = await _questionService.SearchAsync(f);
                 vm.SelectedQuestionIds = SelectedQuestionIds ?? new List<string>();
+                await PopulateCoursesAsync(vm.CourseId);
                 return View(vm);
             }
 
@@ -222,6 +244,7 @@ namespace UniTestSystem.Controllers
             {
                 Id = vm.Id,
                 Title = vm.Title,
+                CourseId = vm.CourseId,
                 DurationMinutes = vm.DurationMinutes,
                 PassScore = vm.PassScore,
                 ShuffleQuestions = vm.ShuffleQuestions,
@@ -235,6 +258,25 @@ namespace UniTestSystem.Controllers
             await _testAdministrationService.UpdateAsync(request, SelectedQuestionIds);
             TempData["Msg"] = "Đã lưu thay đổi.";
             return RedirectToAction(nameof(Index));
+        }
+
+        private async Task PopulateCoursesAsync(string? selectedCourseId)
+        {
+            var courses = await _academicService.GetAllCoursesAsync();
+            var selected = string.IsNullOrWhiteSpace(selectedCourseId) ? null : selectedCourseId;
+            ViewBag.Courses = new SelectList(courses, "Id", "Name", selected);
+        }
+
+        private void SetFlashMessageByContent(string message)
+        {
+            if (message.StartsWith("Không thể", StringComparison.OrdinalIgnoreCase) ||
+                message.StartsWith("Thiếu", StringComparison.OrdinalIgnoreCase))
+            {
+                TempData["Err"] = message;
+                return;
+            }
+
+            TempData["Msg"] = message;
         }
 
         // ---------- Delete ----------
@@ -292,7 +334,7 @@ namespace UniTestSystem.Controllers
         {
             var (found, message) = await _testAdministrationService.AssignToUserAsync(testId, userId);
             if (!found) return NotFound();
-            TempData["Msg"] = message;
+            SetFlashMessageByContent(message);
             return RedirectToAction(nameof(Index));
         }
 
@@ -334,7 +376,7 @@ namespace UniTestSystem.Controllers
         {
             var (found, message) = await _testAdministrationService.AssignUsersAsync(testId, userIds, startAt, endAt);
             if (!found) return NotFound();
-            TempData["Msg"] = message;
+            SetFlashMessageByContent(message);
             return RedirectToAction(nameof(Assign), new { id = testId });
         }
 
@@ -352,7 +394,7 @@ namespace UniTestSystem.Controllers
 
             var (found, message) = await _testAdministrationService.AssignByFacultyAsync(testId, faculty, startAt, endAt);
             if (!found) return NotFound();
-            TempData["Msg"] = message;
+            SetFlashMessageByContent(message);
             return RedirectToAction(nameof(Assign), new { id = testId, faculty });
         }
 

@@ -171,6 +171,7 @@ public sealed class TestAdministrationService : ITestAdministrationService
         test.ShuffleQuestions = request.ShuffleQuestions;
         test.ShuffleOptions = request.ShuffleOptions;
         test.SubjectIdFilter = request.SubjectIdFilter;
+        test.CourseId = string.IsNullOrWhiteSpace(request.CourseId) ? null : request.CourseId.Trim();
         test.RandomMCQ = request.RandomMCQ;
         test.RandomTF = request.RandomTF;
         test.RandomEssay = request.RandomEssay;
@@ -338,6 +339,11 @@ public sealed class TestAdministrationService : ITestAdministrationService
             return (false, "Không tìm thấy bài test.");
         }
 
+        if (!TryGetAssessmentCourseId(test, out var courseId))
+        {
+            return (true, "Không thể giao bài: test chưa được gắn Course. Vui lòng vào Edit Test và chọn Course trước khi assign.");
+        }
+
         if (!test.IsPublished)
         {
             test.IsPublished = true;
@@ -355,7 +361,7 @@ public sealed class TestAdministrationService : ITestAdministrationService
             EndTime = e,
             TargetType = "Student",
             TargetValue = userId,
-            CourseId = test.CourseId ?? "default",
+            CourseId = courseId,
             Type = AssessmentType.Quiz
         };
         await _assessmentRepo.InsertAsync(assessment);
@@ -384,6 +390,17 @@ public sealed class TestAdministrationService : ITestAdministrationService
             return (false, "Không tìm thấy bài test.");
         }
 
+        var newAssigned = (userIds ?? Array.Empty<string>())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var courseId = string.Empty;
+        if (newAssigned.Count > 0 && !TryGetAssessmentCourseId(test, out courseId))
+        {
+            return (true, "Không thể giao bài: test chưa được gắn Course. Vui lòng vào Edit Test và chọn Course trước khi assign.");
+        }
+
         if (!test.IsPublished)
         {
             test.IsPublished = true;
@@ -398,11 +415,6 @@ public sealed class TestAdministrationService : ITestAdministrationService
         {
             await _assessmentRepo.DeleteAsync(a => a.TargetType == "Student" && a.Id == test.AssessmentId);
         }
-
-        var newAssigned = (userIds ?? Array.Empty<string>())
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
 
         if (newAssigned.Count == 0)
         {
@@ -420,7 +432,7 @@ public sealed class TestAdministrationService : ITestAdministrationService
                 EndTime = e,
                 TargetType = "Student",
                 TargetValue = uid,
-                CourseId = test.CourseId ?? "default",
+                CourseId = courseId,
                 Type = AssessmentType.Quiz
             };
             await _assessmentRepo.InsertAsync(assessment);
@@ -446,6 +458,11 @@ public sealed class TestAdministrationService : ITestAdministrationService
             return (false, "Không tìm thấy bài test.");
         }
 
+        if (!TryGetAssessmentCourseId(test, out var courseId))
+        {
+            return (true, "Không thể giao bài: test chưa được gắn Course. Vui lòng vào Edit Test và chọn Course trước khi assign.");
+        }
+
         if (!test.IsPublished)
         {
             test.IsPublished = true;
@@ -463,7 +480,7 @@ public sealed class TestAdministrationService : ITestAdministrationService
             EndTime = e,
             TargetType = "Class",
             TargetValue = faculty,
-            CourseId = test.CourseId ?? "default",
+            CourseId = courseId,
             Type = AssessmentType.Quiz
         };
         await _assessmentRepo.InsertAsync(assessment);
@@ -490,10 +507,17 @@ public sealed class TestAdministrationService : ITestAdministrationService
         var e = endAt ?? DateTime.UtcNow.AddDays(30);
 
         var assigned = 0;
+        var skippedNoCourse = new List<string>();
         foreach (var tid in ids)
         {
             var test = await _testRepo.FirstOrDefaultAsync(x => x.Id == tid);
             if (test == null) continue;
+
+            if (!TryGetAssessmentCourseId(test, out var courseId))
+            {
+                skippedNoCourse.Add(test.Title);
+                continue;
+            }
 
             if (!test.IsPublished)
             {
@@ -514,7 +538,7 @@ public sealed class TestAdministrationService : ITestAdministrationService
                 EndTime = e,
                 TargetType = "Student",
                 TargetValue = userId,
-                CourseId = test.CourseId ?? "default",
+                CourseId = courseId,
                 Type = AssessmentType.Quiz
             };
             await _assessmentRepo.InsertAsync(assessment);
@@ -524,7 +548,12 @@ public sealed class TestAdministrationService : ITestAdministrationService
             assigned++;
         }
 
-        return $"Đã assign {assigned} test cho sinh viên '{userId}'.";
+        var msg = $"Đã assign {assigned} test cho sinh viên '{userId}'.";
+        if (skippedNoCourse.Count > 0)
+        {
+            msg += $" Bỏ qua {skippedNoCourse.Count} test chưa gắn Course: {string.Join("; ", skippedNoCourse.Take(3))}{(skippedNoCourse.Count > 3 ? "..." : "")}";
+        }
+        return msg;
     }
 
     public async Task<string> BulkAssignAutoAsync(IReadOnlyCollection<string>? testIds, DateTime? startAt = null, DateTime? endAt = null)
@@ -544,6 +573,7 @@ public sealed class TestAdministrationService : ITestAdministrationService
 
         var assigned = 0;
         var skipped = new List<string>();
+        var skippedNoCourse = new List<string>();
 
         foreach (var tid in ids)
         {
@@ -557,6 +587,12 @@ public sealed class TestAdministrationService : ITestAdministrationService
             if (owner == null)
             {
                 skipped.Add(test.Title);
+                continue;
+            }
+
+            if (!TryGetAssessmentCourseId(test, out var courseId))
+            {
+                skippedNoCourse.Add(test.Title);
                 continue;
             }
 
@@ -579,7 +615,7 @@ public sealed class TestAdministrationService : ITestAdministrationService
                 EndTime = e,
                 TargetType = "Student",
                 TargetValue = owner.Id,
-                CourseId = test.CourseId ?? "default",
+                CourseId = courseId,
                 Type = AssessmentType.Quiz
             };
             await _assessmentRepo.InsertAsync(assessment);
@@ -594,7 +630,17 @@ public sealed class TestAdministrationService : ITestAdministrationService
         {
             msg += $" Bỏ qua {skipped.Count}: {string.Join("; ", skipped.Take(5))}{(skipped.Count > 5 ? "..." : "")}";
         }
+        if (skippedNoCourse.Count > 0)
+        {
+            msg += $" Bỏ qua {skippedNoCourse.Count} test chưa gắn Course: {string.Join("; ", skippedNoCourse.Take(3))}{(skippedNoCourse.Count > 3 ? "..." : "")}";
+        }
         return msg;
+    }
+
+    private static bool TryGetAssessmentCourseId(Test test, out string courseId)
+    {
+        courseId = (test.CourseId ?? string.Empty).Trim();
+        return !string.IsNullOrWhiteSpace(courseId);
     }
 
     private async Task CreateSnapshotsAsync(Test test)

@@ -9,6 +9,7 @@ public class CreateTestViewModel
     public QuestionFilter Filter { get; set; } = new();
 
     public string Title { get; set; } = "";
+    public string? CourseId { get; set; }
     public int DurationMinutes { get; set; } = 10;
     public int PassScore { get; set; } = 3;
     public bool ShuffleQuestions { get; set; } = true;

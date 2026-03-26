@@ -36,6 +36,7 @@ public sealed class TestUpdateRequest
 {
     public string Id { get; set; } = "";
     public string Title { get; set; } = "";
+    public string? CourseId { get; set; }
     public int DurationMinutes { get; set; }
     public int PassScore { get; set; }
     public bool ShuffleQuestions { get; set; }
