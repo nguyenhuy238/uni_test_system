@@ -10,12 +10,11 @@ namespace UniTestSystem.Controllers
     [Authorize(Policy = PermissionCodes.Org_Manage)]
     public class FacultiesController : Controller
     {
-        private readonly IEntityStore<Faculty> _facultyRepo;
-        private readonly IEntityStore<StudentClass> _classRepo;
+        private readonly IAcademicService _academicService;
         private readonly IPermissionService _perms;
 
-        public FacultiesController(IEntityStore<Faculty> facultyRepo, IEntityStore<StudentClass> classRepo, IPermissionService perms)
-        { _facultyRepo = facultyRepo; _classRepo = classRepo; _perms = perms; }
+        public FacultiesController(IAcademicService academicService, IPermissionService perms)
+        { _academicService = academicService; _perms = perms; }
 
         private bool IsAdmin => User?.IsInRole(nameof(Role.Admin)) == true;
         private bool IsStaff => User?.IsInRole(nameof(Role.Staff)) == true;
@@ -31,10 +30,8 @@ namespace UniTestSystem.Controllers
         {
             if (!await CanViewAsync()) return Redirect("/auth/denied");
 
-            var list = await _facultyRepo.GetAllAsync();
-            var classes = await _classRepo.GetAllAsync();
-            var counts = classes.GroupBy(t => t.FacultyId ?? "")
-                              .ToDictionary(g => g.Key, g => g.Count());
+            var list = await _academicService.GetAllFacultiesAsync();
+            var counts = await _academicService.GetClassCountsByFacultyAsync();
             ViewBag.ClassCounts = counts;
             return View("Index", list.OrderBy(d => d.Name).ToList());
         }
@@ -58,7 +55,7 @@ namespace UniTestSystem.Controllers
                 return View("Create", model);
             }
 
-            var all = await _facultyRepo.GetAllAsync();
+            var all = await _academicService.GetAllFacultiesAsync();
             if (all.Any(d => d.Name.Equals(model.Name.Trim(), StringComparison.OrdinalIgnoreCase)))
             {
                 ModelState.AddModelError(nameof(Faculty.Name), "Tên khoa đã tồn tại.");
@@ -70,7 +67,7 @@ namespace UniTestSystem.Controllers
             model.Description = model.Description?.Trim();
             model.CreatedAt = DateTime.UtcNow;
 
-            await _facultyRepo.InsertAsync(model);
+            await _academicService.CreateFacultyAsync(model);
 
             TempData["Msg"] = "Đã tạo khoa.";
             return RedirectToAction(nameof(Index));
@@ -81,7 +78,7 @@ namespace UniTestSystem.Controllers
         {
             if (!await CanManageAsync()) return Redirect("/auth/denied");
 
-            var d = await _facultyRepo.FirstOrDefaultAsync(x => x.Id == id);
+            var d = await _academicService.GetFacultyByIdAsync(id);
             if (d == null)
             {
                 TempData["Err"] = "Không tìm thấy khoa.";
@@ -96,7 +93,7 @@ namespace UniTestSystem.Controllers
         {
             if (!await CanManageAsync()) return Redirect("/auth/denied");
 
-            var d = await _facultyRepo.FirstOrDefaultAsync(x => x.Id == id);
+            var d = await _academicService.GetFacultyByIdAsync(id);
             if (d == null)
             {
                 TempData["Err"] = "Không tìm thấy khoa.";
@@ -109,7 +106,7 @@ namespace UniTestSystem.Controllers
                 return View("Edit", model);
             }
 
-            var all = await _facultyRepo.GetAllAsync();
+            var all = await _academicService.GetAllFacultiesAsync();
             if (all.Any(x => x.Id != id && x.Name.Equals(model.Name.Trim(), StringComparison.OrdinalIgnoreCase)))
             {
                 ModelState.AddModelError(nameof(Faculty.Name), "Tên khoa đã tồn tại.");
@@ -120,7 +117,7 @@ namespace UniTestSystem.Controllers
             d.Description = model.Description?.Trim();
             d.UpdatedAt = DateTime.UtcNow;
 
-            await _facultyRepo.UpsertAsync(x => x.Id == d.Id, d);
+            await _academicService.UpdateFacultyAsync(d.Id, d);
 
             TempData["Msg"] = "Đã cập nhật khoa.";
             return RedirectToAction(nameof(Index));
@@ -132,14 +129,13 @@ namespace UniTestSystem.Controllers
         {
             if (!await CanManageAsync()) return Redirect("/auth/denied");
 
-            var classes = await _classRepo.GetAllAsync();
-            if (classes.Any(t => (t.FacultyId ?? "") == id))
+            if (await _academicService.HasClassesInFacultyAsync(id))
             {
                 TempData["Err"] = "Không thể xóa: còn lớp thuộc khoa này.";
                 return RedirectToAction(nameof(Index));
             }
 
-            await _facultyRepo.DeleteAsync(x => x.Id == id);
+            await _academicService.DeleteFacultyAsync(id);
             TempData["Msg"] = "Đã xóa khoa.";
             return RedirectToAction(nameof(Index));
         }

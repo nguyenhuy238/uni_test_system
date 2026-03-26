@@ -27,6 +27,11 @@ public sealed class TestAdministrationService : ITestAdministrationService
         _notificationService = notificationService;
     }
 
+    public Task<List<Test>> GetAllTestsAsync()
+    {
+        return _testRepo.GetAllAsync();
+    }
+
     public async Task<List<Test>> GetTestsByStatusAsync(string? status)
     {
         var tests = await _testRepo.GetAllAsync();
@@ -58,6 +63,61 @@ public sealed class TestAdministrationService : ITestAdministrationService
     public Task<Test?> GetTestByIdAsync(string id)
     {
         return _testRepo.FirstOrDefaultAsync(x => x.Id == id);
+    }
+
+    public async Task CreateRawAsync(Test test)
+    {
+        test.Id = string.IsNullOrWhiteSpace(test.Id) ? Guid.NewGuid().ToString("N") : test.Id;
+        if (test.CreatedAt == default) test.CreatedAt = DateTime.UtcNow;
+        await _testRepo.InsertAsync(test);
+    }
+
+    public async Task<bool> UpdateRawAsync(string id, Test test)
+    {
+        var existing = await _testRepo.FirstOrDefaultAsync(x => x.Id == id);
+        if (existing == null) return false;
+
+        test.Id = id;
+        test.CreatedAt = existing.CreatedAt;
+        test.UpdatedAt = DateTime.UtcNow;
+        await _testRepo.UpsertAsync(x => x.Id == id, test);
+        return true;
+    }
+
+    public async Task<bool> DeleteRawAsync(string id)
+    {
+        var existing = await _testRepo.FirstOrDefaultAsync(x => x.Id == id);
+        if (existing == null) return false;
+
+        await _testRepo.DeleteAsync(x => x.Id == id);
+        return true;
+    }
+
+    public async Task<List<string>> GetDepartmentOptionsAsync()
+    {
+        return (await _studentRepo.GetAllAsync())
+            .Select(x => x.StudentClassId ?? string.Empty)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToList();
+    }
+
+    public async Task<int> AssignPairsAsync(IReadOnlyCollection<TestUserAssignment> assignments, DateTime? startAt = null, DateTime? endAt = null)
+    {
+        var assigned = 0;
+        foreach (var item in assignments)
+        {
+            if (string.IsNullOrWhiteSpace(item.TestId) || string.IsNullOrWhiteSpace(item.UserId))
+            {
+                continue;
+            }
+
+            var (found, _) = await AssignToUserAsync(item.TestId, item.UserId, startAt, endAt);
+            if (found) assigned++;
+        }
+
+        return assigned;
     }
 
     public async Task CreateAndPublishAsync(Test test, IReadOnlyCollection<string>? selectedQuestionIds)

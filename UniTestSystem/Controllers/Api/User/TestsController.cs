@@ -11,21 +11,17 @@ namespace UniTestSystem.Controllers.Api.User;
 [Route("api/user/tests")]
 public class TestsController : ControllerBase
 {
-    private readonly IEntityStore<Test> _tests;
-    private readonly IEntityStore<Session> _sessions;
-    private readonly IEntityStore<Result> _results;
+    private readonly IUserTestService _userTestService;
 
-    public TestsController(IEntityStore<Test> tests, IEntityStore<Session> sessions, IEntityStore<Result> results)
+    public TestsController(IUserTestService userTestService)
     {
-        _tests = tests;
-        _sessions = sessions;
-        _results = results;
+        _userTestService = userTestService;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAvailableTests()
     {
-        var tests = await _tests.GetAllAsync();
+        var tests = await _userTestService.GetAvailablePublishedTestsAsync();
         var availableTests = tests.Where(t => t.IsPublished && t.Type == TestType.Test)
                                   .Select(t => new {
                                       t.Id,
@@ -40,7 +36,7 @@ public class TestsController : ControllerBase
     [HttpGet("Tests")]
     public async Task<IActionResult> GetAvailableTestsByRoute()
     {
-        var tests = await _tests.GetAllAsync();
+        var tests = await _userTestService.GetAvailablePublishedTestsAsync();
         var availableTests = tests.Where(t => t.IsPublished && t.Type == TestType.Test)
                                     .Select(t => new {
                                         t.Id,
@@ -54,8 +50,8 @@ public class TestsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetTestById(string id)
     {
-        var test = await _tests.FirstOrDefaultAsync(x => x.Id == id);
-        if (test == null || !test.IsPublished)
+        var test = await _userTestService.GetPublishedTestByIdAsync(id);
+        if (test == null)
             return NotFound();
 
         return Ok(new {
@@ -72,69 +68,26 @@ public class TestsController : ControllerBase
     public async Task<IActionResult> StartTest(string id)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var test = await _tests.FirstOrDefaultAsync(x => x.Id == id);
-        if (test == null || !test.IsPublished)
-            return NotFound();
-
-        // Check if user already has an active session
-        var existingSession = await _sessions.FirstOrDefaultAsync(s => s.TestId == id && s.UserId == userId && s.Status == SessionStatus.InProgress);
-        if (existingSession != null)
-            return Ok(new { sessionId = existingSession.Id });
-
-        // Create new session
-        var session = new Session
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            TestId = id,
-            UserId = userId ?? "",
-            Status = SessionStatus.InProgress,
-            StartAt = DateTime.UtcNow,
-            LastActivityAt = DateTime.UtcNow
-        };
-
-        await _sessions.InsertAsync(session);
-        return Ok(new { sessionId = session.Id });
+        var sessionId = await _userTestService.StartOrResumeSessionAsync(id, userId ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(sessionId)) return NotFound();
+        return Ok(new { sessionId });
     }
 
     [HttpGet("results")]
     public async Task<IActionResult> GetUserResults()
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var results = await _results.GetAllAsync();
-        var userResults = results.Where(r => r.UserId == userId)
-                               .Join(await _tests.GetAllAsync(), r => r.TestId, t => t.Id, (r, t) => new {
-                                   r.Id,
-                                   t.Title,
-                                   r.Score,
-                                   r.MaxScore,
-                                   r.SubmitTime,
-                                   r.Status,
-                                   t.Type
-                               })
-                               .OrderByDescending(r => r.SubmitTime)
-                               .ToList();
-
-        return Ok(userResults);
+        if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
+        return Ok(await _userTestService.GetUserResultsAsync(userId));
     }
 
     [HttpGet("results/{id}")]
     public async Task<IActionResult> GetResultById(string id)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var result = await _results.FirstOrDefaultAsync(r => r.Id == id && r.UserId == userId);
-        if (result == null)
-            return NotFound();
-
-        var test = await _tests.FirstOrDefaultAsync(t => t.Id == result.TestId);
-        return Ok(new {
-            result.Id,
-            Title = test?.Title ?? "Untitled",
-            result.Score,
-            result.MaxScore,
-            result.SubmitTime,
-            result.Status,
-            Type = test?.Type ?? TestType.Test
-        });
+        if (string.IsNullOrWhiteSpace(userId)) return Unauthorized();
+        var result = await _userTestService.GetUserResultByIdAsync(userId, id);
+        return result == null ? NotFound() : Ok(result);
     }
 }
 

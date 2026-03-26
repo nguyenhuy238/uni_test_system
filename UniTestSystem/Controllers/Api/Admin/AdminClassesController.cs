@@ -10,42 +10,39 @@ namespace UniTestSystem.Controllers.Api.Admin;
 [Route("api/admin/classes")]
 public class AdminClassesController : ControllerBase
 {
-    private readonly IEntityStore<StudentClass> _repo;
+    private readonly IAcademicService _academicService;
 
-    public AdminClassesController(IEntityStore<StudentClass> repo)
+    public AdminClassesController(IAcademicService academicService)
     {
-        _repo = repo;
+        _academicService = academicService;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var list = await _repo.GetAllAsync();
+        var list = await _academicService.GetAllClassesAsync();
         return Ok(list.OrderBy(x => x.Name).ToList());
     }
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] StudentClass model)
     {
-        model.Id = string.IsNullOrWhiteSpace(model.Id) ? Guid.NewGuid().ToString("N") : model.Id;
-        model.CreatedAt = DateTime.UtcNow;
-        await _repo.InsertAsync(model);
+        await _academicService.CreateClassAsync(model);
         return Ok(model);
     }
 
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(string id, [FromBody] StudentClass model)
     {
-        model.Id = id;
-        model.UpdatedAt = DateTime.UtcNow;
-        await _repo.UpsertAsync(x => x.Id == id, model);
+        var ok = await _academicService.UpdateClassAsync(id, model);
+        if (!ok) return NotFound();
         return NoContent();
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id)
     {
-        await _repo.DeleteAsync(x => x.Id == id);
+        await _academicService.DeleteClassAsync(id);
         return NoContent();
     }
 }

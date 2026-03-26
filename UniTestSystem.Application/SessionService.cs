@@ -14,6 +14,7 @@ public class SessionService : ISessionService
 
     private readonly IRepository<Session> _sessionRepo;
     private readonly IRepository<Test> _testRepo;
+    private readonly IRepository<User> _userRepo;
     private readonly IRepository<Question> _questionRepo;
     private readonly IRepository<SessionLog> _sessionLogRepo;
     private readonly TestService _testService;
@@ -25,6 +26,7 @@ public class SessionService : ISessionService
     public SessionService(
         IRepository<Session> sessionRepo,
         IRepository<Test> testRepo,
+        IRepository<User> userRepo,
         IRepository<Question> questionRepo,
         IRepository<SessionLog> sessionLogRepo,
         TestService testService,
@@ -35,6 +37,7 @@ public class SessionService : ISessionService
     {
         _sessionRepo = sessionRepo;
         _testRepo = testRepo;
+        _userRepo = userRepo;
         _questionRepo = questionRepo;
         _sessionLogRepo = sessionLogRepo;
         _testService = testService;
@@ -489,6 +492,48 @@ public class SessionService : ISessionService
 
         await _sessionLogRepo.InsertAsync(log);
         return Success(true);
+    }
+
+    public async Task<List<AdminSessionItem>> GetAdminSessionsAsync()
+    {
+        var sessions = await _sessionRepo.GetAllAsync();
+        var users = await _userRepo.GetAllAsync();
+        var tests = await _testRepo.GetAllAsync();
+
+        return sessions
+            .Select(s =>
+            {
+                var user = users.FirstOrDefault(x => x.Id == s.UserId);
+                var test = tests.FirstOrDefault(x => x.Id == s.TestId);
+                return new AdminSessionItem
+                {
+                    Id = s.Id,
+                    UserId = s.UserId,
+                    UserName = user?.Name ?? "Unknown",
+                    UserEmail = user?.Email,
+                    TestId = s.TestId,
+                    TestTitle = test?.Title ?? "Unknown",
+                    StartAt = s.StartAt,
+                    EndAt = s.EndAt,
+                    Status = s.Status,
+                    LastActivityAt = s.LastActivityAt,
+                    TotalScore = s.TotalScore,
+                    MaxScore = s.MaxScore,
+                    Percent = s.Percent,
+                    IsPassed = s.IsPassed
+                };
+            })
+            .OrderByDescending(x => x.LastActivityAt)
+            .ToList();
+    }
+
+    public async Task<bool> TerminateSessionAsync(string id)
+    {
+        var session = await _sessionRepo.FirstOrDefaultAsync(x => x.Id == id);
+        if (session == null) return false;
+
+        await _sessionRepo.DeleteAsync(x => x.Id == id);
+        return true;
     }
 
     private async Task<StartSessionData> BuildStartSessionDataAsync(Session session, Test test, bool includeQuestionPayload)

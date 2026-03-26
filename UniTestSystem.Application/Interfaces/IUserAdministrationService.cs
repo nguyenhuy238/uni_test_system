@@ -5,6 +5,18 @@ namespace UniTestSystem.Application.Interfaces;
 public interface IUserAdministrationService
 {
     Task<List<User>> SearchAsync(string? query, string? classId, Role? role);
+    Task<List<User>> GetAllUsersAsync();
+    Task<User?> GetUserByIdAsync(string id);
+    Task<Student?> GetStudentByIdAsync(string id);
+    Task<Lecturer?> GetLecturerByIdAsync(string id);
+    Task<bool> EmailExistsAsync(string email, string? excludeUserId = null);
+    Task<bool> AssignRoleAsync(string userId, Role role);
+    Task<bool> CreateRawAsync(User user);
+    Task<bool> UpdateRawAsync(string id, User user);
+    Task<bool> DeleteRawAsync(string id);
+    Task UpsertUserAsync(User user);
+    Task UpsertStudentAsync(Student student);
+    Task UpsertLecturerAsync(Lecturer lecturer);
     Task<UserLookupData> GetLookupDataAsync();
     Task<UserFormData?> GetUserFormAsync(string id);
     Task<(bool Success, string? Error)> CreateAsync(UserUpsertCommand command);

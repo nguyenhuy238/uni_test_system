@@ -151,6 +151,24 @@ public sealed class SessionLogEventCommand
     public SessionRequestContext RequestContext { get; set; } = new();
 }
 
+public sealed class AdminSessionItem
+{
+    public string Id { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
+    public string UserName { get; set; } = string.Empty;
+    public string? UserEmail { get; set; }
+    public string TestId { get; set; } = string.Empty;
+    public string TestTitle { get; set; } = string.Empty;
+    public DateTime StartAt { get; set; }
+    public DateTime? EndAt { get; set; }
+    public SessionStatus Status { get; set; }
+    public DateTime LastActivityAt { get; set; }
+    public decimal TotalScore { get; set; }
+    public decimal MaxScore { get; set; }
+    public decimal Percent { get; set; }
+    public bool IsPassed { get; set; }
+}
+
 public interface ISessionService
 {
     Task<SessionServiceResult<StartSessionData>> StartSessionAsync(StartSessionCommand command);
@@ -162,4 +180,6 @@ public interface ISessionService
     Task<SessionServiceResult<SessionTimerData>> ResumeTimerAsync(SessionTimerCommand command);
     Task<SessionServiceResult<SessionTouchData>> TouchSessionAsync(SessionTouchCommand command);
     Task<SessionServiceResult<bool>> LogEventAsync(SessionLogEventCommand command);
+    Task<List<AdminSessionItem>> GetAdminSessionsAsync();
+    Task<bool> TerminateSessionAsync(string id);
 }

@@ -63,6 +63,88 @@ public sealed class UserAdministrationService : IUserAdministrationService
         return filtered.OrderBy(u => u.Name).ToList();
     }
 
+    public Task<List<User>> GetAllUsersAsync()
+    {
+        return _userRepo.GetAllAsync();
+    }
+
+    public Task<User?> GetUserByIdAsync(string id)
+    {
+        return _userRepo.FirstOrDefaultAsync(x => x.Id == id);
+    }
+
+    public Task<Student?> GetStudentByIdAsync(string id)
+    {
+        return _studentRepo.FirstOrDefaultAsync(x => x.Id == id);
+    }
+
+    public Task<Lecturer?> GetLecturerByIdAsync(string id)
+    {
+        return _lecturerRepo.FirstOrDefaultAsync(x => x.Id == id);
+    }
+
+    public async Task<bool> EmailExistsAsync(string email, string? excludeUserId = null)
+    {
+        var normalized = email.Trim();
+        if (string.IsNullOrWhiteSpace(normalized)) return false;
+
+        var all = await _userRepo.GetAllAsync();
+        return all.Any(x =>
+            x.Email.Equals(normalized, StringComparison.OrdinalIgnoreCase) &&
+            x.Id != (excludeUserId ?? string.Empty));
+    }
+
+    public async Task<bool> AssignRoleAsync(string userId, Role role)
+    {
+        var user = await _userRepo.FirstOrDefaultAsync(x => x.Id == userId);
+        if (user == null) return false;
+
+        user.Role = role;
+        await _userRepo.UpsertAsync(x => x.Id == user.Id, user);
+        return true;
+    }
+
+    public async Task<bool> CreateRawAsync(User user)
+    {
+        user.Id = string.IsNullOrWhiteSpace(user.Id) ? Guid.NewGuid().ToString("N") : user.Id;
+        await _userRepo.InsertAsync(user);
+        return true;
+    }
+
+    public async Task<bool> UpdateRawAsync(string id, User user)
+    {
+        var existing = await _userRepo.FirstOrDefaultAsync(x => x.Id == id);
+        if (existing == null) return false;
+
+        user.Id = id;
+        await _userRepo.UpsertAsync(x => x.Id == id, user);
+        return true;
+    }
+
+    public async Task<bool> DeleteRawAsync(string id)
+    {
+        var existing = await _userRepo.FirstOrDefaultAsync(x => x.Id == id);
+        if (existing == null) return false;
+
+        await _userRepo.DeleteAsync(x => x.Id == id);
+        return true;
+    }
+
+    public Task UpsertUserAsync(User user)
+    {
+        return _userRepo.UpsertAsync(x => x.Id == user.Id, user);
+    }
+
+    public Task UpsertStudentAsync(Student student)
+    {
+        return _studentRepo.UpsertAsync(x => x.Id == student.Id, student);
+    }
+
+    public Task UpsertLecturerAsync(Lecturer lecturer)
+    {
+        return _lecturerRepo.UpsertAsync(x => x.Id == lecturer.Id, lecturer);
+    }
+
     public async Task<UserLookupData> GetLookupDataAsync()
     {
         var classes = await _classRepo.GetAllAsync();

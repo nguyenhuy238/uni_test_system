@@ -12,10 +12,10 @@ namespace UniTestSystem.Controllers
     public class RolesController : Controller
     {
         private readonly IPermissionService _perms;
-        private readonly IEntityStore<User> _userRepo;
+        private readonly IUserAdministrationService _userAdministrationService;
 
-        public RolesController(IPermissionService perms, IEntityStore<User> userRepo)
-        { _perms = perms; _userRepo = userRepo; }
+        public RolesController(IPermissionService perms, IUserAdministrationService userAdministrationService)
+        { _perms = perms; _userAdministrationService = userAdministrationService; }
 
         [HttpGet("/roles")]
         public async Task<IActionResult> Index()
@@ -26,7 +26,7 @@ namespace UniTestSystem.Controllers
             await _perms.EnsureDefaultAsync();
             var maps = await _perms.GetAllAsync();
             ViewBag.AllCodes = PermissionCodes.All;
-            var users = await _userRepo.GetAllAsync();
+            var users = await _userAdministrationService.GetAllUsersAsync();
             ViewBag.Users = users.OrderBy(u => u.Name).ToList();
             return View("Index", maps);
         }
@@ -51,10 +51,9 @@ namespace UniTestSystem.Controllers
             if (!await _perms.HasAsync(User, PermissionCodes.Roles_Assign))
                 return Redirect("/auth/denied");
 
-            var u = await _userRepo.FirstOrDefaultAsync(x => x.Id == userId);
+            var u = await _userAdministrationService.GetUserByIdAsync(userId);
             if (u == null) { TempData["Err"] = "User không tồn tại."; return RedirectToAction(nameof(Index)); }
-            u.Role = role;
-            await _userRepo.UpsertAsync(x => x.Id == u.Id, u);
+            await _userAdministrationService.AssignRoleAsync(userId, role);
             TempData["Msg"] = $"Đã gán role {role} cho {u.Name}.";
             return RedirectToAction(nameof(Index));
         }

@@ -4,8 +4,14 @@ namespace UniTestSystem.Application.Interfaces;
 
 public interface ITestAdministrationService
 {
+    Task<List<Test>> GetAllTestsAsync();
     Task<List<Test>> GetTestsByStatusAsync(string? status);
     Task<Test?> GetTestByIdAsync(string id);
+    Task CreateRawAsync(Test test);
+    Task<bool> UpdateRawAsync(string id, Test test);
+    Task<bool> DeleteRawAsync(string id);
+    Task<List<string>> GetDepartmentOptionsAsync();
+    Task<int> AssignPairsAsync(IReadOnlyCollection<TestUserAssignment> assignments, DateTime? startAt = null, DateTime? endAt = null);
     Task CreateAndPublishAsync(Test test, IReadOnlyCollection<string>? selectedQuestionIds);
     Task<bool> UpdateAsync(TestUpdateRequest request, IReadOnlyCollection<string>? selectedQuestionIds);
     Task<bool> DeleteAsync(string id);
@@ -18,6 +24,12 @@ public interface ITestAdministrationService
     Task<(bool Found, string Message)> AssignByFacultyAsync(string testId, string faculty, DateTime? startAt = null, DateTime? endAt = null);
     Task<string> BulkAssignAsync(IReadOnlyCollection<string>? testIds, string userId, DateTime? startAt = null, DateTime? endAt = null);
     Task<string> BulkAssignAutoAsync(IReadOnlyCollection<string>? testIds, DateTime? startAt = null, DateTime? endAt = null);
+}
+
+public sealed class TestUserAssignment
+{
+    public string TestId { get; set; } = "";
+    public string UserId { get; set; } = "";
 }
 
 public sealed class TestUpdateRequest

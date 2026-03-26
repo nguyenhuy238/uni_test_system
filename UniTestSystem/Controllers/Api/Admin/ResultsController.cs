@@ -6,7 +6,6 @@ using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using UniTestSystem.Domain;
-using DomainUser = UniTestSystem.Domain.User;
 
 namespace UniTestSystem.Controllers.Api.Admin;
 
@@ -15,82 +14,29 @@ namespace UniTestSystem.Controllers.Api.Admin;
 [Route("api/admin/results")]
 public class ResultsController : ControllerBase
 {
-    public class ExportResultDto
-    {
-        public string UserName { get; set; } = "";
-        public string UserEmail { get; set; } = "";
-        public string TestTitle { get; set; } = "";
-        public decimal Score { get; set; }
-        public decimal MaxScore { get; set; }
-        public DateTime SubmitTime { get; set; }
-        public SessionStatus Status { get; set; }
-    }
+    private readonly IResultsService _resultsService;
 
-    private readonly IEntityStore<Result> _results;
-    private readonly IEntityStore<DomainUser> _users;
-    private readonly IEntityStore<Test> _tests;
-
-    public ResultsController(IEntityStore<Result> results, IEntityStore<DomainUser> users, IEntityStore<Test> tests)
+    public ResultsController(IResultsService resultsService)
     {
-        _results = results;
-        _users = users;
-        _tests = tests;
+        _resultsService = resultsService;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? testId = null)
     {
-        var results = await _results.GetAllAsync();
-        var users = await _users.GetAllAsync();
-        var tests = await _tests.GetAllAsync();
-
-        var query = results.AsQueryable();
-        if (!string.IsNullOrEmpty(testId))
-        {
-            query = query.Where(r => r.TestId == testId);
-        }
-
-        var resultList = query.Join(users, r => r.UserId, u => u.Id, (r, u) => new { r, u })
-                           .Join(tests, ru => ru.r.TestId, t => t.Id, (ru, t) => new {
-                               ru.r.Id,
-                               UserName = ru.u.Name,
-                               UserEmail = ru.u.Email,
-                               TestTitle = t.Title,
-                               TestType = t.Type,
-                               ru.r.Score,
-                               ru.r.MaxScore,
-                               ru.r.SubmitTime,
-                               ru.r.Status
-                           })
-                           .OrderByDescending(r => r.SubmitTime)
-                           .ToList();
-
-        return Ok(resultList);
+        return Ok(await _resultsService.GetResultsAsync(testId));
     }
 
     [HttpGet("stats")]
     public async Task<IActionResult> GetStats()
     {
-        var results = await _results.GetAllAsync();
-        var tests = await _tests.GetAllAsync();
-
-        var stats = new {
-            TotalSubmissions = results.Count,
-            AverageScore = results.Any() ? results.Average(r => r.Score) : 0,
-            PassRate = results.Any() ? (decimal)results.Count(r => r.Score >= 5) / results.Count * 100 : 0,
-            TestsByType = tests.GroupBy(t => t.Type)
-                              .ToDictionary(g => g.Key.ToString(), g => g.Count()),
-            SubmissionsByMonth = results.GroupBy(r => new { r.SubmitTime.Year, r.SubmitTime.Month })
-                                        .ToDictionary(g => $"{g.Key.Year}-{g.Key.Month:D2}", g => g.Count())
-        };
-
-        return Ok(stats);
+        return Ok(await _resultsService.GetStatsAsync());
     }
 
     [HttpGet("export/excel")]
     public async Task<IActionResult> ExportExcel([FromQuery] string? testId = null)
     {
-        var results = await GetResultData(testId);
+        var results = await _resultsService.GetExportDataAsync(testId);
         
         using var workbook = new XLWorkbook();
         var worksheet = workbook.Worksheets.Add("Test Results");
@@ -129,7 +75,7 @@ public class ResultsController : ControllerBase
     [HttpGet("export/pdf")]
     public async Task<IActionResult> ExportPdf([FromQuery] string? testId = null)
     {
-        var results = await GetResultData(testId);
+        var results = await _resultsService.GetExportDataAsync(testId);
         
         var document = Document.Create(container =>
         {
@@ -172,26 +118,5 @@ public class ResultsController : ControllerBase
         return File(stream.ToArray(), "application/pdf", $"Results_{DateTime.Now:yyyyMMdd}.pdf");
     }
 
-    private async Task<List<ExportResultDto>> GetResultData(string? testId)
-    {
-        var rs = await _results.GetAllAsync();
-        var us = await _users.GetAllAsync();
-        var ts = await _tests.GetAllAsync();
-
-        var query = rs.AsQueryable();
-        if (!string.IsNullOrEmpty(testId)) query = query.Where(r => r.TestId == testId);
-
-        return query.Join(us, r => r.UserId, u => u.Id, (r, u) => new { r, u })
-                    .Join(ts, ru => ru.r.TestId, t => t.Id, (ru, t) => new ExportResultDto {
-                        UserName = ru.u.Name,
-                        UserEmail = ru.u.Email,
-                        TestTitle = t.Title,
-                        Score = ru.r.Score,
-                        MaxScore = ru.r.MaxScore,
-                        SubmitTime = ru.r.SubmitTime,
-                        Status = ru.r.Status
-                    })
-                    .ToList();
-    }
 }
 

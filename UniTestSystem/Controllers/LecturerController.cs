@@ -1,28 +1,27 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using UniTestSystem.Domain;
+using UniTestSystem.Application;
 using UniTestSystem.Application.Interfaces;
-using System.Linq;
-using System.Threading.Tasks;
+using UniTestSystem.Domain;
 
 namespace UniTestSystem.Controllers
 {
     [Authorize(Roles = "Lecturer,Admin")]
     public class LecturerController : Controller
     {
-        private readonly IEntityStore<Question> _questionRepo;
-        private readonly IEntityStore<Test> _testRepo;
+        private readonly IQuestionService _questionService;
+        private readonly ITestAdministrationService _testAdministrationService;
 
-        public LecturerController(IEntityStore<Question> questionRepo, IEntityStore<Test> testRepo)
+        public LecturerController(IQuestionService questionService, ITestAdministrationService testAdministrationService)
         {
-            _questionRepo = questionRepo;
-            _testRepo = testRepo;
+            _questionService = questionService;
+            _testAdministrationService = testAdministrationService;
         }
 
         public async Task<IActionResult> Dashboard()
         {
-            var questions = await _questionRepo.GetAllAsync();
-            var tests = await _testRepo.GetAllAsync();
+            var questions = await _questionService.GetAllAsync();
+            var tests = await _testAdministrationService.GetAllTestsAsync();
 
             ViewBag.TotalQuestions = questions.Count;
             ViewBag.TotalTests = tests.Count;

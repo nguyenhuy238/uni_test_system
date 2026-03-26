@@ -10,24 +10,23 @@ namespace UniTestSystem.Controllers.Api;
 [Route("api/admin/users")]
 public class AdminUsersController : ControllerBase
 {
-    private readonly IEntityStore<UniTestSystem.Domain.User> _users;
+    private readonly IUserAdministrationService _userAdministrationService;
 
-    public AdminUsersController(IEntityStore<UniTestSystem.Domain.User> users)
+    public AdminUsersController(IUserAdministrationService userAdministrationService)
     {
-        _users = users;
+        _userAdministrationService = userAdministrationService;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var list = await _users.GetAllAsync();
-        return Ok(list);
+        return Ok(await _userAdministrationService.GetAllUsersAsync());
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
-        var u = await _users.FirstOrDefaultAsync(x => x.Id == id);
+        var u = await _userAdministrationService.GetUserByIdAsync(id);
         if (u == null) return NotFound();
         return Ok(u);
     }
@@ -42,34 +41,35 @@ public class AdminUsersController : ControllerBase
         {
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword("123456");
         }
-        await _users.InsertAsync(user);
+        await _userAdministrationService.CreateRawAsync(user);
         return CreatedAtAction(nameof(GetById), new { id = user.Id }, user);
     }
 
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(string id, [FromBody] UniTestSystem.Domain.User user)
     {
-        var existing = await _users.FirstOrDefaultAsync(x => x.Id == id);
+        var existing = await _userAdministrationService.GetUserByIdAsync(id);
         if (existing == null) return NotFound();
 
         if (IsStaffAndProtectedRole(user.Role) || IsStaffAndProtectedRole(existing.Role))
             return Forbid();
 
-        user.Id = id; // Ensure ID consistency
-        await _users.UpsertAsync(x => x.Id == id, user);
+        var updated = await _userAdministrationService.UpdateRawAsync(id, user);
+        if (!updated) return NotFound();
         return NoContent();
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id)
     {
-        var existing = await _users.FirstOrDefaultAsync(x => x.Id == id);
+        var existing = await _userAdministrationService.GetUserByIdAsync(id);
         if (existing == null) return NotFound();
 
         if (IsStaffAndProtectedRole(existing.Role))
             return Forbid();
 
-        await _users.DeleteAsync(x => x.Id == id);
+        var deleted = await _userAdministrationService.DeleteRawAsync(id);
+        if (!deleted) return NotFound();
         return NoContent();
     }
 
