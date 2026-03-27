@@ -142,9 +142,6 @@ public sealed class TestAdministrationService : ITestAdministrationService
             test.TestQuestions = selectedIds
                 .Select(qid => new TestQuestion { QuestionId = qid })
                 .ToList();
-            test.RandomMCQ = 0;
-            test.RandomTF = 0;
-            test.RandomEssay = 0;
         }
 
         test.IsPublished = true;
@@ -152,13 +149,6 @@ public sealed class TestAdministrationService : ITestAdministrationService
         test.PublishedAt = DateTime.UtcNow;
         test.ShuffleQuestions = true;
         test.ShuffleOptions = true;
-        test.FrozenRandom = new FrozenRandomConfig
-        {
-            SubjectIdFilter = test.SubjectIdFilter,
-            RandomMCQ = test.RandomMCQ,
-            RandomTF = test.RandomTF,
-            RandomEssay = test.RandomEssay
-        };
 
         await _testRepo.InsertAsync(test);
 
@@ -182,11 +172,8 @@ public sealed class TestAdministrationService : ITestAdministrationService
         test.PassScore = request.PassScore;
         test.ShuffleQuestions = request.ShuffleQuestions;
         test.ShuffleOptions = request.ShuffleOptions;
-        test.SubjectIdFilter = request.SubjectIdFilter;
+        test.AssessmentType = request.AssessmentType;
         test.CourseId = string.IsNullOrWhiteSpace(request.CourseId) ? null : request.CourseId.Trim();
-        test.RandomMCQ = request.RandomMCQ;
-        test.RandomTF = request.RandomTF;
-        test.RandomEssay = request.RandomEssay;
         test.UpdatedAt = DateTime.UtcNow;
 
         var selectedIds = selectedQuestionIds?.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).ToList()
@@ -196,9 +183,6 @@ public sealed class TestAdministrationService : ITestAdministrationService
             test.TestQuestions = selectedIds
                 .Select(qid => new TestQuestion { TestId = test.Id, QuestionId = qid })
                 .ToList();
-            test.RandomMCQ = 0;
-            test.RandomTF = 0;
-            test.RandomEssay = 0;
         }
         else
         {
@@ -238,13 +222,6 @@ public sealed class TestAdministrationService : ITestAdministrationService
         if (test.IsPublished)
         {
             test.PublishedAt = DateTime.UtcNow;
-            test.FrozenRandom = new FrozenRandomConfig
-            {
-                SubjectIdFilter = test.SubjectIdFilter,
-                RandomMCQ = test.RandomMCQ,
-                RandomTF = test.RandomTF,
-                RandomEssay = test.RandomEssay
-            };
 
             if (test.TestQuestions.Any())
             {
@@ -273,12 +250,9 @@ public sealed class TestAdministrationService : ITestAdministrationService
             Title = test.Title + " (Clone)",
             DurationMinutes = test.DurationMinutes,
             PassScore = test.PassScore,
+            AssessmentType = test.AssessmentType,
             ShuffleQuestions = test.ShuffleQuestions,
             ShuffleOptions = test.ShuffleOptions,
-            SubjectIdFilter = test.SubjectIdFilter,
-            RandomMCQ = test.RandomMCQ,
-            RandomTF = test.RandomTF,
-            RandomEssay = test.RandomEssay,
             TotalMaxScore = test.TotalMaxScore,
             CourseId = test.CourseId,
             IsPublished = false,

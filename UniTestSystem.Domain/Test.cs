@@ -17,6 +17,8 @@ namespace UniTestSystem.Domain
         // Cấu hình chung
         public int DurationMinutes { get; set; } = 30;
 
+        public AssessmentType AssessmentType { get; set; } = AssessmentType.Quiz;
+
         /// <summary>
         /// Ngưỡng đậu tính theo "điểm" (không phải số câu).
         /// Mặc định 5/10 (tương đương 50%).
@@ -29,12 +31,6 @@ namespace UniTestSystem.Domain
         /// Hoán vị các đáp án trong câu hỏi (nếu loại câu hỏi cho phép).
         /// </summary>
         public bool ShuffleOptions { get; set; } = true;
-
-        // Cấu hình random cũ (giữ nguyên để tương thích)
-        public string SubjectIdFilter { get; set; } = "Programming";
-        public int RandomMCQ { get; set; } = 5;
-        public int RandomTF { get; set; } = 5;
-        public int RandomEssay { get; set; } = 0;
 
         // === Tổng điểm đề (mặc định 10.0) ===
         public decimal TotalMaxScore { get; set; } = 10m;
@@ -52,8 +48,6 @@ namespace UniTestSystem.Domain
         /// </summary>
         public virtual ICollection<TestQuestionSnapshot> QuestionSnapshots { get; set; } = new List<TestQuestionSnapshot>();
 
-        public FrozenRandomConfig? FrozenRandom { get; set; }
-
         // === NEW: Liên kết với Course ===
         public string? CourseId { get; set; }
         public virtual Course? Course { get; set; }
@@ -65,14 +59,6 @@ namespace UniTestSystem.Domain
         public DateTime? UpdatedAt { get; set; }
         public DateTime? PublishedAt { get; set; }
         public bool IsDeleted { get; set; } = false;
-    }
-
-    public class FrozenRandomConfig
-    {
-        public string SubjectIdFilter { get; set; } = "Programming";
-        public int RandomMCQ { get; set; }
-        public int RandomTF { get; set; }
-        public int RandomEssay { get; set; }
     }
 
     /// <summary>

@@ -42,10 +42,7 @@ public sealed class TestUpdateRequest
     public int PassScore { get; set; }
     public bool ShuffleQuestions { get; set; }
     public bool ShuffleOptions { get; set; }
-    public string SubjectIdFilter { get; set; } = "";
-    public int RandomMCQ { get; set; }
-    public int RandomTF { get; set; }
-    public int RandomEssay { get; set; }
+    public AssessmentType AssessmentType { get; set; }
 }
 
 public sealed class TestAssignData

@@ -12,12 +12,9 @@ public class CreateTestViewModel
     public string? CourseId { get; set; }
     public int DurationMinutes { get; set; } = 10;
     public int PassScore { get; set; } = 3;
+    public AssessmentType AssessmentType { get; set; } = AssessmentType.Quiz;
     public bool ShuffleQuestions { get; set; } = true;
     public bool ShuffleOptions { get; set; } = true;
-    public string SubjectIdFilter { get; set; } = "Programming";
-    public int RandomMCQ { get; set; } = 2;
-    public int RandomTF { get; set; } = 1;
-    public int RandomEssay { get; set; } = 0;
 
     public List<string> SelectedQuestionIds { get; set; } = new();
 

@@ -59,10 +59,7 @@ namespace UniTestSystem.Controllers
                 Title = "",
                 DurationMinutes = 10,
                 PassScore = 3,
-                SubjectIdFilter = "Programming",
-                RandomMCQ = 2,
-                RandomTF = 1,
-                RandomEssay = 0
+                AssessmentType = AssessmentType.Quiz
             };
 
             // NEW: giữ giá trị form khi paging (đọc từ query)
@@ -70,10 +67,7 @@ namespace UniTestSystem.Controllers
             if (!string.IsNullOrWhiteSpace(q("Title"))) model.Title = q("Title");
             if (int.TryParse(q("DurationMinutes"), out var dur)) model.DurationMinutes = dur;
             if (int.TryParse(q("PassScore"), out var pass)) model.PassScore = pass;
-            if (!string.IsNullOrWhiteSpace(q("SubjectIdFilter"))) model.SubjectIdFilter = q("SubjectIdFilter");
-            if (int.TryParse(q("RandomMCQ"), out var r1)) model.RandomMCQ = r1;
-            if (int.TryParse(q("RandomTF"), out var r2)) model.RandomTF = r2;
-            if (int.TryParse(q("RandomEssay"), out var r3)) model.RandomEssay = r3;
+            if (Enum.TryParse<AssessmentType>(q("AssessmentType"), true, out var assessmentType)) model.AssessmentType = assessmentType;
             if (!string.IsNullOrWhiteSpace(q("CourseId"))) model.CourseId = q("CourseId");
 
             await PopulateCoursesAsync(model.CourseId);
@@ -90,12 +84,6 @@ namespace UniTestSystem.Controllers
             if (SelectedQuestionIds != null && SelectedQuestionIds.Any())
             {
                 t.TestQuestions = SelectedQuestionIds.Distinct().Select(qid => new TestQuestion { QuestionId = qid }).ToList();
-                t.RandomMCQ = 0; t.RandomTF = 0; t.RandomEssay = 0;
-            }
-            else
-            {
-                if (t.RandomMCQ + t.RandomTF + t.RandomEssay <= 0)
-                    ModelState.AddModelError("", "Vui lòng chọn ít nhất 1 câu hỏi hoặc cấu hình số lượng random > 0");
             }
 
             if (string.IsNullOrWhiteSpace(t.CourseId))
@@ -129,10 +117,7 @@ namespace UniTestSystem.Controllers
                     CourseId = t.CourseId,
                     DurationMinutes = t.DurationMinutes,
                     PassScore = t.PassScore,
-                    SubjectIdFilter = t.SubjectIdFilter,
-                    RandomMCQ = t.RandomMCQ,
-                    RandomTF = t.RandomTF,
-                    RandomEssay = t.RandomEssay,
+                    AssessmentType = t.AssessmentType,
                     SelectedQuestionIds = SelectedQuestionIds ?? new List<string>()
                 };
                 await PopulateCoursesAsync(vm.CourseId);
@@ -171,11 +156,9 @@ namespace UniTestSystem.Controllers
                 CourseId = t.CourseId,
                 DurationMinutes = t.DurationMinutes,
                 PassScore = t.PassScore,
+                AssessmentType = t.AssessmentType,
                 ShuffleQuestions = t.ShuffleQuestions,
-                SubjectIdFilter = t.SubjectIdFilter,
-                RandomMCQ = t.RandomMCQ,
-                RandomTF = t.RandomTF,
-                RandomEssay = t.RandomEssay,
+                ShuffleOptions = t.ShuffleOptions,
                 IsPublished = t.IsPublished,
                 Filter = f,
                 Page = paged,
@@ -188,10 +171,8 @@ namespace UniTestSystem.Controllers
             if (int.TryParse(q("DurationMinutes"), out var dur)) vm.DurationMinutes = dur;
             if (int.TryParse(q("PassScore"), out var pass)) vm.PassScore = pass;
             if (bool.TryParse(q("ShuffleQuestions"), out var sh)) vm.ShuffleQuestions = sh;
-            if (!string.IsNullOrWhiteSpace(q("SubjectIdFilter"))) vm.SubjectIdFilter = q("SubjectIdFilter");
-            if (int.TryParse(q("RandomMCQ"), out var r1)) vm.RandomMCQ = r1;
-            if (int.TryParse(q("RandomTF"), out var r2)) vm.RandomTF = r2;
-            if (int.TryParse(q("RandomEssay"), out var r3)) vm.RandomEssay = r3;
+            if (bool.TryParse(q("ShuffleOptions"), out var sho)) vm.ShuffleOptions = sho;
+            if (Enum.TryParse<AssessmentType>(q("AssessmentType"), true, out var assessmentType)) vm.AssessmentType = assessmentType;
             if (!string.IsNullOrWhiteSpace(q("CourseId"))) vm.CourseId = q("CourseId");
 
             await PopulateCoursesAsync(vm.CourseId);
@@ -206,12 +187,6 @@ namespace UniTestSystem.Controllers
         {
             var existing = await _testAdministrationService.GetTestByIdAsync(vm.Id);
             if (existing == null) return NotFound();
-
-            if ((SelectedQuestionIds == null || !SelectedQuestionIds.Any()) &&
-                (vm.RandomMCQ + vm.RandomTF + vm.RandomEssay <= 0))
-            {
-                ModelState.AddModelError("", "Chọn ít nhất 1 câu hỏi hoặc cấu hình random > 0.");
-            }
 
             if (string.IsNullOrWhiteSpace(vm.CourseId))
             {
@@ -248,12 +223,9 @@ namespace UniTestSystem.Controllers
                 CourseId = vm.CourseId,
                 DurationMinutes = vm.DurationMinutes,
                 PassScore = vm.PassScore,
+                AssessmentType = vm.AssessmentType,
                 ShuffleQuestions = vm.ShuffleQuestions,
                 ShuffleOptions = vm.ShuffleOptions,
-                SubjectIdFilter = vm.SubjectIdFilter,
-                RandomMCQ = vm.RandomMCQ,
-                RandomTF = vm.RandomTF,
-                RandomEssay = vm.RandomEssay
             };
 
             await _testAdministrationService.UpdateAsync(request, SelectedQuestionIds);

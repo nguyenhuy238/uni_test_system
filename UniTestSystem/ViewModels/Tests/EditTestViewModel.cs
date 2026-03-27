@@ -10,12 +10,9 @@ public class EditTestViewModel
     public string? CourseId { get; set; }
     public int DurationMinutes { get; set; }
     public int PassScore { get; set; }
+    public AssessmentType AssessmentType { get; set; } = AssessmentType.Quiz;
     public bool ShuffleQuestions { get; set; }
     public bool ShuffleOptions { get; set; }
-    public string SubjectIdFilter { get; set; } = "";
-    public int RandomMCQ { get; set; }
-    public int RandomTF { get; set; }
-    public int RandomEssay { get; set; }
     public bool IsPublished { get; set; }
 
     public PagedResult<Question> Page { get; set; } = new();

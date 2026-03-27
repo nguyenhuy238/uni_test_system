@@ -1,12 +1,13 @@
 @model UniTestSystem.ViewModels.Tests.CreateTestViewModel
 @using UniTestSystem.Domain
+@using System
 
 <h2>Create Test</h2>
 
 <div class="alert alert-info">
     <i class="bi bi-info-circle"></i>
     <strong>Lưu ý:</strong> Bạn có thể <u>chọn thủ công</u> câu hỏi bằng checkbox bên dưới
-    <em>(khi đó hệ thống sẽ không random)</em>. Nếu không chọn, đề sẽ sinh theo cấu hình random.
+    <em>(nếu không chọn câu nào, đề sẽ không có câu hỏi khi làm bài).</em>
 </div>
 
 <!-- FORM GET: lọc/paging -->
@@ -29,10 +30,7 @@
     <input type="hidden" id="q_CourseId" name="CourseId" value="@Model.CourseId" />
     <input type="hidden" id="q_DurationMinutes" name="DurationMinutes" value="@Model.DurationMinutes" />
     <input type="hidden" id="q_PassScore" name="PassScore" value="@Model.PassScore" />
-    <input type="hidden" id="q_SubjectIdFilter" name="SubjectIdFilter" value="@Model.SubjectIdFilter" />
-    <input type="hidden" id="q_RandomMCQ" name="RandomMCQ" value="@Model.RandomMCQ" />
-    <input type="hidden" id="q_RandomTF" name="RandomTF" value="@Model.RandomTF" />
-    <input type="hidden" id="q_RandomEssay" name="RandomEssay" value="@Model.RandomEssay" />
+    <input type="hidden" id="q_AssessmentType" name="AssessmentType" value="@Model.AssessmentType" />
     <input type="hidden" id="q_ShuffleQuestions" name="ShuffleQuestions" value="@Model.ShuffleQuestions.ToString().ToLower()" />
     <input type="hidden" id="q_ShuffleOptions" name="ShuffleOptions" value="@Model.ShuffleOptions.ToString().ToLower()" />
 
@@ -66,6 +64,15 @@
                 <label class="form-label">PassScore</label>
                 <input name="PassScore" type="number" value="@Model.PassScore" class="form-control" />
             </div>
+            <div class="mb-2">
+                <label class="form-label">Assessment Type</label>
+                <select name="AssessmentType" class="form-select">
+                    @foreach (var type in Enum.GetValues<AssessmentType>())
+                    {
+                        <option value="@type" selected="@(Model.AssessmentType == type)">@type</option>
+                    }
+                </select>
+            </div>
             <div class="mb-2 form-check">
                 <input type="checkbox" name="ShuffleQuestions" value="true" checked="@Model.ShuffleQuestions" class="form-check-input" />
                 <label class="form-check-label">Shuffle Questions (Xáo trộn thứ tự câu hỏi)</label>
@@ -73,25 +80,6 @@
             <div class="mb-2 form-check">
                 <input type="checkbox" name="ShuffleOptions" value="true" checked="@Model.ShuffleOptions" class="form-check-input" />
                 <label class="form-check-label">Shuffle Options (Xáo trộn thứ tự đáp án)</label>
-            </div>
-            <div class="mb-2">
-                <label class="form-label">Môn học (Subject - áp dụng cho random)</label>
-                <input name="SubjectIdFilter" value="@Model.SubjectIdFilter" class="form-control" />
-                <div class="form-text">Chỉ dùng khi bạn KHÔNG chọn thủ công câu hỏi.</div>
-            </div>
-            <div class="row g-2">
-                <div class="col-4">
-                    <label class="form-label">RandomMCQ</label>
-                    <input name="RandomMCQ" type="number" value="@Model.RandomMCQ" class="form-control" />
-                </div>
-                <div class="col-4">
-                    <label class="form-label">RandomTF</label>
-                    <input name="RandomTF" type="number" value="@Model.RandomTF" class="form-control" />
-                </div>
-                <div class="col-4">
-                    <label class="form-label">RandomEssay</label>
-                    <input name="RandomEssay" type="number" value="@Model.RandomEssay" class="form-control" />
-                </div>
             </div>
 
             <div class="mt-3 d-flex align-items-center gap-2">
@@ -179,10 +167,7 @@
             CourseId:        {src:'select[name="CourseId"]',        hid:'#q_CourseId'},
             DurationMinutes: {src:'input[name="DurationMinutes"]',  hid:'#q_DurationMinutes'},
             PassScore:       {src:'input[name="PassScore"]',        hid:'#q_PassScore'},
-            SubjectIdFilter: {src:'input[name="SubjectIdFilter"]',  hid:'#q_SubjectIdFilter'},
-            RandomMCQ:       {src:'input[name="RandomMCQ"]',        hid:'#q_RandomMCQ'},
-            RandomTF:        {src:'input[name="RandomTF"]',         hid:'#q_RandomTF'},
-            RandomEssay:     {src:'input[name="RandomEssay"]',      hid:'#q_RandomEssay'},
+            AssessmentType:  {src:'select[name="AssessmentType"]',  hid:'#q_AssessmentType'},
             ShuffleQuestions:{src:'input[name="ShuffleQuestions"]', hid:'#q_ShuffleQuestions', isCheckbox:true},
             ShuffleOptions:  {src:'input[name="ShuffleOptions"]',   hid:'#q_ShuffleOptions', isCheckbox:true}
           };

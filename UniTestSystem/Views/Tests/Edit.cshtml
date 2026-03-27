@@ -1,5 +1,6 @@
 @model UniTestSystem.ViewModels.Tests.EditTestViewModel
 @using UniTestSystem.Domain
+@using System
 
 <h2>Edit Test</h2>
 
@@ -29,11 +30,8 @@
     <input type="hidden" id="q_CourseId" name="CourseId" value="@Model.CourseId" />
     <input type="hidden" id="q_DurationMinutes" name="DurationMinutes" value="@Model.DurationMinutes" />
     <input type="hidden" id="q_PassScore" name="PassScore" value="@Model.PassScore" />
+    <input type="hidden" id="q_AssessmentType" name="AssessmentType" value="@Model.AssessmentType" />
     <input type="hidden" id="q_ShuffleQuestions" name="ShuffleQuestions" value="@Model.ShuffleQuestions" />
-    <input type="hidden" id="q_SubjectIdFilter" name="SubjectIdFilter" value="@Model.SubjectIdFilter" />
-    <input type="hidden" id="q_RandomMCQ" name="RandomMCQ" value="@Model.RandomMCQ" />
-    <input type="hidden" id="q_RandomTF" name="RandomTF" value="@Model.RandomTF" />
-    <input type="hidden" id="q_RandomEssay" name="RandomEssay" value="@Model.RandomEssay" />
     <input type="hidden" id="q_ShuffleOptions" name="ShuffleOptions" value="@Model.ShuffleOptions.ToString().ToLower()" />
 
     <button class="btn btn-outline-secondary" type="submit">Apply</button>
@@ -71,6 +69,16 @@
             </div>
 
             <div class="mb-3">
+                <label class="form-label">Assessment Type</label>
+                <select class="form-select" asp-for="AssessmentType">
+                    @foreach (var type in Enum.GetValues<AssessmentType>())
+                    {
+                        <option value="@type">@type</option>
+                    }
+                </select>
+            </div>
+
+            <div class="mb-3">
                 <label class="form-label">Shuffle Questions</label>
                 <input class="form-check-input ms-2" asp-for="ShuffleQuestions" type="checkbox" />
             </div>
@@ -78,23 +86,6 @@
             <div class="mb-3">
                 <label class="form-label">Shuffle Options</label>
                 <input class="form-check-input ms-2" asp-for="ShuffleOptions" type="checkbox" />
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Môn học (Subject)</label>
-                <input class="form-control" asp-for="SubjectIdFilter" />
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Random Counts (used nếu không chọn thủ công)</label>
-                <div class="input-group">
-                    <span class="input-group-text">MCQ</span>
-                    <input class="form-control" asp-for="RandomMCQ" type="number" min="0" />
-                    <span class="input-group-text">TF</span>
-                    <input class="form-control" asp-for="RandomTF" type="number" min="0" />
-                    <span class="input-group-text">Essay</span>
-                    <input class="form-control" asp-for="RandomEssay" type="number" min="0" />
-                </div>
             </div>
 
             <div class="mb-3">
@@ -255,11 +246,8 @@
             CourseId:        {src:'select[name="CourseId"]',        hid:'#q_CourseId'},
             DurationMinutes: {src:'input[name="DurationMinutes"]',  hid:'#q_DurationMinutes'},
             PassScore:       {src:'input[name="PassScore"]',        hid:'#q_PassScore'},
+            AssessmentType:  {src:'select[name="AssessmentType"]',  hid:'#q_AssessmentType'},
             ShuffleQuestions:{src:'input[name="ShuffleQuestions"]', hid:'#q_ShuffleQuestions', isCheckbox:true},
-            SubjectIdFilter: {src:'input[name="SubjectIdFilter"]',  hid:'#q_SubjectIdFilter'},
-            RandomMCQ:       {src:'input[name="RandomMCQ"]',        hid:'#q_RandomMCQ'},
-            RandomTF:        {src:'input[name="RandomTF"]',         hid:'#q_RandomTF'},
-            RandomEssay:     {src:'input[name="RandomEssay"]',      hid:'#q_RandomEssay'},
             ShuffleOptions:  {src:'input[name="ShuffleOptions"]',   hid:'#q_ShuffleOptions', isCheckbox:true}
           };
           function syncHidden(){

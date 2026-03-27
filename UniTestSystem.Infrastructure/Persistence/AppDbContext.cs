@@ -191,12 +191,6 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("Test");
 
-            entity.Property(e => e.FrozenRandom)
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, JsonOptions),
-                    v => JsonSerializer.Deserialize<FrozenRandomConfig>(v, JsonOptions))
-                .HasColumnType("nvarchar(max)");
-
             // Test -> Assessment
             entity.HasOne(d => d.Assessment)
                 .WithOne()

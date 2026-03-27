@@ -175,33 +175,15 @@ namespace UniTestSystem.Application
             return map;
         }
 
-        private async Task<List<Question>> BuildSnapshotAsync(Test t, IEnumerable<Question> all)
+        private Task<List<Question>> BuildSnapshotAsync(Test t, IEnumerable<Question> all)
         {
             if (t.TestQuestions != null && t.TestQuestions.Any())
             {
                 var qIds = t.TestQuestions.Select(i => i.QuestionId).ToHashSet();
-                return all.Where(q => qIds.Contains(q.Id)).ToList();
+                return Task.FromResult(all.Where(q => qIds.Contains(q.Id)).ToList());
             }
 
-            var cfg = t.FrozenRandom;
-            if (cfg == null) return new List<Question>();
-
-            var pool = all.Where(q => q.SubjectId == cfg.SubjectIdFilter).ToList();
-            var pick = new List<Question>();
-            var rnd = new Random();
-
-            void Add(QType type, int count)
-            {
-                if (count <= 0) return;
-                var sub = pool.Where(q => q.Type == type).OrderBy(_ => rnd.Next()).Take(count).ToList();
-                pick.AddRange(sub);
-            }
-
-            Add(QType.MCQ, cfg.RandomMCQ);
-            Add(QType.TrueFalse, cfg.RandomTF);
-            Add(QType.Essay, cfg.RandomEssay);
-
-            return pick;
+            return Task.FromResult(new List<Question>());
         }
 
         private static Dictionary<string, string> ParseKeyValueAnswer(string? raw)
