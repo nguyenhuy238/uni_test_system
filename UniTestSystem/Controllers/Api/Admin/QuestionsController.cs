@@ -3,6 +3,7 @@ using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 
 namespace UniTestSystem.Controllers.Api.Admin;
 
@@ -12,10 +13,20 @@ namespace UniTestSystem.Controllers.Api.Admin;
 public class QuestionsController : ControllerBase
 {
     private readonly IQuestionService _svc;
+    private readonly IRepository<Subject> _subjectRepo;
+    private readonly IRepository<DifficultyLevel> _difficultyLevelRepo;
+    private readonly IRepository<Skill> _skillRepo;
 
-    public QuestionsController(IQuestionService svc)
+    public QuestionsController(
+        IQuestionService svc,
+        IRepository<Subject> subjectRepo,
+        IRepository<DifficultyLevel> difficultyLevelRepo,
+        IRepository<Skill> skillRepo)
     {
         _svc = svc;
+        _subjectRepo = subjectRepo;
+        _difficultyLevelRepo = difficultyLevelRepo;
+        _skillRepo = skillRepo;
     }
 
     [HttpPost("submit/{id}")]
@@ -49,7 +60,44 @@ public class QuestionsController : ControllerBase
     public async Task<IActionResult> GetAll()
     {
         var questions = await _svc.GetAllAsync();
-        return Ok(questions);
+        var subjectById = (await _subjectRepo.GetAllAsync(x => !x.IsDeleted))
+            .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase);
+        var difficultyById = (await _difficultyLevelRepo.GetAllAsync(x => !x.IsDeleted))
+            .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase);
+        var skillById = (await _skillRepo.GetAllAsync(x => !x.IsDeleted))
+            .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase);
+
+        var items = questions.Select(q => new
+        {
+            q.Id,
+            q.Content,
+            q.Type,
+            q.Status,
+            q.Options,
+            q.SkillId,
+            q.DifficultyLevelId,
+            q.SubjectId,
+            skill = ResolveDisplayName(skillById, q.SkillId),
+            difficulty = ResolveDisplayName(difficultyById, q.DifficultyLevelId),
+            subject = ResolveDisplayName(subjectById, q.SubjectId),
+            mediaUrl = q.Media?.FirstOrDefault()?.Url,
+            q.CreatedAt
+        });
+
+        return Ok(items);
+    }
+
+    private static string ResolveDisplayName(IReadOnlyDictionary<string, string> map, string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            return string.Empty;
+
+        return map.TryGetValue(id, out var value) && !string.IsNullOrWhiteSpace(value)
+            ? value
+            : id;
     }
 
     [HttpGet("{id}")]
@@ -103,10 +151,14 @@ public class QuestionsController : ControllerBase
     [Authorize(Policy = PermissionCodes.Question_Create)]
     public async Task<IActionResult> Create([FromBody] CreateQuestionRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.QuestionBankId))
+            return BadRequest(new { message = "QuestionBankId is required" });
+
         var question = new Question
         {
             Content = request.Content,
             Type = request.Type,
+            QuestionBankId = request.QuestionBankId,
             SubjectId = request.SubjectId,
             DifficultyLevelId = request.DifficultyLevelId ?? "Easy",
             Options = (request.Options ?? new List<OptionRequest>())
@@ -119,7 +171,16 @@ public class QuestionsController : ControllerBase
         };
 
         var actor = User.Identity?.Name ?? "admin";
-        var id = await _svc.CreateAsync(question, actor);
+        string id;
+        try
+        {
+            id = await _svc.CreateAsync(question, actor);
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
         var created = await _svc.GetAsync(id);
         return CreatedAtAction(nameof(GetById), new { id }, created ?? question);
     }
@@ -131,10 +192,19 @@ public class QuestionsController : ControllerBase
         var existingQuestion = await _svc.GetAsync(id);
         if (existingQuestion == null) return NotFound();
 
+        // Validate the request
+        if (request.SubjectId != null && string.IsNullOrWhiteSpace(request.SubjectId))
+            return BadRequest(new { message = "SubjectId cannot be empty if provided" });
+        if (request.QuestionBankId != null && string.IsNullOrWhiteSpace(request.QuestionBankId))
+            return BadRequest(new { message = "QuestionBankId cannot be empty if provided" });
+
+        // Apply updates
         existingQuestion.Content = request.Content ?? existingQuestion.Content;
         existingQuestion.Type = request.Type ?? existingQuestion.Type;
         existingQuestion.SubjectId = request.SubjectId ?? existingQuestion.SubjectId;
+        existingQuestion.QuestionBankId = request.QuestionBankId ?? existingQuestion.QuestionBankId;
         existingQuestion.DifficultyLevelId = request.DifficultyLevelId ?? existingQuestion.DifficultyLevelId;
+        
         if (request.Options != null)
         {
             existingQuestion.Options = request.Options
@@ -175,6 +245,7 @@ public class CreateQuestionRequest
 {
     public string Content { get; set; } = "";
     public QType Type { get; set; }
+    public string QuestionBankId { get; set; } = "";
     public string SubjectId { get; set; } = "";
     public string? DifficultyLevelId { get; set; }
     public List<OptionRequest>? Options { get; set; }
@@ -184,6 +255,7 @@ public class UpdateQuestionRequest
 {
     public string? Content { get; set; }
     public QType? Type { get; set; }
+    public string? QuestionBankId { get; set; }
     public string? SubjectId { get; set; }
     public string? DifficultyLevelId { get; set; }
     public List<OptionRequest>? Options { get; set; }
@@ -194,4 +266,3 @@ public class OptionRequest
     public string Content { get; set; } = "";
     public bool IsCorrect { get; set; }
 }
-

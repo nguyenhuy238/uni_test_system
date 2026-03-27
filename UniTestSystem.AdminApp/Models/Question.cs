@@ -23,18 +23,36 @@ namespace UniTestSystem.AdminApp.Models
         public List<string>? CorrectKeys { get; set; } = new();
 
         [JsonPropertyName("skillId")]
-        public string Skill { get; set; } = "General";
+        public string SkillId { get; set; } = "";
+
+        [JsonPropertyName("skill")]
+        public string Skill { get; set; } = "";
 
         [JsonPropertyName("difficultyLevelId")]
-        public string Difficulty { get; set; } = "Junior";
+        public string DifficultyLevelId { get; set; } = "";
+
+        [JsonPropertyName("difficulty")]
+        public string Difficulty { get; set; } = "";
 
         [JsonPropertyName("subjectId")]
         public string SubjectId { get; set; } = "";
+
+        [JsonPropertyName("subject")]
+        public string Subject { get; set; } = "";
 
         [JsonPropertyName("mediaUrl")]
         public string? MediaUrl { get; set; }
 
         [JsonPropertyName("createdAt")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        [JsonIgnore]
+        public string DisplaySkill => string.IsNullOrWhiteSpace(Skill) ? SkillId : Skill;
+
+        [JsonIgnore]
+        public string DisplayDifficulty => string.IsNullOrWhiteSpace(Difficulty) ? DifficultyLevelId : Difficulty;
+
+        [JsonIgnore]
+        public string DisplaySubject => string.IsNullOrWhiteSpace(Subject) ? SubjectId : Subject;
     }
 }

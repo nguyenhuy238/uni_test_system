@@ -19,15 +19,24 @@ namespace UniTestSystem.Controllers
         private readonly ITestAdministrationService _testAdministrationService;
         private readonly IQuestionService _questionService;
         private readonly IAcademicService _academicService;
+        private readonly IRepository<Subject> _subjectRepo;
+        private readonly IRepository<DifficultyLevel> _difficultyLevelRepo;
+        private readonly IRepository<Skill> _skillRepo;
 
         public TestsController(
             ITestAdministrationService testAdministrationService,
             IQuestionService questionService,
-            IAcademicService academicService)
+            IAcademicService academicService,
+            IRepository<Subject> subjectRepo,
+            IRepository<DifficultyLevel> difficultyLevelRepo,
+            IRepository<Skill> skillRepo)
         {
             _testAdministrationService = testAdministrationService;
             _questionService = questionService;
             _academicService = academicService;
+            _subjectRepo = subjectRepo;
+            _difficultyLevelRepo = difficultyLevelRepo;
+            _skillRepo = skillRepo;
         }
 
         // ---------- Index ----------
@@ -81,6 +90,7 @@ namespace UniTestSystem.Controllers
             if (!string.IsNullOrWhiteSpace(q("CourseId"))) model.CourseId = q("CourseId");
 
             await PopulateCoursesAsync(model.CourseId);
+            await PopulateQuestionReferenceViewBagsAsync();
             return View(model);
         }
 
@@ -130,6 +140,7 @@ namespace UniTestSystem.Controllers
                     SelectedQuestionIds = SelectedQuestionIds ?? new List<string>()
                 };
                 await PopulateCoursesAsync(vm.CourseId);
+                await PopulateQuestionReferenceViewBagsAsync();
                 return View(vm);
             }
 
@@ -150,6 +161,7 @@ namespace UniTestSystem.Controllers
             }
 
             var questions = await _testAdministrationService.PreviewQuestionsAsync(request);
+            var refs = await LoadQuestionReferenceMapsAsync();
             var warnings = BuildPreviewWarnings(request, questions);
             var warning = warnings.Count > 0
                 ? "Không đủ câu hỏi trong pool cho một số loại. Hệ thống đã lấy tối đa theo dữ liệu hiện có."
@@ -162,7 +174,7 @@ namespace UniTestSystem.Controllers
                     Id = q.Id,
                     Content = q.Content ?? string.Empty,
                     Type = q.Type.ToString(),
-                    Difficulty = q.DifficultyLevelId ?? string.Empty,
+                    Difficulty = ResolveDisplay(refs.DifficultyById, q.DifficultyLevelId),
                     EstimatedPoints = EstimatePoints(q.Type)
                 })
                 .ToList();
@@ -230,6 +242,7 @@ namespace UniTestSystem.Controllers
             if (!string.IsNullOrWhiteSpace(q("CourseId"))) vm.CourseId = q("CourseId");
 
             await PopulateCoursesAsync(vm.CourseId);
+            await PopulateQuestionReferenceViewBagsAsync();
             return View(vm);
         }
 
@@ -266,6 +279,7 @@ namespace UniTestSystem.Controllers
                 vm.Page = await GetQuestionsForTestContextAsync(f);
                 vm.SelectedQuestionIds = SelectedQuestionIds ?? new List<string>();
                 await PopulateCoursesAsync(vm.CourseId);
+                await PopulateQuestionReferenceViewBagsAsync();
                 return View(vm);
             }
 
@@ -292,6 +306,43 @@ namespace UniTestSystem.Controllers
             var selected = string.IsNullOrWhiteSpace(selectedCourseId) ? null : selectedCourseId;
             ViewBag.Courses = new SelectList(courses, "Id", "Name", selected);
             ViewBag.SelectedCourseName = courses.FirstOrDefault(x => x.Id == selected)?.Name;
+        }
+
+        private async Task PopulateQuestionReferenceViewBagsAsync()
+        {
+            var refs = await LoadQuestionReferenceMapsAsync();
+            ViewBag.SubjectNameMap = refs.SubjectById;
+            ViewBag.DifficultyNameMap = refs.DifficultyById;
+            ViewBag.SkillNameMap = refs.SkillById;
+        }
+
+        private async Task<QuestionReferenceMaps> LoadQuestionReferenceMapsAsync()
+        {
+            var subjects = await _subjectRepo.GetAllAsync(x => !x.IsDeleted);
+            var difficulties = await _difficultyLevelRepo.GetAllAsync(x => !x.IsDeleted);
+            var skills = await _skillRepo.GetAllAsync(x => !x.IsDeleted);
+
+            return new QuestionReferenceMaps(
+                subjects
+                    .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase),
+                difficulties
+                    .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase),
+                skills
+                    .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase)
+            );
+        }
+
+        private static string ResolveDisplay(IReadOnlyDictionary<string, string> lookup, string? id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+                return string.Empty;
+
+            return lookup.TryGetValue(id, out var name) && !string.IsNullOrWhiteSpace(name)
+                ? name
+                : id;
         }
 
         private async Task<PagedResult<Question>> GetQuestionsForTestContextAsync(QuestionFilter filter)
@@ -389,6 +440,11 @@ namespace UniTestSystem.Controllers
             public string Difficulty { get; set; } = string.Empty;
             public decimal EstimatedPoints { get; set; }
         }
+
+        private sealed record QuestionReferenceMaps(
+            IReadOnlyDictionary<string, string> SubjectById,
+            IReadOnlyDictionary<string, string> DifficultyById,
+            IReadOnlyDictionary<string, string> SkillById);
 
         // ---------- Delete ----------
         [HttpPost]

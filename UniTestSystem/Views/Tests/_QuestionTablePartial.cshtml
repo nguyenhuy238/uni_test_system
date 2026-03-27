@@ -1,6 +1,9 @@
 @model IEnumerable<UniTestSystem.Domain.Question>
 @{
     var selected = (ViewData["Selected"] as List<string>) ?? new List<string>();
+    var subjectNameMap = ViewBag.SubjectNameMap as IDictionary<string, string> ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    var difficultyNameMap = ViewBag.DifficultyNameMap as IDictionary<string, string> ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    var skillNameMap = ViewBag.SkillNameMap as IDictionary<string, string> ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 }
 <table class="table table-sm align-middle">
     <thead>
@@ -9,7 +12,7 @@
             <th>Nội dung</th>
             <th style="width:120px;">Loại</th>
             <th style="width:140px;">Kỹ năng</th>
-            <th style="width:120px;">DifficultyLevel</th>
+            <th style="width:120px;">Độ khó</th>
             <th style="width:180px;">Tags</th>
         </tr>
     </thead>
@@ -20,14 +23,22 @@
             {
                 var isChecked = selected.Contains(q.Id) ? "checked" : "";
                 var tags = q.Tags?.Any() == true ? string.Join(", ", q.Tags) : "-";
+                var skillDisplay = !string.IsNullOrWhiteSpace(q.SkillId) && skillNameMap.TryGetValue(q.SkillId, out var skillName)
+                    ? skillName
+                    : (!string.IsNullOrWhiteSpace(q.SubjectId) && subjectNameMap.TryGetValue(q.SubjectId, out var subjectName)
+                        ? subjectName
+                        : (q.SkillId ?? q.SubjectId ?? string.Empty));
+                var difficultyDisplay = !string.IsNullOrWhiteSpace(q.DifficultyLevelId) && difficultyNameMap.TryGetValue(q.DifficultyLevelId, out var difficultyName)
+                    ? difficultyName
+                    : (q.DifficultyLevelId ?? string.Empty);
                 <tr class="q-row" data-text="@q.Content?.ToLower()">
                     <td>
                         <input type="checkbox" name="SelectedQuestionIds" value="@q.Id" @isChecked />
                     </td>
                     <td>@q.Content</td>
                     <td>@q.Type</td>
-                    <td>@q.SubjectId</td>
-                    <td>@q.DifficultyLevelId</td>
+                    <td>@skillDisplay</td>
+                    <td>@difficultyDisplay</td>
                     <td>@tags</td>
                 </tr>
             }

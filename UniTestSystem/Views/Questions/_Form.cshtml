@@ -1,4 +1,11 @@
 @model UniTestSystem.Domain.Question
+@using Microsoft.AspNetCore.Mvc.Rendering
+@{
+    var subjectOptions = ViewBag.SubjectOptions as IEnumerable<SelectListItem> ?? new List<SelectListItem>();
+    var difficultyLevelOptions = ViewBag.DifficultyLevelOptions as IEnumerable<SelectListItem> ?? new List<SelectListItem>();
+    var skillOptions = ViewBag.SkillOptions as IEnumerable<SelectListItem> ?? new List<SelectListItem>();
+    var questionBankOptions = ViewBag.QuestionBankOptions as IEnumerable<SelectListItem> ?? new List<SelectListItem>();
+}
 
 <!-- Hidden ID để POST giữ đúng bản ghi -->
 <input type="hidden" name="Id" value="@Model.Id" />
@@ -16,12 +23,7 @@
 
 <div class="mb-2">
     <label>Type</label>
-    <select name="Type" id="qType" class="form-select">
-        @foreach (var t in Enum.GetNames(typeof(UniTestSystem.Domain.QType)))
-        {
-            <option value="@t" selected="@(Model.Type.ToString() == t)">@t</option>
-        }
-    </select>
+    <select asp-for="Type" id="qType" class="form-select" asp-items="Html.GetEnumSelectList<UniTestSystem.Domain.QType>()"></select>
 </div>
 
 <div id="mcqBlock" class="mb-2">
@@ -48,10 +50,31 @@
     <textarea name="DragSlotsRaw" class="form-control">@string.Join('\n', (Model.DragDrop?.Slots ?? new()).Select(s => $"{s.Name}={s.Answer}"))</textarea>
 </div>
 
-<div class="row">
-    <div class="col"><label>Subject</label><input name="SubjectId" value="@Model.SubjectId" class="form-control" required /></div>
-    <div class="col"><label>Difficulty</label><input name="DifficultyLevelId" value="@Model.DifficultyLevelId" class="form-control" required /></div>
-    <div class="col"><label>Skill</label><input name="SkillId" value="@Model.SkillId" class="form-control" /></div>
+<div class="row g-2">
+    <div class="col-md-3">
+        <label>Question Bank</label>
+        <select asp-for="QuestionBankId" class="form-select" asp-items="questionBankOptions" required>
+            <option value="">-- Select question bank --</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label>Subject</label>
+        <select asp-for="SubjectId" class="form-select" asp-items="subjectOptions" required>
+            <option value="">-- Select subject --</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label>Difficulty</label>
+        <select asp-for="DifficultyLevelId" class="form-select" asp-items="difficultyLevelOptions" required>
+            <option value="">-- Select difficulty --</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label>Skill</label>
+        <select asp-for="SkillId" class="form-select" asp-items="skillOptions">
+            <option value="">-- None --</option>
+        </select>
+    </div>
 </div>
 
 <div class="mb-2">

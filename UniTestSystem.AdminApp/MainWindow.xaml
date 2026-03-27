@@ -240,8 +240,8 @@
                             <DataGridTextColumn Header="Content" Binding="{Binding Content}" Width="*"/>
                             <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="80"/>
                             <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="80"/>
-                            <DataGridTextColumn Header="Skill" Binding="{Binding Skill}" Width="100"/>
-                            <DataGridTextColumn Header="Difficulty" Binding="{Binding Difficulty}" Width="80"/>
+                            <DataGridTextColumn Header="Skill" Binding="{Binding DisplaySkill}" Width="100"/>
+                            <DataGridTextColumn Header="Difficulty" Binding="{Binding DisplayDifficulty}" Width="80"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
@@ -280,10 +280,10 @@
                                 </ComboBox>
 
                                 <TextBlock Grid.Row="4" Text="Skill:"/>
-                                <TextBox Grid.Row="5" Text="{Binding SelectedQuestion.Skill}" Margin="0,0,0,10"/>
+                                <TextBox Grid.Row="5" Text="{Binding SelectedQuestion.DisplaySkill}" Margin="0,0,0,10" IsReadOnly="True"/>
 
                                 <TextBlock Grid.Row="6" Text="Difficulty:"/>
-                                <TextBox Grid.Row="7" Text="{Binding SelectedQuestion.Difficulty}" Margin="0,0,0,10"/>
+                                <TextBox Grid.Row="7" Text="{Binding SelectedQuestion.DisplayDifficulty}" Margin="0,0,0,10" IsReadOnly="True"/>
 
                                 <TextBlock Grid.Row="8" Text="Options &amp; Correct Keys:" FontWeight="Bold" Margin="0,10,0,5"/>
                                 <ListBox Grid.Row="9" ItemsSource="{Binding SelectedQuestionOptions}" SelectedItem="{Binding SelectedOption}" Height="100" Margin="0,0,0,5">
