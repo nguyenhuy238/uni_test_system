@@ -78,7 +78,8 @@ namespace UniTestSystem.Controllers
                 CourseId = selectedCourseId,
                 DurationMinutes = 10,
                 PassScore = 3,
-                AssessmentType = AssessmentType.Quiz
+                AssessmentType = AssessmentType.Quiz,
+                QuestionSelectionMode = CreateTestViewModel.ManualSelectionMode
             };
 
             // NEW: giữ giá trị form khi paging (đọc từ query)
@@ -88,6 +89,12 @@ namespace UniTestSystem.Controllers
             if (int.TryParse(q("PassScore"), out var pass)) model.PassScore = pass;
             if (Enum.TryParse<AssessmentType>(q("AssessmentType"), true, out var assessmentType)) model.AssessmentType = assessmentType;
             if (!string.IsNullOrWhiteSpace(q("CourseId"))) model.CourseId = q("CourseId");
+            if (!string.IsNullOrWhiteSpace(q("QuestionSelectionMode"))) model.QuestionSelectionMode = q("QuestionSelectionMode");
+            if (int.TryParse(q("McqCount"), out var mcqCount)) model.McqCount = Math.Max(0, mcqCount);
+            if (int.TryParse(q("TfCount"), out var tfCount)) model.TfCount = Math.Max(0, tfCount);
+            if (int.TryParse(q("EssayCount"), out var essayCount)) model.EssayCount = Math.Max(0, essayCount);
+            if (int.TryParse(q("MatchingCount"), out var matchingCount)) model.MatchingCount = Math.Max(0, matchingCount);
+            if (int.TryParse(q("DragDropCount"), out var dragDropCount)) model.DragDropCount = Math.Max(0, dragDropCount);
 
             await PopulateCoursesAsync(model.CourseId);
             await PopulateQuestionReferenceViewBagsAsync();
@@ -99,16 +106,76 @@ namespace UniTestSystem.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [Authorize(Policy = PermissionCodes.Tests_Create)]
-        public async Task<IActionResult> Create(Test t, [FromForm] List<string>? SelectedQuestionIds)
+        public async Task<IActionResult> Create(
+            Test t,
+            [FromForm] List<string>? SelectedQuestionIds,
+            [FromForm] string? QuestionSelectionMode,
+            [FromForm] int McqCount,
+            [FromForm] int TfCount,
+            [FromForm] int EssayCount,
+            [FromForm] int MatchingCount,
+            [FromForm] int DragDropCount)
         {
-            if (SelectedQuestionIds != null && SelectedQuestionIds.Any())
+            var mode = NormalizeSelectionMode(QuestionSelectionMode);
+            var request = new PreviewQuestionsRequest
             {
-                t.TestQuestions = SelectedQuestionIds.Distinct().Select(qid => new TestQuestion { QuestionId = qid }).ToList();
+                CourseId = t.CourseId ?? string.Empty,
+                AssessmentType = t.AssessmentType,
+                McqCount = Math.Max(0, McqCount),
+                TfCount = Math.Max(0, TfCount),
+                EssayCount = Math.Max(0, EssayCount),
+                MatchingCount = Math.Max(0, MatchingCount),
+                DragDropCount = Math.Max(0, DragDropCount)
+            };
+            var requestedTotal = GetRequestedTotal(request);
+
+            var effectiveSelectedQuestionIds = (SelectedQuestionIds ?? new List<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            if (mode == CreateTestViewModel.RandomByTypeSelectionMode)
+            {
+                if (string.IsNullOrWhiteSpace(t.CourseId))
+                {
+                    ModelState.AddModelError(nameof(t.CourseId), "Vui lòng chọn Course trước khi random câu hỏi.");
+                }
+
+                if (requestedTotal <= 0)
+                {
+                    ModelState.AddModelError(string.Empty, "Vui lòng nhập số lượng câu hỏi random lớn hơn 0.");
+                }
+
+                if (ModelState.IsValid)
+                {
+                    var randomQuestions = await _testAdministrationService.PreviewQuestionsAsync(request);
+                    effectiveSelectedQuestionIds = randomQuestions
+                        .Select(x => x.Id)
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Distinct(StringComparer.Ordinal)
+                        .ToList();
+
+                    if (effectiveSelectedQuestionIds.Count == 0)
+                    {
+                        ModelState.AddModelError(string.Empty, "Không tìm thấy câu hỏi phù hợp theo cấu hình random hiện tại.");
+                    }
+                    else if (effectiveSelectedQuestionIds.Count < requestedTotal)
+                    {
+                        TempData["Info"] = $"Cấu hình random yêu cầu {requestedTotal} câu, hệ thống chọn được {effectiveSelectedQuestionIds.Count} câu phù hợp.";
+                    }
+                }
             }
 
             if (string.IsNullOrWhiteSpace(t.CourseId))
             {
                 ModelState.AddModelError(nameof(t.CourseId), "Vui lòng chọn Course trước khi tạo test.");
+            }
+
+            if (effectiveSelectedQuestionIds.Any())
+            {
+                t.TestQuestions = effectiveSelectedQuestionIds
+                    .Select(qid => new TestQuestion { QuestionId = qid })
+                    .ToList();
             }
 
             if (!ModelState.IsValid)
@@ -137,14 +204,20 @@ namespace UniTestSystem.Controllers
                     DurationMinutes = t.DurationMinutes,
                     PassScore = t.PassScore,
                     AssessmentType = t.AssessmentType,
-                    SelectedQuestionIds = SelectedQuestionIds ?? new List<string>()
+                    QuestionSelectionMode = mode,
+                    McqCount = request.McqCount,
+                    TfCount = request.TfCount,
+                    EssayCount = request.EssayCount,
+                    MatchingCount = request.MatchingCount,
+                    DragDropCount = request.DragDropCount,
+                    SelectedQuestionIds = effectiveSelectedQuestionIds
                 };
                 await PopulateCoursesAsync(vm.CourseId);
                 await PopulateQuestionReferenceViewBagsAsync();
                 return View(vm);
             }
 
-            await _testAdministrationService.CreateAndPublishAsync(t, SelectedQuestionIds);
+            await _testAdministrationService.CreateAndPublishAsync(t, effectiveSelectedQuestionIds);
 
             TempData["Msg"] = "Đã tạo và publish bài test.";
             return RedirectToAction(nameof(Index));
@@ -383,6 +456,13 @@ namespace UniTestSystem.Controllers
         private bool IsPrivilegedCaller()
         {
             return User.IsInRole(Role.Admin.ToString()) || User.IsInRole(Role.Staff.ToString());
+        }
+
+        private static string NormalizeSelectionMode(string? rawMode)
+        {
+            return string.Equals(rawMode, CreateTestViewModel.RandomByTypeSelectionMode, StringComparison.OrdinalIgnoreCase)
+                ? CreateTestViewModel.RandomByTypeSelectionMode
+                : CreateTestViewModel.ManualSelectionMode;
         }
 
         private static int GetRequestedTotal(PreviewQuestionsRequest request)

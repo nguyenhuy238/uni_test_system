@@ -154,7 +154,19 @@ public class SessionService : ISessionService
                 return Failure<StartSessionData>(SessionServiceStatus.Conflict, "SESSION_BOUND_OTHER_DEVICE", "Session is bound to another device.");
             }
 
-            return Success(await BuildStartSessionDataAsync(inProgress, test, command.IncludeQuestionPayload));
+            var sessionForStartData = inProgress;
+            if (command.IncludeQuestionPayload)
+            {
+                sessionForStartData = await GetSessionWithQuestionGraphAsync(inProgress.Id) ?? inProgress;
+                var sessionTest = await GetTestWithQuestionsAsync(sessionForStartData.TestId) ?? test;
+                var repaired = await EnsureSessionAnswersInitializedAsync(sessionForStartData, sessionTest);
+                if (repaired)
+                {
+                    sessionForStartData = await GetSessionWithQuestionGraphAsync(inProgress.Id) ?? sessionForStartData;
+                }
+            }
+
+            return Success(await BuildStartSessionDataAsync(sessionForStartData, test, command.IncludeQuestionPayload));
         }
 
         var started = await _testService.StartAsync(command.TestId, command.UserId);
@@ -172,13 +184,13 @@ public class SessionService : ISessionService
 
     public async Task<SessionServiceResult<ResumeSessionData>> ResumeSessionAsync(ResumeSessionCommand command)
     {
-        var session = await _sessionRepo.FirstOrDefaultAsync(x => x.Id == command.SessionId);
+        var session = await GetSessionWithQuestionGraphAsync(command.SessionId);
         if (session == null)
         {
             return Failure<ResumeSessionData>(SessionServiceStatus.NotFound, "SESSION_NOT_FOUND", "Session not found.");
         }
 
-        var test = await _testRepo.FirstOrDefaultAsync(x => x.Id == session.TestId);
+        var test = await GetTestWithQuestionsAsync(session.TestId);
         if (test == null)
         {
             return Failure<ResumeSessionData>(SessionServiceStatus.NotFound, "TEST_NOT_FOUND", "Test not found.");
@@ -193,6 +205,12 @@ public class SessionService : ISessionService
         if (!allowed)
         {
             return Failure<ResumeSessionData>(SessionServiceStatus.Conflict, "SESSION_BOUND_OTHER_DEVICE", "Session is bound to another device.");
+        }
+
+        var repaired = await EnsureSessionAnswersInitializedAsync(session, test);
+        if (repaired)
+        {
+            session = await GetSessionWithQuestionGraphAsync(session.Id) ?? session;
         }
 
         session.LastActivityAt = DateTime.UtcNow;
@@ -214,7 +232,7 @@ public class SessionService : ISessionService
 
     public async Task<SessionServiceResult<SaveAnswerData>> SaveAnswerAsync(SaveAnswerCommand command)
     {
-        var session = await _sessionRepo.FirstOrDefaultAsync(x => x.Id == command.SessionId);
+        var session = await GetSessionWithAnswersAsync(command.SessionId);
         if (session == null)
         {
             return Failure<SaveAnswerData>(SessionServiceStatus.NotFound, "SESSION_NOT_FOUND", "Session not found.");
@@ -310,7 +328,7 @@ public class SessionService : ISessionService
 
     public async Task<SessionServiceResult<SubmitSessionData>> SubmitSessionAsync(SubmitSessionCommand command)
     {
-        var session = await _sessionRepo.FirstOrDefaultAsync(x => x.Id == command.SessionId);
+        var session = await GetSessionWithAnswersAsync(command.SessionId);
         if (session == null)
         {
             return Failure<SubmitSessionData>(SessionServiceStatus.NotFound, "SESSION_NOT_FOUND", "Session not found.");
@@ -342,7 +360,7 @@ public class SessionService : ISessionService
             return null;
         }
 
-        var session = await _sessionRepo.FirstOrDefaultAsync(x => x.Id == sessionId);
+        var session = await GetSessionWithAnswersAsync(sessionId);
         if (session == null)
         {
             return null;
@@ -385,7 +403,7 @@ public class SessionService : ISessionService
 
     public async Task<SessionServiceResult<GetSessionResultData>> GetSessionResultAsync(GetSessionResultCommand command)
     {
-        var session = await _sessionRepo.FirstOrDefaultAsync(x => x.Id == command.SessionId);
+        var session = await GetSessionWithQuestionGraphAsync(command.SessionId);
         if (session == null)
         {
             return Failure<GetSessionResultData>(SessionServiceStatus.NotFound, "SESSION_NOT_FOUND", "Session not found.");
@@ -826,6 +844,74 @@ public class SessionService : ISessionService
         var test = await _testRepo.FirstOrDefaultAsync(x => x.Id == session.TestId);
         var durationMinutes = test?.DurationMinutes ?? 30;
         return ComputeRemainingSeconds(session, durationMinutes);
+    }
+
+    private async Task<bool> EnsureSessionAnswersInitializedAsync(Session session, Test test)
+    {
+        if (session.Status != SessionStatus.InProgress || session.StudentAnswers.Count > 0)
+        {
+            return false;
+        }
+
+        var testQuestionIds = test.TestQuestions
+            .Select(tq => tq.QuestionId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (testQuestionIds.Count == 0 && test.QuestionSnapshots.Count > 0)
+        {
+            testQuestionIds = test.QuestionSnapshots
+                .OrderBy(x => x.Order)
+                .Select(x => x.OriginalQuestionId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
+
+        if (testQuestionIds.Count == 0)
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        foreach (var questionId in testQuestionIds)
+        {
+            session.StudentAnswers.Add(new StudentAnswer
+            {
+                SessionId = session.Id,
+                QuestionId = questionId,
+                Score = 0m,
+                AnsweredAt = now
+            });
+        }
+
+        session.UpdatedAt = now;
+        await _sessionRepo.UpsertAsync(x => x.Id == session.Id, session);
+        return true;
+    }
+
+    private Task<Session?> GetSessionWithAnswersAsync(string sessionId)
+    {
+        var spec = new Specification<Session>(x => x.Id == sessionId)
+            .Include(s => s.StudentAnswers);
+        return _sessionRepo.FirstOrDefaultAsync(spec);
+    }
+
+    private Task<Session?> GetSessionWithQuestionGraphAsync(string sessionId)
+    {
+        var spec = new Specification<Session>(x => x.Id == sessionId)
+            .Include(s => s.StudentAnswers)
+            .Include("StudentAnswers.Question.Options");
+        return _sessionRepo.FirstOrDefaultAsync(spec);
+    }
+
+    private Task<Test?> GetTestWithQuestionsAsync(string testId)
+    {
+        var spec = new Specification<Test>(x => x.Id == testId)
+            .Include(x => x.TestQuestions)
+            .Include(x => x.QuestionSnapshots);
+        return _testRepo.FirstOrDefaultAsync(spec);
     }
 
     private async Task<bool> EnsureSessionDeviceAsync(string sessionId, SessionRequestContext context)

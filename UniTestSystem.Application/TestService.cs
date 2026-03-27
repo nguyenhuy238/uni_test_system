@@ -15,10 +15,12 @@ namespace UniTestSystem.Application
         public async Task<Session> StartAsync(string testId, string userId)
         {
             // CHECK: Existing InProgress session
-            var existing = await _sRepo.FirstOrDefaultAsync(x => x.TestId == testId && x.UserId == userId && x.Status == SessionStatus.InProgress && !x.IsDeleted);
+            var existingSpec = new Specification<Session>(x => x.TestId == testId && x.UserId == userId && x.Status == SessionStatus.InProgress && !x.IsDeleted)
+                .Include(s => s.StudentAnswers);
+            var existing = await _sRepo.FirstOrDefaultAsync(existingSpec);
             if (existing != null) return existing;
 
-            var test = await _tRepo.FirstOrDefaultAsync(t => t.Id == testId) ?? throw new Exception("Test not found");
+            var test = await GetTestWithQuestionsAsync(testId) ?? throw new Exception("Test not found");
             var all = await _qRepo.GetAllAsync();
 
             // Pick questions for this session
@@ -56,10 +58,12 @@ namespace UniTestSystem.Application
 
         public async Task<Session> SubmitAsync(string sessionId, Dictionary<string, string?> answers)
         {
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sessionId) ?? throw new Exception("Session not found");
+            var sessionSpec = new Specification<Session>(x => x.Id == sessionId)
+                .Include(s => s.StudentAnswers);
+            var s = await _sRepo.FirstOrDefaultAsync(sessionSpec) ?? throw new Exception("Session not found");
             if (s.Status == SessionStatus.Submitted) return s;
 
-            var test = await _tRepo.FirstOrDefaultAsync(t => t.Id == s.TestId) ?? throw new Exception("Test not found");
+            var test = await GetTestWithQuestionsAsync(s.TestId) ?? throw new Exception("Test not found");
             var allQuestions = await _qRepo.GetAllAsync();
             var qMap = allQuestions.ToDictionary(q => q.Id, q => q);
 
@@ -168,6 +172,14 @@ namespace UniTestSystem.Application
                 foreach (var q in snapshot)
                     map[q.Id] = testQMap.TryGetValue(q.Id, out var p) ? p : 1m;
             }
+            else if (t.QuestionSnapshots != null && t.QuestionSnapshots.Count > 0)
+            {
+                var snapshotPointMap = t.QuestionSnapshots
+                    .GroupBy(i => i.OriginalQuestionId)
+                    .ToDictionary(g => g.Key, g => g.First().Points);
+                foreach (var q in snapshot)
+                    map[q.Id] = snapshotPointMap.TryGetValue(q.Id, out var p) ? p : 1m;
+            }
             else
             {
                 foreach (var q in snapshot) map[q.Id] = 1m;
@@ -180,6 +192,17 @@ namespace UniTestSystem.Application
             if (t.TestQuestions != null && t.TestQuestions.Any())
             {
                 var qIds = t.TestQuestions.Select(i => i.QuestionId).ToHashSet();
+                return Task.FromResult(all.Where(q => qIds.Contains(q.Id)).ToList());
+            }
+
+            if (t.QuestionSnapshots != null && t.QuestionSnapshots.Any())
+            {
+                var qIds = t.QuestionSnapshots
+                    .OrderBy(i => i.Order)
+                    .Select(i => i.OriginalQuestionId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToHashSet(StringComparer.Ordinal);
                 return Task.FromResult(all.Where(q => qIds.Contains(q.Id)).ToList());
             }
 
@@ -228,5 +251,13 @@ namespace UniTestSystem.Application
 
         private static string NormalizeToken(string? input)
             => (input ?? string.Empty).Trim().ToLowerInvariant();
+
+        private async Task<Test?> GetTestWithQuestionsAsync(string testId)
+        {
+            var spec = new Specification<Test>(t => t.Id == testId)
+                .Include(t => t.TestQuestions)
+                .Include(t => t.QuestionSnapshots);
+            return await _tRepo.FirstOrDefaultAsync(spec);
+        }
     }
 }

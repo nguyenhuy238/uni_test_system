@@ -5,6 +5,9 @@ namespace UniTestSystem.ViewModels.Tests;
 
 public class CreateTestViewModel
 {
+    public const string ManualSelectionMode = "Manual";
+    public const string RandomByTypeSelectionMode = "RandomByType";
+
     public PagedResult<Question> Page { get; set; } = new();
     public QuestionFilter Filter { get; set; } = new();
 
@@ -15,6 +18,12 @@ public class CreateTestViewModel
     public AssessmentType AssessmentType { get; set; } = AssessmentType.Quiz;
     public bool ShuffleQuestions { get; set; } = true;
     public bool ShuffleOptions { get; set; } = true;
+    public string QuestionSelectionMode { get; set; } = ManualSelectionMode;
+    public int McqCount { get; set; }
+    public int TfCount { get; set; }
+    public int EssayCount { get; set; }
+    public int MatchingCount { get; set; }
+    public int DragDropCount { get; set; }
 
     public List<string> SelectedQuestionIds { get; set; } = new();
 
