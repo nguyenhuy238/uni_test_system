@@ -6,6 +6,38 @@
     bool hasPendingRegrade = (bool)(ViewBag.HasPendingRegrade ?? false);
 }
 
+@functions {
+    private static Dictionary<string, string> ParseKeyValueAnswer(string? raw)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(raw)) return result;
+
+        var normalized = raw.Replace("||", Environment.NewLine, StringComparison.Ordinal);
+        var lines = normalized.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var line in lines)
+        {
+            var idx = line.IndexOf('=');
+            if (idx <= 0) continue;
+            var key = line[..idx].Trim();
+            var val = line[(idx + 1)..].Trim();
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(val)) continue;
+            result[key] = val;
+        }
+
+        return result;
+    }
+
+    private static string TypeLabel(QType type) => type switch
+    {
+        QType.MCQ => "Trac nghiem (MCQ)",
+        QType.TrueFalse => "Dung/Sai",
+        QType.Essay => "Tu luan",
+        QType.Matching => "Noi cap (Matching)",
+        QType.DragDrop => "Keo tha (DragDrop)",
+        _ => type.ToString()
+    };
+}
+
 <h2 class="mb-3">Kết quả bài test</h2>
 
 <div class="card mb-4">
@@ -20,7 +52,7 @@
         <div class="d-flex align-items-center gap-4 flex-wrap">
             <div><strong>Điểm:</strong> @Model.TotalScore / @Model.MaxScore</div>
             <div><strong>Tỷ lệ đúng:</strong> @Model.Percent %</div>
-            <div><span class="@passClass">@((Model.IsPassed) ? "ĐẠT" : "KHÔNG ĐẠT")</span></div>
+            <div><span class="@passClass">@((Model.IsPassed) ? "DAT" : "KHONG DAT")</span></div>
         </div>
     </div>
 </div>
@@ -31,39 +63,36 @@
             <th style="width:60px;">#</th>
             <th>Nội dung</th>
             <th style="width:160px;">Loại</th>
-            <th style="width:220px;">Bạn chọn / Trả lời</th>
-            <th style="width:220px;">Đáp án đúng</th>
-            <th style="width:100px;">Điểm</th>
+            <th style="width:260px;">Bạn chọn / Trả lời</th>
+            <th style="width:260px;">Đáp án đúng</th>
+            <th style="width:120px;">Điểm</th>
         </tr>
     </thead>
     <tbody>
         @{
-            var snapshot = Model.StudentAnswers?.OrderBy(a => a.QuestionId).Select(a => a.Question).Where(q => q != null).Cast<Question>().ToList() ?? new List<UniTestSystem.Domain.Question>();
-            var mapAns = Model.StudentAnswers?.ToDictionary(a => a.QuestionId, a => a) ?? new Dictionary<string, UniTestSystem.Domain.StudentAnswer>();
+            var snapshot = Model.StudentAnswers?.OrderBy(a => a.QuestionId).Select(a => a.Question).Where(q => q != null).Cast<Question>().ToList() ?? new List<Question>();
+            var mapAns = Model.StudentAnswers?.ToDictionary(a => a.QuestionId, a => a) ?? new Dictionary<string, StudentAnswer>();
+
             for (int i = 0; i < snapshot.Count; i++)
             {
                 var q = snapshot[i];
                 mapAns.TryGetValue(q.Id, out var a);
-                string typeLabel = q.Type switch
-                {
-                    QType.MCQ => "Trắc nghiệm (MCQ)",
-                    QType.TrueFalse => "Đúng/Sai",
-                    QType.Essay => "Tự luận",
-                    _ => q.Type.ToString()
-                };
+                var typeLabel = TypeLabel(q.Type);
+                var orderedOptions = q.Options.Where(o => !o.IsDeleted).OrderBy(o => o.Id, StringComparer.Ordinal).ToList();
 
-                var orderedOptions = q.Options.OrderBy(o => o.Id, StringComparer.Ordinal).ToList();
                 string yourAnswer;
                 if (q.Type == QType.MCQ || q.Type == QType.TrueFalse)
                 {
                     var selectedRaw = a?.SelectedOptionId?.Trim();
                     if (string.IsNullOrWhiteSpace(selectedRaw))
                     {
-                        yourAnswer = "(chưa chọn)";
+                        yourAnswer = "(chua chon)";
                     }
                     else
                     {
-                        var selectedOption = orderedOptions.FirstOrDefault(o => string.Equals(o.Id, selectedRaw, StringComparison.OrdinalIgnoreCase));
+                        var selectedOption = orderedOptions.FirstOrDefault(o =>
+                            string.Equals(o.Id, selectedRaw, StringComparison.OrdinalIgnoreCase));
+
                         if (selectedOption == null &&
                             selectedRaw.Length == 1 &&
                             char.IsLetter(selectedRaw[0]))
@@ -74,6 +103,7 @@
                                 selectedOption = orderedOptions[idx];
                             }
                         }
+
                         if (selectedOption == null)
                         {
                             selectedOption = orderedOptions.FirstOrDefault(o =>
@@ -84,23 +114,28 @@
                         {
                             yourAnswer = selectedRaw;
                         }
-                        else
+                        else if (q.Type == QType.MCQ)
                         {
                             var selectedIndex = orderedOptions.FindIndex(o => o.Id == selectedOption.Id);
                             var selectedLabel = selectedIndex >= 0 ? ((char)('A' + selectedIndex)).ToString() : "";
-                            yourAnswer = q.Type == QType.MCQ
-                                ? $"{selectedLabel}) {selectedOption.Content}"
-                                : selectedOption.Content;
+                            yourAnswer = $"{selectedLabel}) {selectedOption.Content}";
+                        }
+                        else
+                        {
+                            yourAnswer = selectedOption.Content;
                         }
                     }
                 }
                 else if (q.Type == QType.Essay)
                 {
-                    yourAnswer = string.IsNullOrWhiteSpace(a?.EssayAnswer) ? "(chưa trả lời)" : a!.EssayAnswer!;
+                    yourAnswer = string.IsNullOrWhiteSpace(a?.EssayAnswer) ? "(chua tra loi)" : a!.EssayAnswer!;
                 }
                 else
                 {
-                    yourAnswer = a?.EssayAnswer ?? a?.SelectedOptionId ?? "";
+                    var pairs = ParseKeyValueAnswer(a?.EssayAnswer ?? a?.SelectedOptionId);
+                    yourAnswer = pairs.Count == 0
+                        ? "(chua tra loi)"
+                        : string.Join(Environment.NewLine, pairs.Select(p => $"{p.Key} -> {p.Value}"));
                 }
 
                 string correct;
@@ -110,10 +145,7 @@
                     for (int optionIndex = 0; optionIndex < orderedOptions.Count; optionIndex++)
                     {
                         var option = orderedOptions[optionIndex];
-                        if (!option.IsCorrect)
-                        {
-                            continue;
-                        }
+                        if (!option.IsCorrect) continue;
 
                         if (q.Type == QType.MCQ)
                         {
@@ -126,23 +158,40 @@
                         }
                     }
 
-                    correct = correctParts.Any() ? string.Join(", ", correctParts) : "(không xác định)";
+                    correct = correctParts.Any() ? string.Join(Environment.NewLine, correctParts) : "(khong xac dinh)";
+                }
+                else if (q.Type == QType.Essay)
+                {
+                    correct = "(cham tay)";
+                }
+                else if (q.Type == QType.Matching)
+                {
+                    var pairs = (q.MatchingPairs ?? new List<MatchPair>())
+                        .Where(p => !string.IsNullOrWhiteSpace(p.L) && !string.IsNullOrWhiteSpace(p.R))
+                        .Select(p => $"{p.L} -> {p.R}")
+                        .ToList();
+                    correct = pairs.Count == 0 ? "(khong xac dinh)" : string.Join(Environment.NewLine, pairs);
                 }
                 else
                 {
-                    correct = "(chấm tay)";
+                    var slots = (q.DragDrop?.Slots ?? new List<DragSlot>())
+                        .Where(s => !string.IsNullOrWhiteSpace(s.Name))
+                        .Select(s => $"{s.Name} -> {s.Answer}")
+                        .ToList();
+                    correct = slots.Count == 0 ? "(khong xac dinh)" : string.Join(Environment.NewLine, slots);
                 }
 
-                var rowClass = (q.Type == QType.MCQ || q.Type == QType.TrueFalse)
-                ? ((a?.Score ?? 0) > 0 ? "table-success" : "table-danger")
-                : "";
+                var rowClass = (q.Type != QType.Essay)
+                    ? ((a?.Score ?? 0m) > 0m ? "table-success" : "table-danger")
+                    : "";
+
                 <tr class="@rowClass">
                     <td>@(i + 1)</td>
                     <td>@q.Content</td>
                     <td>@typeLabel</td>
-                    <td>@yourAnswer</td>
-                    <td>@correct</td>
-                    <td>@(a?.Score ?? 0)</td>
+                    <td style="white-space: pre-wrap;">@yourAnswer</td>
+                    <td style="white-space: pre-wrap;">@correct</td>
+                    <td>@(a?.Score ?? 0m)</td>
                 </tr>
             }
         }

@@ -95,8 +95,10 @@ namespace UniTestSystem.Application
                 answers.TryGetValue(q.Id, out var selRaw);
                 selRaw ??= "";
 
-                decimal grade = 0.0m; // 0..1
+                decimal gradeRatio = 0.0m; // 0..1
                 bool isAuto = true;
+                var qPoints = pointsByQ.TryGetValue(q.Id, out var p) ? p : 1.0m;
+                if (qPoints <= 0m) qPoints = 1m;
 
                 switch (q.Type)
                 {
@@ -104,16 +106,18 @@ namespace UniTestSystem.Application
                     case QType.TrueFalse:
                         {
                             var sel = selRaw.Trim();
-                            grade = CalculateSingleChoiceGrade(q, sel);
+                            gradeRatio = CalculateSingleChoiceGrade(q, sel);
                             sa.SelectedOptionId = string.IsNullOrWhiteSpace(sel) ? null : sel;
-                            sa.Score = grade;
+                            sa.EssayAnswer = null;
                             break;
                         }
                     case QType.Essay:
                         {
                             isAuto = false;
+                            sa.SelectedOptionId = null;
                             sa.EssayAnswer = selRaw;
                             sa.Score = 0;
+                            sa.GradedAt = null;
                             break;
                         }
                     case QType.Matching:
@@ -125,9 +129,9 @@ namespace UniTestSystem.Application
                                 .ToDictionary(g => g.Key, g => NormalizeToken(g.First().R), StringComparer.OrdinalIgnoreCase);
 
                             var actual = ParseKeyValueAnswer(selRaw);
-                            grade = CalculatePartialMatchScore(expected, actual);
+                            gradeRatio = CalculatePartialMatchScore(expected, actual);
+                            sa.SelectedOptionId = null;
                             sa.EssayAnswer = selRaw;
-                            sa.Score = grade;
                             break;
                         }
                     case QType.DragDrop:
@@ -139,9 +143,9 @@ namespace UniTestSystem.Application
                                 .ToDictionary(g => g.Key, g => NormalizeToken(g.First().Answer), StringComparer.OrdinalIgnoreCase);
 
                             var actual = ParseKeyValueAnswer(selRaw);
-                            grade = CalculatePartialMatchScore(expected, actual);
+                            gradeRatio = CalculatePartialMatchScore(expected, actual);
+                            sa.SelectedOptionId = null;
                             sa.EssayAnswer = selRaw;
-                            sa.Score = grade;
                             break;
                         }
                     default:
@@ -149,11 +153,13 @@ namespace UniTestSystem.Application
                         break;
                 }
 
-                var qPoints = pointsByQ.TryGetValue(q.Id, out var p) ? p : 1.0m;
-
                 if (isAuto)
                 {
-                    autoScore += grade * qPoints;
+                    var awardedPoints = Math.Round(gradeRatio * qPoints, 2, MidpointRounding.AwayFromZero);
+                    sa.Score = awardedPoints;
+                    sa.GradedAt = null;
+
+                    autoScore += awardedPoints;
                     autoMax += qPoints;
                 }
                 else
