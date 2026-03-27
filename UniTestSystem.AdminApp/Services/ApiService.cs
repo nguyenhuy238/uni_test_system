@@ -118,34 +118,24 @@ namespace UniTestSystem.AdminApp.Services
         public async Task<bool> UpdateTestAsync(string id, Test test) => await SendJsonAsync(HttpMethod.Put, $"{_baseUrl}/api/admin/tests/{id}", test);
         public async Task<bool> DeleteTestAsync(string id) => await SendWithoutBodyAsync(HttpMethod.Delete, $"{_baseUrl}/api/admin/tests/{id}");
 
-        public async Task<bool> CreateUserAsync(User user, string password)
+        public async Task<bool> CreateUserAsync(User user)
         {
             var payload = new
             {
                 user.Name,
                 user.Email,
-                user.Role,
-                user.Department,
-                user.Level,
-                user.Skill,
-                user.TeamId,
-                Password = password
+                user.Role
             };
             return await SendJsonAsync(HttpMethod.Post, $"{_baseUrl}/api/admin/users", payload);
         }
 
-        public async Task<bool> UpdateUserAsync(string id, User user, string? password = null)
+        public async Task<bool> UpdateUserAsync(string id, User user)
         {
             var payload = new
             {
                 user.Name,
                 user.Email,
-                user.Role,
-                user.Department,
-                user.Level,
-                user.Skill,
-                user.TeamId,
-                Password = password
+                user.Role
             };
             return await SendJsonAsync(HttpMethod.Put, $"{_baseUrl}/api/admin/users/{id}", payload);
         }

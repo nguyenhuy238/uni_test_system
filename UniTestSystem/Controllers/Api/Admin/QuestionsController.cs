@@ -16,17 +16,20 @@ public class QuestionsController : ControllerBase
     private readonly IRepository<Subject> _subjectRepo;
     private readonly IRepository<DifficultyLevel> _difficultyLevelRepo;
     private readonly IRepository<Skill> _skillRepo;
+    private readonly IRepository<QuestionBank> _questionBankRepo;
 
     public QuestionsController(
         IQuestionService svc,
         IRepository<Subject> subjectRepo,
         IRepository<DifficultyLevel> difficultyLevelRepo,
-        IRepository<Skill> skillRepo)
+        IRepository<Skill> skillRepo,
+        IRepository<QuestionBank> questionBankRepo)
     {
         _svc = svc;
         _subjectRepo = subjectRepo;
         _difficultyLevelRepo = difficultyLevelRepo;
         _skillRepo = skillRepo;
+        _questionBankRepo = questionBankRepo;
     }
 
     [HttpPost("submit/{id}")]
@@ -111,10 +114,28 @@ public class QuestionsController : ControllerBase
                 x.Name
             });
 
+        var subjects = (await _subjectRepo.GetAllAsync(x => !x.IsDeleted))
+            .OrderBy(x => x.Name)
+            .Select(x => new
+            {
+                x.Id,
+                x.Name
+            });
+
+        var questionBanks = (await _questionBankRepo.GetAllAsync(x => !x.IsDeleted))
+            .OrderBy(x => x.Name)
+            .Select(x => new
+            {
+                x.Id,
+                x.Name
+            });
+
         return Ok(new
         {
             skills,
-            difficulties
+            difficulties,
+            subjects,
+            questionBanks
         });
     }
 

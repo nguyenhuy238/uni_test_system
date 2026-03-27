@@ -22,10 +22,10 @@ namespace UniTestSystem.AdminApp.Models
         [JsonPropertyName("isPublished")]
         public bool IsPublished { get; set; } = false;
 
-        [JsonPropertyName("items")]
+        [JsonPropertyName("testQuestions")]
         public List<TestItem>? Items { get; set; } = new();
 
-        [JsonPropertyName("questionIds")]
+        [JsonIgnore]
         public List<string>? QuestionIds { get; set; } = new();
 
         [JsonPropertyName("createdBy")]

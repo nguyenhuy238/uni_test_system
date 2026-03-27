@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using System.IO;
 using System.Linq;
+using System.Net.Mail;
 using System.Threading.Tasks;
 
 namespace UniTestSystem.AdminApp.ViewModels
@@ -49,6 +50,7 @@ namespace UniTestSystem.AdminApp.ViewModels
         private string _selectedQuestionCorrectKeysText = string.Empty;
         private bool _syncingCorrectKeysText;
         private ObservableCollection<TestItem> _selectedTestItems = new();
+        private const string DefaultNewUserPassword = "123456";
         public string CurrentUserName => _apiService.CurrentUser?.Name ?? "Admin";
         public string CurrentUserRole => _apiService.CurrentUser?.Role ?? "Unknown";
         public bool IsAdmin => _apiService.CurrentUser?.Role == "Admin";
@@ -87,20 +89,22 @@ namespace UniTestSystem.AdminApp.ViewModels
             QuestionTypeOptions = new ObservableCollection<string> { "MCQ", "TrueFalse", "Essay", "Matching", "DragDrop" };
             QuestionSkillOptions = new ObservableCollection<QuestionMetadataItem>();
             QuestionDifficultyOptions = new ObservableCollection<QuestionMetadataItem>();
+            QuestionSubjectOptions = new ObservableCollection<QuestionMetadataItem>();
+            QuestionBankOptions = new ObservableCollection<QuestionMetadataItem>();
             YearEndStudents = new ObservableCollection<YearEndStudentSummaryModel>();
             YearEndWarningStudents = new ObservableCollection<YearEndStudentSummaryModel>();
 
             LoadDataCommand = new RelayCommand(async () => await LoadDataAsync());
             
-            AddTestCommand = new RelayCommand(() => { SelectedTest = new Test(); StatusMessage = "Adding new test..."; }, () => IsAdmin);
+            AddTestCommand = new RelayCommand(StartNewTest, () => IsAdmin);
             SaveTestCommand = new RelayCommand(async () => await SaveTestAsync(), () => IsAdmin && SelectedTest != null);
             DeleteTestCommand = new RelayCommand(async () => await DeleteTestAsync(), () => IsAdmin && SelectedTest != null && !string.IsNullOrEmpty(SelectedTest.Id));
             
-            AddUserCommand = new RelayCommand(() => { SelectedUser = new User { Role = "Student" }; StatusMessage = "Adding new user..."; }, () => CanManageUsersRoles);
+            AddUserCommand = new RelayCommand(StartNewUser, () => CanManageUsersRoles);
             SaveUserCommand = new RelayCommand(async () => await SaveUserAsync(), () => CanManageUsersRoles && SelectedUser != null);
             DeleteUserCommand = new RelayCommand(async () => await DeleteUserAsync(), () => CanManageUsersRoles && SelectedUser != null && !string.IsNullOrEmpty(SelectedUser.Id));
 
-            AddQuestionCommand = new RelayCommand(() => { SelectedQuestion = new Question(); StatusMessage = "Adding new question..."; }, () => IsAdmin);
+            AddQuestionCommand = new RelayCommand(StartNewQuestion, () => IsAdmin);
             SaveQuestionCommand = new RelayCommand(async () => await SaveQuestionAsync(), () => IsAdmin && SelectedQuestion != null);
             DeleteQuestionCommand = new RelayCommand(async () => await DeleteQuestionAsync(), () => IsAdmin && SelectedQuestion != null && !string.IsNullOrEmpty(SelectedQuestion.Id));
 
@@ -179,6 +183,8 @@ namespace UniTestSystem.AdminApp.ViewModels
         public ObservableCollection<string> QuestionTypeOptions { get; }
         public ObservableCollection<QuestionMetadataItem> QuestionSkillOptions { get; }
         public ObservableCollection<QuestionMetadataItem> QuestionDifficultyOptions { get; }
+        public ObservableCollection<QuestionMetadataItem> QuestionSubjectOptions { get; }
+        public ObservableCollection<QuestionMetadataItem> QuestionBankOptions { get; }
 
         public ObservableCollection<OptionWrapper> SelectedQuestionOptions => _selectedQuestionOptions;
         public ObservableCollection<string> SelectedQuestionCorrectKeys => _selectedQuestionCorrectKeys;
@@ -234,13 +240,19 @@ namespace UniTestSystem.AdminApp.ViewModels
                 _selectedTest = value; 
                 OnPropertyChanged(); 
                 SyncTestItems();
+                CommandManager.InvalidateRequerySuggested();
             }
         }
 
         public User? SelectedUser
         {
             get => _selectedUser;
-            set { _selectedUser = value; OnPropertyChanged(); }
+            set
+            {
+                _selectedUser = value;
+                OnPropertyChanged();
+                CommandManager.InvalidateRequerySuggested();
+            }
         }
 
         public Question? SelectedQuestion
@@ -523,6 +535,10 @@ namespace UniTestSystem.AdminApp.ViewModels
                     Lecturers.Clear();
                     foreach (var u in Users.Where(u => u.Role == "Lecturer")) Lecturers.Add(u);
                 }
+                else
+                {
+                    Lecturers.Clear();
+                }
                 
                 if (statsTask.Result != null) Stats = statsTask.Result;
                 else failures.Add("Stats");
@@ -565,6 +581,57 @@ namespace UniTestSystem.AdminApp.ViewModels
         private async Task SaveTestAsync()
         {
             if (SelectedTest == null) return;
+
+            UpdateTestModelFromUI();
+            var normalizedTitle = (SelectedTest.Title ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedTitle))
+            {
+                StatusMessage = "Test title is required.";
+                return;
+            }
+
+            if (SelectedTest.DurationMinutes <= 0)
+            {
+                StatusMessage = "Duration must be greater than 0 minutes.";
+                return;
+            }
+
+            SelectedTest.Title = normalizedTitle;
+            SelectedTest.Type = string.Equals(SelectedTest.Type, "Exam", StringComparison.OrdinalIgnoreCase) ? "Exam" : "Test";
+            SelectedTest.TotalMaxScore = 10m;
+
+            var normalizedItems = (SelectedTest.Items ?? new List<TestItem>())
+                .Where(item => !string.IsNullOrWhiteSpace(item.QuestionId))
+                .Select((item, index) => new TestItem
+                {
+                    TestId = SelectedTest.Id,
+                    QuestionId = item.QuestionId.Trim(),
+                    Points = item.Points <= 0 ? 1m : item.Points,
+                    Order = index
+                })
+                .ToList();
+
+            var validQuestionIds = Questions
+                .Where(q => !string.IsNullOrWhiteSpace(q.Id))
+                .Select(q => q.Id)
+                .ToHashSet(StringComparer.Ordinal);
+
+            var invalidQuestion = normalizedItems
+                .Select(item => item.QuestionId)
+                .FirstOrDefault(id => !validQuestionIds.Contains(id));
+            if (!string.IsNullOrWhiteSpace(invalidQuestion))
+            {
+                StatusMessage = $"Question ID '{invalidQuestion}' does not exist.";
+                return;
+            }
+
+            SelectedTest.Items = normalizedItems;
+            SelectedTest.QuestionIds = normalizedItems.Select(x => x.QuestionId).ToList();
+            if (string.IsNullOrWhiteSpace(SelectedTest.CreatedBy))
+            {
+                SelectedTest.CreatedBy = CurrentUserName;
+            }
+
             try
             {
                 StatusMessage = "Saving test...";
@@ -608,14 +675,35 @@ namespace UniTestSystem.AdminApp.ViewModels
                 SelectedUser.Role = "Student";
             }
 
+            SelectedUser.Name = (SelectedUser.Name ?? string.Empty).Trim();
+            SelectedUser.Email = (SelectedUser.Email ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(SelectedUser.Name))
+            {
+                StatusMessage = "User name is required.";
+                return;
+            }
+
+            if (!IsValidEmail(SelectedUser.Email))
+            {
+                StatusMessage = "A valid email address is required.";
+                return;
+            }
+
             try
             {
                 StatusMessage = "Saving user...";
-                bool success = string.IsNullOrEmpty(SelectedUser.Id)
-                    ? await _apiService.CreateUserAsync(SelectedUser, "Password123!")
+                var isCreate = string.IsNullOrEmpty(SelectedUser.Id);
+                bool success = isCreate
+                    ? await _apiService.CreateUserAsync(SelectedUser)
                     : await _apiService.UpdateUserAsync(SelectedUser.Id, SelectedUser);
                 
-                if (success) { StatusMessage = "User saved successfully"; await LoadDataAsync(); }
+                if (success)
+                {
+                    StatusMessage = isCreate
+                        ? $"User created successfully. Default password: {DefaultNewUserPassword}"
+                        : "User saved successfully";
+                    await LoadDataAsync();
+                }
                 else StatusMessage = "Failed to save user";
             }
             catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
@@ -642,6 +730,18 @@ namespace UniTestSystem.AdminApp.ViewModels
             try
             {
                 UpdateQuestionModelFromUI();
+                var questionValidation = ValidateQuestionForSave(SelectedQuestion);
+                if (!string.IsNullOrWhiteSpace(questionValidation))
+                {
+                    StatusMessage = questionValidation;
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(SelectedQuestion.Id) && string.IsNullOrWhiteSpace(SelectedQuestion.Status))
+                {
+                    SelectedQuestion.Status = "Draft";
+                }
+
                 StatusMessage = "Saving question...";
                 bool success = string.IsNullOrEmpty(SelectedQuestion.Id)
                     ? await _apiService.CreateQuestionAsync(SelectedQuestion)
@@ -834,6 +934,19 @@ namespace UniTestSystem.AdminApp.ViewModels
             var defaultOptionText = string.Equals(questionType, "Matching", StringComparison.OrdinalIgnoreCase)
                 ? "Left|Right"
                 : "New Option";
+            if (string.Equals(questionType, "TrueFalse", StringComparison.OrdinalIgnoreCase))
+            {
+                if (_selectedQuestionOptions.Any(option => string.Equals(option.Text, "True", StringComparison.OrdinalIgnoreCase))
+                    && _selectedQuestionOptions.Any(option => string.Equals(option.Text, "False", StringComparison.OrdinalIgnoreCase)))
+                {
+                    StatusMessage = "True/False only supports two options: True and False.";
+                    return;
+                }
+
+                defaultOptionText = _selectedQuestionOptions.Any(option => string.Equals(option.Text, "True", StringComparison.OrdinalIgnoreCase))
+                    ? "False"
+                    : "True";
+            }
 
             var option = new OptionWrapper { Text = defaultOptionText };
             SubscribeOptionHandler(option);
@@ -968,6 +1081,22 @@ namespace UniTestSystem.AdminApp.ViewModels
                 return;
             }
 
+            if (string.Equals(questionType, "TrueFalse", StringComparison.OrdinalIgnoreCase))
+            {
+                var trueFalseOptions = new[] { "True", "False" };
+                SelectedQuestion.Options = trueFalseOptions
+                    .Select(value => new Option
+                    {
+                        Content = value,
+                        IsCorrect = correctSet.Contains(value)
+                    })
+                    .ToList();
+                SelectedQuestion.CorrectKeys = normalizedCorrectKeys;
+                SelectedQuestion.MatchingPairs = new List<MatchPair>();
+                SelectedQuestion.DragDrop = null;
+                return;
+            }
+
             SelectedQuestion.Options = _selectedQuestionOptions
                 .Where(x => !string.IsNullOrWhiteSpace(x.Text))
                 .Select(x => new Option
@@ -997,6 +1126,54 @@ namespace UniTestSystem.AdminApp.ViewModels
             {
                 UnsubscribeOptionHandler(option);
             }
+        }
+
+        private void StartNewTest()
+        {
+            SelectedTest = new Test
+            {
+                Type = "Test",
+                DurationMinutes = 30,
+                TotalMaxScore = 10m,
+                IsPublished = false,
+                CreatedBy = CurrentUserName
+            };
+
+            StatusMessage = "Creating new test...";
+        }
+
+        private void StartNewUser()
+        {
+            SelectedUser = new User
+            {
+                Role = "Student",
+                Level = "Junior"
+            };
+
+            StatusMessage = "Creating new user...";
+        }
+
+        private void StartNewQuestion()
+        {
+            SelectedQuestion = new Question
+            {
+                Type = "MCQ",
+                Status = "Draft",
+                DifficultyLevelId = GetDefaultMetadataId(QuestionDifficultyOptions, "Easy"),
+                SkillId = GetDefaultMetadataId(QuestionSkillOptions),
+                SubjectId = GetDefaultMetadataId(QuestionSubjectOptions),
+                QuestionBankId = GetDefaultMetadataId(QuestionBankOptions),
+                Options = new List<Option>
+                {
+                    new Option { Content = "Option A", IsCorrect = true },
+                    new Option { Content = "Option B", IsCorrect = false }
+                },
+                CorrectKeys = new List<string> { "Option A" }
+            };
+
+            StatusMessage = string.IsNullOrWhiteSpace(SelectedQuestion.SubjectId) || string.IsNullOrWhiteSpace(SelectedQuestion.QuestionBankId)
+                ? "Creating new question... Please select Subject and Question Bank."
+                : "Creating new question...";
         }
 
         private void AddQuestionOptionFromText(string text)
@@ -1125,6 +1302,110 @@ namespace UniTestSystem.AdminApp.ViewModels
         private static string NormalizeQuestionType(string? type)
             => string.IsNullOrWhiteSpace(type) ? "MCQ" : type.Trim();
 
+        private static bool IsValidEmail(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            try
+            {
+                _ = new MailAddress(value);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private string? ValidateQuestionForSave(Question question)
+        {
+            question.Content = (question.Content ?? string.Empty).Trim();
+            question.Type = NormalizeQuestionType(question.Type);
+            question.SubjectId = (question.SubjectId ?? string.Empty).Trim();
+            question.QuestionBankId = (question.QuestionBankId ?? string.Empty).Trim();
+            question.SkillId = (question.SkillId ?? string.Empty).Trim();
+            question.DifficultyLevelId = (question.DifficultyLevelId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(question.DifficultyLevelId))
+            {
+                question.DifficultyLevelId = GetDefaultMetadataId(QuestionDifficultyOptions, "Easy");
+            }
+
+            if (string.IsNullOrWhiteSpace(question.Content))
+            {
+                return "Question content is required.";
+            }
+
+            if (string.IsNullOrWhiteSpace(question.SubjectId))
+            {
+                return "Subject is required.";
+            }
+
+            if (string.IsNullOrWhiteSpace(question.QuestionBankId))
+            {
+                return "Question Bank is required.";
+            }
+
+            var questionType = NormalizeQuestionType(question.Type);
+            var options = question.Options ?? new List<Option>();
+            if (string.Equals(questionType, "MCQ", StringComparison.OrdinalIgnoreCase))
+            {
+                if (options.Count(o => !string.IsNullOrWhiteSpace(o.Content)) < 2)
+                {
+                    return "MCQ requires at least 2 options.";
+                }
+
+                if (!options.Any(o => o.IsCorrect))
+                {
+                    return "MCQ requires at least 1 correct option.";
+                }
+            }
+            else if (string.Equals(questionType, "TrueFalse", StringComparison.OrdinalIgnoreCase))
+            {
+                if (options.Count(o => o.IsCorrect) != 1)
+                {
+                    return "True/False requires exactly 1 correct option.";
+                }
+            }
+            else if (string.Equals(questionType, "Matching", StringComparison.OrdinalIgnoreCase))
+            {
+                if (question.MatchingPairs == null || question.MatchingPairs.Count == 0)
+                {
+                    return "Matching question requires at least 1 pair.";
+                }
+            }
+            else if (string.Equals(questionType, "DragDrop", StringComparison.OrdinalIgnoreCase))
+            {
+                var hasTokens = question.DragDrop?.Tokens?.Any(token => !string.IsNullOrWhiteSpace(token)) == true;
+                var hasSlots = question.DragDrop?.Slots?.Any(slot => !string.IsNullOrWhiteSpace(slot.Answer)) == true;
+                if (!hasTokens || !hasSlots)
+                {
+                    return "DragDrop requires tokens and slots.";
+                }
+            }
+
+            return null;
+        }
+
+        private static string GetDefaultMetadataId(IEnumerable<QuestionMetadataItem> items, string? preferredContains = null)
+        {
+            if (!string.IsNullOrWhiteSpace(preferredContains))
+            {
+                var match = items.FirstOrDefault(item =>
+                    !string.IsNullOrWhiteSpace(item.Id) &&
+                    ((!string.IsNullOrWhiteSpace(item.Name) && item.Name.Contains(preferredContains, StringComparison.OrdinalIgnoreCase))
+                     || item.Id.Contains(preferredContains, StringComparison.OrdinalIgnoreCase)));
+                if (match != null)
+                {
+                    return match.Id;
+                }
+            }
+
+            return items.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.Id))?.Id ?? string.Empty;
+        }
+
         private void RefreshQuestionMetadataOptions(QuestionMetadataResponse? metadata = null)
         {
             var skillValues = metadata?.Skills?
@@ -1167,8 +1448,50 @@ namespace UniTestSystem.AdminApp.ViewModels
                     .ToList();
             }
 
+            var subjectValues = metadata?.Subjects?
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .Select(item => new QuestionMetadataItem
+                {
+                    Id = item.Id.Trim(),
+                    Name = string.IsNullOrWhiteSpace(item.Name) ? item.Id.Trim() : item.Name.Trim()
+                })
+                .ToList();
+            if (subjectValues == null || subjectValues.Count == 0)
+            {
+                subjectValues = Questions
+                    .Where(q => !string.IsNullOrWhiteSpace(q.SubjectId))
+                    .Select(q => new QuestionMetadataItem
+                    {
+                        Id = q.SubjectId.Trim(),
+                        Name = string.IsNullOrWhiteSpace(q.Subject) ? q.SubjectId.Trim() : q.Subject.Trim()
+                    })
+                    .ToList();
+            }
+
+            var questionBankValues = metadata?.QuestionBanks?
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .Select(item => new QuestionMetadataItem
+                {
+                    Id = item.Id.Trim(),
+                    Name = string.IsNullOrWhiteSpace(item.Name) ? item.Id.Trim() : item.Name.Trim()
+                })
+                .ToList();
+            if (questionBankValues == null || questionBankValues.Count == 0)
+            {
+                questionBankValues = Questions
+                    .Where(q => !string.IsNullOrWhiteSpace(q.QuestionBankId))
+                    .Select(q => new QuestionMetadataItem
+                    {
+                        Id = q.QuestionBankId.Trim(),
+                        Name = q.QuestionBankId.Trim()
+                    })
+                    .ToList();
+            }
+
             RefillMetadataCollection(QuestionSkillOptions, skillValues);
             RefillMetadataCollection(QuestionDifficultyOptions, difficultyValues);
+            RefillMetadataCollection(QuestionSubjectOptions, subjectValues);
+            RefillMetadataCollection(QuestionBankOptions, questionBankValues);
 
             EnsureQuestionMetadataValues();
         }
@@ -1182,6 +1505,8 @@ namespace UniTestSystem.AdminApp.ViewModels
 
             EnsureOptionExists(QuestionSkillOptions, SelectedQuestion.SkillId, SelectedQuestion.Skill);
             EnsureOptionExists(QuestionDifficultyOptions, SelectedQuestion.DifficultyLevelId, SelectedQuestion.Difficulty);
+            EnsureOptionExists(QuestionSubjectOptions, SelectedQuestion.SubjectId, SelectedQuestion.Subject);
+            EnsureOptionExists(QuestionBankOptions, SelectedQuestion.QuestionBankId);
         }
 
         private static void EnsureOptionExists(ObservableCollection<QuestionMetadataItem> items, string? id, string? name = null)
@@ -1243,15 +1568,50 @@ namespace UniTestSystem.AdminApp.ViewModels
             _selectedTestItems.Clear();
             if (SelectedTest != null && SelectedTest.Items != null)
             {
-                foreach (var item in SelectedTest.Items) _selectedTestItems.Add(item);
+                foreach (var item in SelectedTest.Items.OrderBy(item => item.Order))
+                {
+                    _selectedTestItems.Add(new TestItem
+                    {
+                        TestId = item.TestId,
+                        QuestionId = item.QuestionId,
+                        Points = item.Points,
+                        Order = item.Order
+                    });
+                }
             }
         }
 
         private void AddTestItem()
         {
             if (SelectedTest == null) return;
-            // For simplicity, add the first available question not already in test, or just a placeholder
-            var itm = new TestItem { QuestionId = "Select Question", Points = 1 };
+
+            var usedQuestionIds = _selectedTestItems
+                .Where(item => !string.IsNullOrWhiteSpace(item.QuestionId))
+                .Select(item => item.QuestionId.Trim())
+                .ToHashSet(StringComparer.Ordinal);
+
+            var nextQuestion = Questions
+                .FirstOrDefault(question =>
+                    !string.IsNullOrWhiteSpace(question.Id) &&
+                    string.Equals(question.Status, "Approved", StringComparison.OrdinalIgnoreCase) &&
+                    !usedQuestionIds.Contains(question.Id));
+            nextQuestion ??= Questions.FirstOrDefault(question =>
+                !string.IsNullOrWhiteSpace(question.Id) &&
+                !usedQuestionIds.Contains(question.Id));
+
+            if (nextQuestion == null)
+            {
+                StatusMessage = "No more questions available to add.";
+                return;
+            }
+
+            var itm = new TestItem
+            {
+                TestId = SelectedTest.Id,
+                QuestionId = nextQuestion.Id,
+                Points = 1m,
+                Order = _selectedTestItems.Count
+            };
             _selectedTestItems.Add(itm);
             UpdateTestModelFromUI();
         }
@@ -1266,8 +1626,20 @@ namespace UniTestSystem.AdminApp.ViewModels
         private void UpdateTestModelFromUI()
         {
             if (SelectedTest == null) return;
-            SelectedTest.Items = _selectedTestItems.ToList();
-            SelectedTest.QuestionIds = _selectedTestItems.Select(x => x.QuestionId).ToList();
+
+            var normalizedItems = _selectedTestItems
+                .Where(item => !string.IsNullOrWhiteSpace(item.QuestionId))
+                .Select((item, index) => new TestItem
+                {
+                    TestId = SelectedTest.Id,
+                    QuestionId = item.QuestionId.Trim(),
+                    Points = item.Points <= 0 ? 1m : item.Points,
+                    Order = index
+                })
+                .ToList();
+
+            SelectedTest.Items = normalizedItems;
+            SelectedTest.QuestionIds = normalizedItems.Select(x => x.QuestionId).ToList();
         }
 
         private async Task ExportAsync(string type)

@@ -218,6 +218,7 @@
                                 </StackPanel>
 
                                 <StackPanel Grid.Row="12" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}">
+                                    <Button Content="Create" Command="{Binding AddTestCommand}" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
                                     <Button Content="Save" Command="{Binding SaveTestCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
                                     <Button Content="Delete" Command="{Binding DeleteTestCommand}" Width="70"/>
                                 </StackPanel>
@@ -259,11 +260,14 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
@@ -296,8 +300,28 @@
                                           IsTextSearchEnabled="True"
                                           Margin="0,0,0,10"/>
 
-                                <TextBlock Grid.Row="8" Text="Options &amp; Correct Keys:" FontWeight="Bold" Margin="0,10,0,5"/>
-                                <ListBox Grid.Row="9" ItemsSource="{Binding SelectedQuestionOptions}" SelectedItem="{Binding SelectedOption}" Height="100" Margin="0,0,0,5">
+                                <TextBlock Grid.Row="8" Text="Subject:"/>
+                                <ComboBox Grid.Row="9"
+                                          ItemsSource="{Binding QuestionSubjectOptions}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding SelectedQuestion.SubjectId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False"
+                                          IsTextSearchEnabled="True"
+                                          Margin="0,0,0,10"/>
+
+                                <TextBlock Grid.Row="10" Text="Question Bank:"/>
+                                <ComboBox Grid.Row="11"
+                                          ItemsSource="{Binding QuestionBankOptions}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding SelectedQuestion.QuestionBankId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False"
+                                          IsTextSearchEnabled="True"
+                                          Margin="0,0,0,10"/>
+
+                                <TextBlock Grid.Row="12" Text="Options &amp; Correct Keys:" FontWeight="Bold" Margin="0,10,0,5"/>
+                                <ListBox Grid.Row="13" ItemsSource="{Binding SelectedQuestionOptions}" SelectedItem="{Binding SelectedOption}" Height="100" Margin="0,0,0,5">
                                     <ListBox.ItemContainerStyle>
                                         <Style TargetType="ListBoxItem">
                                             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -315,14 +339,14 @@
                                     </ListBox.ItemTemplate>
                                 </ListBox>
                                 
-                                <StackPanel Grid.Row="10" Orientation="Horizontal" Margin="0,0,0,10">
+                                <StackPanel Grid.Row="14" Orientation="Horizontal" Margin="0,0,0,10">
                                     <Button Content="Add Option" Command="{Binding AddOptionCommand}" Width="80" Margin="0,0,5,0"/>
                                     <Button Content="Remove" Command="{Binding RemoveOptionCommand}" Width="60" Margin="0,0,5,0"/>
                                     <Button Content="Set Correct" Command="{Binding ToggleCorrectKeyCommand}" Width="80" Background="#FFF9C4"/>
                                 </StackPanel>
 
-                                <TextBlock Grid.Row="11" Text="Correct Keys:" FontSize="11" Foreground="Gray"/>
-                                <TextBox Grid.Row="12"
+                                <TextBlock Grid.Row="15" Text="Correct Keys:" FontSize="11" Foreground="Gray"/>
+                                <TextBox Grid.Row="16"
                                          Text="{Binding SelectedQuestionCorrectKeysText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                          AcceptsReturn="True"
                                          TextWrapping="Wrap"
@@ -330,7 +354,8 @@
                                          VerticalScrollBarVisibility="Auto"
                                          Margin="0,0,0,10"/>
 
-                                <StackPanel Grid.Row="13" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}">
+                                <StackPanel Grid.Row="18" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}">
+                                    <Button Content="Create" Command="{Binding AddQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
                                     <Button Content="Save" Command="{Binding SaveQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
                                     <Button Content="Submit" Command="{Binding SubmitQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
                                     <Button Content="Approve" Command="{Binding ApproveQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
@@ -374,10 +399,6 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
@@ -391,22 +412,27 @@
                                 <ComboBox Grid.Row="5" SelectedItem="{Binding SelectedUser.Role}" ItemsSource="{Binding EditableRoles}" Margin="0,0,0,10"/>
 
                                 <TextBlock Grid.Row="6" Text="Faculty:"/>
-                                <TextBox Grid.Row="7" Text="{Binding SelectedUser.Department}" Margin="0,0,0,10"/>
-                                
-                                <TextBlock Grid.Row="8" Text="Skill:"/>
-                                <TextBox Grid.Row="9" Text="{Binding SelectedUser.Skill}" Margin="0,0,0,10"/>
+                                <ComboBox Grid.Row="7"
+                                          ItemsSource="{Binding Faculties}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Name"
+                                          SelectedValue="{Binding SelectedUser.Department, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False"
+                                          IsTextSearchEnabled="True"
+                                          Margin="0,0,0,10"/>
 
-                                <TextBlock Grid.Row="10" Text="Level:"/>
-                                <ComboBox Grid.Row="11" Text="{Binding SelectedUser.Level}" Margin="0,0,0,10">
-                                    <ComboBoxItem Content="Junior"/>
-                                    <ComboBoxItem Content="Mid"/>
-                                    <ComboBoxItem Content="Senior"/>
-                                </ComboBox>
+                                <TextBlock Grid.Row="8" Text="Class ID:"/>
+                                <ComboBox Grid.Row="9"
+                                          ItemsSource="{Binding Classes}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding SelectedUser.TeamId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False"
+                                          IsTextSearchEnabled="True"
+                                          Margin="0,0,0,10"/>
 
-                                <TextBlock Grid.Row="12" Text="Class ID:"/>
-                                <TextBox Grid.Row="13" Text="{Binding SelectedUser.TeamId}" Margin="0,0,0,10"/>
-
-                                <StackPanel Grid.Row="14" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                                <StackPanel Grid.Row="10" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                                    <Button Content="Create" Command="{Binding AddUserCommand}" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
                                     <Button Content="Save" Command="{Binding SaveUserCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
                                     <Button Content="Delete" Command="{Binding DeleteUserCommand}" Width="70"/>
                                 </StackPanel>

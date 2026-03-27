@@ -9,6 +9,12 @@ namespace UniTestSystem.AdminApp.Models
 
         [JsonPropertyName("difficulties")]
         public List<QuestionMetadataItem> Difficulties { get; set; } = new();
+
+        [JsonPropertyName("subjects")]
+        public List<QuestionMetadataItem> Subjects { get; set; } = new();
+
+        [JsonPropertyName("questionBanks")]
+        public List<QuestionMetadataItem> QuestionBanks { get; set; } = new();
     }
 
     public class QuestionMetadataItem

@@ -46,6 +46,9 @@ namespace UniTestSystem.AdminApp.Models
         [JsonPropertyName("subject")]
         public string Subject { get; set; } = "";
 
+        [JsonPropertyName("questionBankId")]
+        public string QuestionBankId { get; set; } = "";
+
         [JsonPropertyName("mediaUrl")]
         public string? MediaUrl { get; set; }
 

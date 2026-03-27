@@ -1,6 +1,7 @@
 using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 
 namespace UniTestSystem.Infrastructure.Persistence
@@ -8,7 +9,12 @@ namespace UniTestSystem.Infrastructure.Persistence
     public class AuditService : IAuditService
     {
         private readonly AppDbContext _db;
-        private readonly JsonSerializerOptions _opt = new() { WriteIndented = true };
+        private readonly JsonSerializerOptions _opt = new()
+        {
+            WriteIndented = true,
+            ReferenceHandler = ReferenceHandler.IgnoreCycles,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
 
         public AuditService(AppDbContext db)
         {
@@ -24,12 +30,35 @@ namespace UniTestSystem.Infrastructure.Persistence
                 Action = action,
                 EntityName = entityName,
                 EntityId = entityId,
-                Before = before != null ? JsonSerializer.Serialize(before, _opt) : null,
-                After = after != null ? JsonSerializer.Serialize(after, _opt) : null
+                Before = SerializeForAudit(before),
+                After = SerializeForAudit(after)
             };
 
             _db.AuditEntries.Add(entry);
             await _db.SaveChangesAsync();
+        }
+
+        private string? SerializeForAudit(object? value)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                return JsonSerializer.Serialize(value, _opt);
+            }
+            catch (Exception ex)
+            {
+                var fallback = new
+                {
+                    Type = value.GetType().FullName,
+                    Error = ex.Message
+                };
+
+                return JsonSerializer.Serialize(fallback, _opt);
+            }
         }
     }
 }

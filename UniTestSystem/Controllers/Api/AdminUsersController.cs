@@ -37,10 +37,19 @@ public class AdminUsersController : ControllerBase
         if (IsStaffAndProtectedRole(user.Role))
             return Forbid();
 
+        user.Name = (user.Name ?? string.Empty).Trim();
+        user.Email = (user.Email ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(user.Name) || string.IsNullOrWhiteSpace(user.Email))
+            return BadRequest(new { message = "Name and Email are required." });
+
+        if (await _userAdministrationService.EmailExistsAsync(user.Email))
+            return Conflict(new { message = "Email already exists." });
+
         if (string.IsNullOrEmpty(user.PasswordHash))
         {
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword("123456");
         }
+
         await _userAdministrationService.CreateRawAsync(user);
         return CreatedAtAction(nameof(GetById), new { id = user.Id }, user);
     }
@@ -54,7 +63,24 @@ public class AdminUsersController : ControllerBase
         if (IsStaffAndProtectedRole(user.Role) || IsStaffAndProtectedRole(existing.Role))
             return Forbid();
 
-        var updated = await _userAdministrationService.UpdateRawAsync(id, user);
+        var normalizedName = (user.Name ?? string.Empty).Trim();
+        var normalizedEmail = (user.Email ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalizedName) || string.IsNullOrWhiteSpace(normalizedEmail))
+            return BadRequest(new { message = "Name and Email are required." });
+
+        if (await _userAdministrationService.EmailExistsAsync(normalizedEmail, id))
+            return Conflict(new { message = "Email already exists." });
+
+        existing.Name = normalizedName;
+        existing.Email = normalizedEmail;
+        existing.Role = user.Role;
+        existing.UpdatedAt = DateTime.UtcNow;
+        if (!string.IsNullOrWhiteSpace(user.PasswordHash))
+        {
+            existing.PasswordHash = user.PasswordHash;
+        }
+
+        var updated = await _userAdministrationService.UpdateRawAsync(id, existing);
         if (!updated) return NotFound();
         return NoContent();
     }
