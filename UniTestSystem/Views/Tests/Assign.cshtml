@@ -1,11 +1,40 @@
 @model UniTestSystem.ViewModels.Tests.AssignUsersViewModel
+@using UniTestSystem.Domain
 @{
     ViewData["Title"] = "Assign Students";
+    var students = Model.Users.OfType<Student>().ToList();
+    var selectedClassId = Model.SelectedClassId ?? Model.SelectedFaculty;
+    var classLookup = Model.AvailableClasses
+        .Where(c => !string.IsNullOrWhiteSpace(c.Id))
+        .GroupBy(c => c.Id)
+        .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+    var assignedCourseCount = Model.AssignedUserIds.Count;
+    var defaultStart = DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-ddTHH:mm");
+    var defaultEnd = DateTime.UtcNow.AddDays(30).ToString("yyyy-MM-ddTHH:mm");
+
+    string GetClassDisplay(string? classId)
+    {
+        if (string.IsNullOrWhiteSpace(classId))
+        {
+            return "-";
+        }
+
+        if (classLookup.TryGetValue(classId, out var clazz))
+        {
+            var prefix = string.IsNullOrWhiteSpace(clazz.Code) ? clazz.Id : clazz.Code;
+            return string.IsNullOrWhiteSpace(clazz.Name) ? prefix : $"{prefix} - {clazz.Name}";
+        }
+
+        return classId;
+    }
 }
 
-<div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="bi bi-people me-2"></i>Giao bài thi cho sinh viên</h2>
+<div class="container-fluid py-4 assign-test-page">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-clipboard-check me-2"></i>Giao bài thi cho sinh viên</h2>
+            <div class="text-muted small">Chỉ hiển thị đúng phạm vi sinh viên hợp lệ theo Course của bài test.</div>
+        </div>
         <a class="btn btn-outline-secondary" href="/Tests"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
     </div>
 
@@ -16,101 +45,143 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     }
-    @if (TempData["Msg"] is string m)
+    @if (TempData["Msg"] is string msg)
     {
         <div class="alert alert-success alert-dismissible fade show" role="alert">
-            <i class="bi bi-check-circle me-2"></i>@m
+            <i class="bi bi-check-circle me-2"></i>@msg
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     }
 
-    <div class="alert alert-info shadow-sm">
-        <i class="bi bi-info-circle-fill me-2"></i>
-        <strong>Lưu ý:</strong> Bài thi sẽ được tự động chuyển sang trạng thái <b>Published</b> khi giao.
-        Nếu không chọn thời gian, bài thi sẽ có hiệu lực từ thời điểm hiện tại đến 30 ngày tới.
-    </div>
-
     <div class="card shadow-sm mb-4">
-        <div class="card-header bg-light">
-            <h5 class="mb-0">Thông tin bài thi: <span class="text-primary">@Model.TestTitle</span></h5>
+        <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="fw-semibold">Bài thi: <span class="text-primary">@Model.TestTitle</span></div>
+            @if (Model.IsOwner)
+            {
+                <span class="badge text-bg-success">Bạn là giảng viên phụ trách / caller hợp lệ</span>
+            }
         </div>
         <div class="card-body">
-            <!-- Bộ lọc Faculty (GET) -->
-            <form method="get" action="/Tests/Assign" class="row g-3 align-items-end mb-4 border-bottom pb-4">
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-md-3">
+                    <div class="border rounded p-3 h-100 bg-light-subtle">
+                        <div class="text-muted text-uppercase small">Môn học</div>
+                        <div class="fw-semibold mt-1">@(string.IsNullOrWhiteSpace(Model.CourseName) ? "-" : Model.CourseName)</div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-3">
+                    <div class="border rounded p-3 h-100 bg-light-subtle">
+                        <div class="text-muted text-uppercase small">Giảng viên</div>
+                        <div class="fw-semibold mt-1">@(string.IsNullOrWhiteSpace(Model.LecturerName) ? "-" : Model.LecturerName)</div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-3">
+                    <div class="border rounded p-3 h-100 bg-success-subtle border-success-subtle">
+                        <div class="text-muted text-uppercase small">Đã enrolled</div>
+                        <div class="fw-semibold mt-1">@Model.TotalEnrolled sinh viên</div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-3">
+                    <div class="border rounded p-3 h-100 bg-warning-subtle border-warning-subtle">
+                        <div class="text-muted text-uppercase small">Đã assign</div>
+                        <div class="fw-semibold mt-1">@assignedCourseCount / @Model.TotalEnrolled</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert alert-info">
+                Chỉ sinh viên hợp lệ theo Course mới được assign. Sinh viên ngoài phạm vi sẽ bị bỏ qua ở server-side.
+            </div>
+
+            <form method="get" action="/Tests/Assign" class="row g-2 align-items-end mb-4">
                 <input type="hidden" name="id" value="@Model.TestId" />
-                <div class="col-md-4">
-                    <label class="form-label fw-bold">Lọc theo Khoa (Faculty)</label>
-                    <select name="faculty" class="form-select">
-                        <option value="">-- Tất cả các khoa --</option>
-                        @foreach (var d in Model.Faculties)
+                <div class="col-12 col-md-5 col-lg-4">
+                    <label class="form-label fw-semibold">Lọc theo lớp</label>
+                    <select name="classFilter" class="form-select">
+                        <option value="">-- Tất cả lớp --</option>
+                        @foreach (var c in Model.AvailableClasses)
                         {
-                            var isSelected = string.Equals(d ?? "", Model.SelectedFaculty ?? "", StringComparison.OrdinalIgnoreCase);
-                            <option value="@d" selected="@(isSelected ? "selected" : null)">
-                                @(string.IsNullOrEmpty(d) ? "(Trống)" : d)
+                            if (string.IsNullOrWhiteSpace(c.Id)) { continue; }
+                            var optionLabel = $"{(string.IsNullOrWhiteSpace(c.Code) ? c.Id : c.Code)} - {c.Name}";
+                            <option value="@c.Id" selected="@(string.Equals(c.Id, selectedClassId, StringComparison.Ordinal) ? "selected" : null)">
+                                @optionLabel
                             </option>
                         }
                     </select>
                 </div>
                 <div class="col-auto">
-                    <button class="btn btn-primary px-4"><i class="bi bi-filter me-1"></i>Lọc</button>
-                    @if (!string.IsNullOrEmpty(Model.SelectedFaculty))
-                    {
-                        <a href="/Tests/Assign?id=@Model.TestId" class="btn btn-link text-decoration-none">Xóa lọc</a>
-                    }
+                    <button class="btn btn-primary"><i class="bi bi-funnel me-1"></i>Lọc</button>
+                </div>
+                <div class="col-auto">
+                    <a href="/Tests/Assign?id=@Model.TestId" class="btn btn-outline-secondary">Xóa lọc</a>
                 </div>
             </form>
 
-            <!-- Giao cho toàn bộ Faculty (POST) -->
-            <form method="post" asp-action="AssignByFaculty" asp-controller="Tests" class="row g-3 align-items-end mb-4 bg-light p-3 rounded border">
+            <form method="post" asp-action="AssignByClass" asp-controller="Tests" class="row g-3 align-items-end mb-4 p-3 rounded border bg-light">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="testId" value="@Model.TestId" />
-                <div class="col-md-4">
-                    <label class="form-label fw-bold"><i class="bi bi-building me-1"></i>Giao theo Khoa</label>
-                    <select name="faculty" class="form-select" required>
-                        <option value="">-- Chọn Khoa để giao bài --</option>
-                        @foreach (var d in Model.Faculties)
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold">Assign theo lớp</label>
+                    <select name="classId" class="form-select" required>
+                        <option value="">-- Chọn lớp --</option>
+                        @foreach (var c in Model.AvailableClasses)
                         {
-                            var isSelected = string.Equals(d ?? "", Model.SelectedFaculty ?? "", StringComparison.OrdinalIgnoreCase);
-                            <option value="@d" selected="@(isSelected ? "selected" : null)">
-                                @(string.IsNullOrEmpty(d) ? "(Trống)" : d)
+                            if (string.IsNullOrWhiteSpace(c.Id)) { continue; }
+                            <option value="@c.Id" selected="@(string.Equals(c.Id, selectedClassId, StringComparison.Ordinal) ? "selected" : null)">
+                                @(string.IsNullOrWhiteSpace(c.Code) ? c.Id : c.Code) - @c.Name
                             </option>
                         }
                     </select>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-bold">Bắt đầu (UTC)</label>
-                    <input type="datetime-local" class="form-control" name="startAt"
-                           value="@DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-ddTHH:mm")" />
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">Bắt đầu (UTC)</label>
+                    <input type="datetime-local" class="form-control" name="startAt" value="@defaultStart" />
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-bold">Kết thúc (UTC)</label>
-                    <input type="datetime-local" class="form-control" name="endAt"
-                           value="@DateTime.UtcNow.AddDays(30).ToString("yyyy-MM-ddTHH:mm")" />
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">Kết thúc (UTC)</label>
+                    <input type="datetime-local" class="form-control" name="endAt" value="@defaultEnd" />
                 </div>
-                <div class="col-md-2">
-                    <button class="btn btn-danger w-100"><i class="bi bi-check-all me-1"></i>Giao cho Khoa</button>
+                <div class="col-12 col-md-2">
+                    <button class="btn btn-outline-primary w-100"><i class="bi bi-collection me-1"></i>Assign lớp</button>
                 </div>
             </form>
 
-            <!-- Giao cho từng sinh viên (POST) -->
-            <form method="post" action="/Tests/Assign">
+            <form id="assignUsersForm" method="post" action="/Tests/Assign">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="testId" value="@Model.TestId" />
+                <input type="hidden" name="classFilter" value="@selectedClassId" />
 
-                <div class="d-flex justify-content-between align-items-end mb-3">
-                    <div class="row g-2 flex-grow-1 me-3">
-                        <div class="col-md-5">
-                            <label class="form-label fw-bold">Bắt đầu (UTC)</label>
-                            <input type="datetime-local" class="form-control" name="startAt"
-                                   value="@DateTime.UtcNow.AddDays(-1).ToString("yyyy-MM-ddTHH:mm")" />
-                        </div>
-                        <div class="col-md-5">
-                            <label class="form-label fw-bold">Kết thúc (UTC)</label>
-                            <input type="datetime-local" class="form-control" name="endAt"
-                                   value="@DateTime.UtcNow.AddDays(30).ToString("yyyy-MM-ddTHH:mm")" />
-                        </div>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 p-3 rounded border bg-primary-subtle mb-3">
+                    <div>
+                        <div class="fw-semibold">Assign nhanh</div>
+                        <div class="small text-muted">Giao cho toàn bộ sinh viên trong danh sách đang hiển thị.</div>
                     </div>
-                    <button class="btn btn-success px-4"><i class="bi bi-save me-1"></i>Lưu danh sách</button>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <input type="datetime-local" id="quickStartAt" class="form-control form-control-sm" style="min-width: 180px;" value="@defaultStart" />
+                        <span class="text-muted small">đến</span>
+                        <input type="datetime-local" id="quickEndAt" class="form-control form-control-sm" style="min-width: 180px;" value="@defaultEnd" />
+                        <button type="button" id="assignAllEnrolledBtn" class="btn btn-success btn-sm">
+                            <i class="bi bi-check2-all me-1"></i>Assign tất cả enrolled
+                        </button>
+                    </div>
+                </div>
+
+                <div class="row g-2 align-items-end mb-3">
+                    <div class="col-12 col-md-3">
+                        <label class="form-label fw-semibold">Trạng thái assign</label>
+                        <select id="assignStatusFilter" class="form-select">
+                            <option value="all">-- Tất cả --</option>
+                            <option value="assigned">Đã assign</option>
+                            <option value="unassigned">Chưa assign</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label fw-semibold">Tìm kiếm</label>
+                        <input id="searchUserInput" type="text" class="form-control" placeholder="Tên, email hoặc mã sinh viên..." />
+                    </div>
+                    <div class="col-auto">
+                        <button type="button" id="clearClientFilterBtn" class="btn btn-outline-secondary">Xóa lọc client</button>
+                    </div>
                 </div>
 
                 <div class="table-responsive">
@@ -121,41 +192,73 @@
                                     <input type="checkbox" id="selectAll" class="form-check-input" />
                                 </th>
                                 <th>Họ tên</th>
+                                <th>Mã SV</th>
                                 <th>Email</th>
                                 <th>Lớp</th>
-                                <th>Khoa</th>
                                 <th>Năm học</th>
+                                <th>Enrolled</th>
+                                <th>Trạng thái</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            @if (Model.Users.Any())
+                        <tbody id="assignTableBody">
+                            @if (students.Any())
                             {
-                                @foreach (var u in Model.Users)
+                                @foreach (var student in students)
                                 {
-                                    var isChecked = Model.AssignedUserIds.Contains(u.Id);
-                                    <tr>
+                                    var isAssigned = Model.AssignedUserIds.Contains(student.Id);
+                                    var classDisplay = GetClassDisplay(student.StudentClassId);
+                                    <tr class="assign-row" data-assigned="@(isAssigned ? "1" : "0")">
                                         <td class="text-center">
-                                            <input type="checkbox" name="userIds[]" value="@u.Id" checked="@(isChecked ? "checked" : null)" class="form-check-input user-cb" />
+                                            <input type="checkbox"
+                                                   name="userIds[]"
+                                                   value="@student.Id"
+                                                   checked="@(isAssigned ? "checked" : null)"
+                                                   class="form-check-input user-cb" />
                                         </td>
-                                        <td><span class="fw-bold">@u.Name</span></td>
-                                        <td>@u.Email</td>
-                                        @{
-                                            var stu = u as Student;
-                                        }
-                                        <td><span class="badge bg-secondary">@(stu?.StudentClassId ?? "-")</span></td>
-                                        <td>-</td>
-                                        <td>@(stu?.AcademicYear ?? "-")</td>
+                                        <td class="fw-semibold user-name">@student.Name</td>
+                                        <td class="text-muted user-code">@student.StudentCode</td>
+                                        <td class="user-email">@student.Email</td>
+                                        <td><span class="badge text-bg-primary">@classDisplay</span></td>
+                                        <td><span class="badge text-bg-warning">@student.AcademicYear</span></td>
+                                        <td><span class="badge text-bg-success">Enrolled</span></td>
+                                        <td>
+                                            @if (isAssigned)
+                                            {
+                                                <span class="badge text-bg-success">Đã assign</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge text-bg-secondary">Chưa assign</span>
+                                            }
+                                        </td>
                                     </tr>
                                 }
                             }
                             else
                             {
-                                <tr>
-                                    <td colspan="6" class="text-center py-4 text-muted">Không tìm thấy sinh viên nào phù hợp.</td>
+                                <tr id="emptyRow">
+                                    <td colspan="8" class="text-center py-4 text-muted">Không có sinh viên phù hợp trong phạm vi được phép assign.</td>
                                 </tr>
                             }
                         </tbody>
                     </table>
+                </div>
+
+                <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 border-top pt-3 mt-2">
+                    <div class="small text-muted">
+                        Đã chọn: <strong id="selectedCounter">0</strong> / <strong id="visibleCounter">0</strong> sinh viên đang hiển thị
+                    </div>
+                    <div class="d-flex flex-wrap align-items-end gap-2">
+                        <div>
+                            <label class="form-label small fw-semibold mb-1">Bắt đầu (UTC)</label>
+                            <input type="datetime-local" id="bulkStartAt" name="startAt" class="form-control" value="@defaultStart" />
+                        </div>
+                        <div>
+                            <label class="form-label small fw-semibold mb-1">Kết thúc (UTC)</label>
+                            <input type="datetime-local" id="bulkEndAt" name="endAt" class="form-control" value="@defaultEnd" />
+                        </div>
+                        <button class="btn btn-success"><i class="bi bi-save me-1"></i>Lưu danh sách đã chọn</button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -164,9 +267,115 @@
 
 @section Scripts {
     <script>
-        document.getElementById('selectAll')?.addEventListener('change', function() {
-            const isChecked = this.checked;
-            document.querySelectorAll('.user-cb').forEach(cb => cb.checked = isChecked);
-        });
+        (function () {
+            const tableBody = document.getElementById('assignTableBody');
+            const rows = Array.from(document.querySelectorAll('.assign-row'));
+            const selectAll = document.getElementById('selectAll');
+            const statusFilter = document.getElementById('assignStatusFilter');
+            const searchInput = document.getElementById('searchUserInput');
+            const clearClientFilterBtn = document.getElementById('clearClientFilterBtn');
+            const selectedCounter = document.getElementById('selectedCounter');
+            const visibleCounter = document.getElementById('visibleCounter');
+            const assignAllBtn = document.getElementById('assignAllEnrolledBtn');
+            const assignForm = document.getElementById('assignUsersForm');
+            const quickStartAt = document.getElementById('quickStartAt');
+            const quickEndAt = document.getElementById('quickEndAt');
+            const bulkStartAt = document.getElementById('bulkStartAt');
+            const bulkEndAt = document.getElementById('bulkEndAt');
+            const emptyRow = document.getElementById('emptyRow');
+
+            function getVisibleRows() {
+                return rows.filter(r => !r.classList.contains('d-none'));
+            }
+
+            function updateCounter() {
+                const visibleRows = getVisibleRows();
+                const visibleChecks = visibleRows
+                    .map(r => r.querySelector('.user-cb'))
+                    .filter(cb => cb);
+
+                const selectedVisibleCount = visibleChecks.filter(cb => cb.checked).length;
+                selectedCounter.textContent = String(selectedVisibleCount);
+                visibleCounter.textContent = String(visibleChecks.length);
+
+                if (selectAll) {
+                    selectAll.checked = visibleChecks.length > 0 && visibleChecks.every(cb => cb.checked);
+                }
+            }
+
+            function applyFilters() {
+                const selectedStatus = statusFilter ? statusFilter.value : 'all';
+                const keyword = (searchInput ? searchInput.value : '').trim().toLowerCase();
+
+                rows.forEach(row => {
+                    const isAssigned = row.dataset.assigned === '1';
+                    const statusOk = selectedStatus === 'all'
+                        || (selectedStatus === 'assigned' && isAssigned)
+                        || (selectedStatus === 'unassigned' && !isAssigned);
+
+                    const name = (row.querySelector('.user-name')?.textContent || '').toLowerCase();
+                    const email = (row.querySelector('.user-email')?.textContent || '').toLowerCase();
+                    const code = (row.querySelector('.user-code')?.textContent || '').toLowerCase();
+                    const searchOk = !keyword || name.includes(keyword) || email.includes(keyword) || code.includes(keyword);
+
+                    row.classList.toggle('d-none', !(statusOk && searchOk));
+                });
+
+                if (emptyRow) {
+                    const hasVisibleRows = getVisibleRows().length > 0;
+                    emptyRow.classList.toggle('d-none', hasVisibleRows);
+                }
+
+                updateCounter();
+            }
+
+            if (selectAll) {
+                selectAll.addEventListener('change', () => {
+                    const checked = selectAll.checked;
+                    getVisibleRows().forEach(row => {
+                        const cb = row.querySelector('.user-cb');
+                        if (cb) cb.checked = checked;
+                    });
+                    updateCounter();
+                });
+            }
+
+            if (statusFilter) {
+                statusFilter.addEventListener('change', applyFilters);
+            }
+            if (searchInput) {
+                searchInput.addEventListener('input', applyFilters);
+            }
+            if (clearClientFilterBtn) {
+                clearClientFilterBtn.addEventListener('click', () => {
+                    if (statusFilter) statusFilter.value = 'all';
+                    if (searchInput) searchInput.value = '';
+                    applyFilters();
+                });
+            }
+
+            tableBody?.addEventListener('change', (event) => {
+                const target = event.target;
+                if (target && target.classList.contains('user-cb')) {
+                    updateCounter();
+                }
+            });
+
+            assignAllBtn?.addEventListener('click', () => {
+                if (quickStartAt && bulkStartAt) bulkStartAt.value = quickStartAt.value;
+                if (quickEndAt && bulkEndAt) bulkEndAt.value = quickEndAt.value;
+
+                const visibleRows = getVisibleRows();
+                visibleRows.forEach(row => {
+                    const cb = row.querySelector('.user-cb');
+                    if (cb) cb.checked = true;
+                });
+
+                updateCounter();
+                assignForm?.submit();
+            });
+
+            applyFilters();
+        })();
     </script>
 }

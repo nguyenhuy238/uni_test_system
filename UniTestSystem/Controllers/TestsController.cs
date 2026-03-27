@@ -4,6 +4,7 @@ using UniTestSystem.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using System.Security.Claims;
 using System;
 using System.Linq;
 using System.Collections.Generic;
@@ -270,13 +271,24 @@ namespace UniTestSystem.Controllers
         private void SetFlashMessageByContent(string message)
         {
             if (message.StartsWith("Không thể", StringComparison.OrdinalIgnoreCase) ||
-                message.StartsWith("Thiếu", StringComparison.OrdinalIgnoreCase))
+                message.StartsWith("Thiếu", StringComparison.OrdinalIgnoreCase) ||
+                message.StartsWith("Bạn không", StringComparison.OrdinalIgnoreCase))
             {
                 TempData["Err"] = message;
                 return;
             }
 
             TempData["Msg"] = message;
+        }
+
+        private string GetCurrentUserId()
+        {
+            return User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        }
+
+        private bool IsPrivilegedCaller()
+        {
+            return User.IsInRole(Role.Admin.ToString()) || User.IsInRole(Role.Staff.ToString());
         }
 
         // ---------- Delete ----------
@@ -342,18 +354,32 @@ namespace UniTestSystem.Controllers
         [HttpGet("Tests/Assign/{id}")]
         [HttpGet("/Tests/Assign")]
         [Authorize(Policy = PermissionCodes.Exam_Schedule)]
-        public async Task<IActionResult> Assign(string id, [FromQuery] string? faculty = null)
+        public async Task<IActionResult> Assign(string id, [FromQuery] string? classFilter = null, [FromQuery] string? faculty = null)
         {
             if (string.IsNullOrWhiteSpace(id))
                 return NotFound();
 
-            var assignData = await _testAdministrationService.GetAssignDataAsync(id, faculty);
-            if (assignData == null) return NotFound();
+            var selectedClassId = !string.IsNullOrWhiteSpace(classFilter) ? classFilter : faculty;
+            var currentUserId = GetCurrentUserId();
+            var isPrivileged = IsPrivilegedCaller();
+
+            var assignData = await _testAdministrationService.GetAssignDataAsync(id, selectedClassId, currentUserId, isPrivileged);
+            if (assignData == null)
+            {
+                TempData["Err"] = "Bạn không có quyền assign bài test này hoặc bài test không tồn tại.";
+                return RedirectToAction(nameof(Index));
+            }
 
             var vm = new AssignUsersViewModel
             {
                 TestId = assignData.TestId,
                 TestTitle = assignData.TestTitle,
+                CourseName = assignData.CourseName,
+                LecturerName = assignData.LecturerName,
+                TotalEnrolled = assignData.TotalEnrolled,
+                AvailableClasses = assignData.AvailableClasses,
+                SelectedClassId = assignData.SelectedClassId,
+                IsOwner = assignData.IsOwner,
                 Users = assignData.Users,
                 AssignedUserIds = assignData.AssignedUserIds,
                 Faculties = assignData.Faculties,
@@ -371,31 +397,47 @@ namespace UniTestSystem.Controllers
             [FromRoute] string? id,                 // không dùng, chỉ để match route nếu có
             [FromForm] string testId,
             [FromForm] List<string>? userIds,
+            [FromForm] string? classFilter,
             [FromForm] DateTime? startAt,
             [FromForm] DateTime? endAt)
         {
-            var (found, message) = await _testAdministrationService.AssignUsersAsync(testId, userIds, startAt, endAt);
+            var currentUserId = GetCurrentUserId();
+            var isPrivileged = IsPrivilegedCaller();
+
+            var (found, message) = await _testAdministrationService.AssignUsersAsync(testId, userIds, startAt, endAt, currentUserId, isPrivileged);
             if (!found) return NotFound();
             SetFlashMessageByContent(message);
-            return RedirectToAction(nameof(Assign), new { id = testId });
+            return RedirectToAction(nameof(Assign), new { id = testId, classFilter });
         }
 
-        // ---------- AssignByFaculty ----------
+        // ---------- AssignByClass (alias route: AssignByFaculty) ----------
+        [HttpPost("/Tests/AssignByClass")]
         [HttpPost("/Tests/AssignByFaculty")]
         [ValidateAntiForgeryToken]
         [Authorize(Policy = PermissionCodes.Exam_Schedule)]
-        public async Task<IActionResult> AssignByFaculty(string testId, string faculty, DateTime? startAt, DateTime? endAt)
+        public async Task<IActionResult> AssignByClass(string testId, string? classId, string? faculty, DateTime? startAt, DateTime? endAt)
         {
-            if (string.IsNullOrWhiteSpace(faculty))
+            var selectedClassId = !string.IsNullOrWhiteSpace(classId) ? classId : faculty;
+            if (string.IsNullOrWhiteSpace(selectedClassId))
             {
                 TempData["Err"] = "Vui lòng chọn Lớp/Khoa.";
                 return RedirectToAction(nameof(Assign), new { id = testId });
             }
 
-            var (found, message) = await _testAdministrationService.AssignByFacultyAsync(testId, faculty, startAt, endAt);
+            var currentUserId = GetCurrentUserId();
+            var isPrivileged = IsPrivilegedCaller();
+
+            var (found, message) = await _testAdministrationService.AssignByClassAsync(
+                testId,
+                selectedClassId,
+                startAt,
+                endAt,
+                currentUserId,
+                isPrivileged);
+
             if (!found) return NotFound();
             SetFlashMessageByContent(message);
-            return RedirectToAction(nameof(Assign), new { id = testId, faculty });
+            return RedirectToAction(nameof(Assign), new { id = testId, classFilter = selectedClassId });
         }
 
         // ---------- BulkAssign ----------

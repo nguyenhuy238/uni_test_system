@@ -10,6 +10,10 @@ public sealed class TestAdministrationService : ITestAdministrationService
     private readonly IRepository<Test> _testRepo;
     private readonly IRepository<Assessment> _assessmentRepo;
     private readonly IRepository<Student> _studentRepo;
+    private readonly IRepository<Enrollment> _enrollmentRepo;
+    private readonly IRepository<Course> _courseRepo;
+    private readonly IRepository<StudentClass> _studentClassRepo;
+    private readonly IRepository<User> _userRepo;
     private readonly IQuestionService _questionService;
     private readonly INotificationService? _notificationService;
 
@@ -17,12 +21,20 @@ public sealed class TestAdministrationService : ITestAdministrationService
         IRepository<Test> testRepo,
         IRepository<Assessment> assessmentRepo,
         IRepository<Student> studentRepo,
+        IRepository<Enrollment> enrollmentRepo,
+        IRepository<Course> courseRepo,
+        IRepository<StudentClass> studentClassRepo,
+        IRepository<User> userRepo,
         IQuestionService questionService,
         INotificationService? notificationService = null)
     {
         _testRepo = testRepo;
         _assessmentRepo = assessmentRepo;
         _studentRepo = studentRepo;
+        _enrollmentRepo = enrollmentRepo;
+        _courseRepo = courseRepo;
+        _studentClassRepo = studentClassRepo;
+        _userRepo = userRepo;
         _questionService = questionService;
         _notificationService = notificationService;
     }
@@ -294,46 +306,64 @@ public sealed class TestAdministrationService : ITestAdministrationService
         return true;
     }
 
-    public async Task<TestAssignData?> GetAssignDataAsync(string testId, string? faculty)
+    public async Task<TestAssignData?> GetAssignDataAsync(string testId, string? classFilter, string? currentUserId = null, bool isPrivileged = false)
     {
-        var test = await _testRepo.FirstOrDefaultAsync(t => t.Id == testId);
-        if (test == null)
+        var (allowed, _, test, course, isOwner, isAdmin, _) =
+            await ValidateAssignContextAsync(testId, currentUserId, isPrivileged);
+        if (!allowed || test == null || course == null)
         {
             return null;
         }
 
-        var allStudents = await _studentRepo.GetAllAsync();
-        var classes = allStudents
-            .Select(u => u.StudentClassId ?? "")
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(s => s)
-            .ToList();
+        var enrolledStudentIds = await GetEnrolledStudentIdsAsync(course.Id);
+        var allStudents = await _studentRepo.GetAllAsync(s => !s.IsDeleted);
 
-        var usersToShow = string.IsNullOrWhiteSpace(faculty)
+        var scopedStudents = isAdmin
             ? allStudents
-            : allStudents.Where(u => string.Equals(u.StudentClassId ?? "", faculty, StringComparison.OrdinalIgnoreCase)).ToList();
+            : allStudents.Where(s => enrolledStudentIds.Contains(s.Id)).ToList();
 
-        var assigns = (await _assessmentRepo.GetAllAsync())
-            .Where(a => a.TargetType == "Student")
+        var usersToShow = string.IsNullOrWhiteSpace(classFilter)
+            ? scopedStudents
+            : scopedStudents.Where(s => string.Equals(s.StudentClassId, classFilter, StringComparison.Ordinal)).ToList();
+
+        var assignedUserIds = (await _assessmentRepo.GetAllAsync(a =>
+                !a.IsDeleted &&
+                a.TargetType == "Student" &&
+                a.CourseId == course.Id))
             .Select(a => a.TargetValue)
             .Where(v => !string.IsNullOrWhiteSpace(v))
             .Cast<string>()
             .ToHashSet(StringComparer.Ordinal);
 
+        var availableClasses = await ResolveAvailableClassesAsync(scopedStudents);
+        var legacyClassIds = availableClasses
+            .Select(c => c.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .ToList();
+
         return new TestAssignData
         {
             TestId = test.Id,
             TestTitle = test.Title,
+            CourseName = course.Name,
+            LecturerName = await ResolveLecturerNameAsync(course.LecturerId),
+            TotalEnrolled = isAdmin ? allStudents.Count : enrolledStudentIds.Count,
+            AvailableClasses = availableClasses,
+            AvailableClassCodes = availableClasses.Select(c => c.Code).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList(),
+            IsOwner = isOwner || isAdmin,
             Users = usersToShow.Cast<User>().ToList(),
-            AssignedUserIds = assigns,
-            Faculties = classes,
-            SelectedFaculty = faculty
+            AssignedUserIds = assignedUserIds,
+            Faculties = legacyClassIds,
+            SelectedFaculty = classFilter,
+            SelectedClassId = classFilter
         };
     }
 
     public async Task<(bool Found, string Message)> AssignToUserAsync(string testId, string userId, DateTime? startAt = null, DateTime? endAt = null)
     {
-        var test = await _testRepo.FirstOrDefaultAsync(t => t.Id == testId);
+        var test = await _testRepo.FirstOrDefaultAsync(t => t.Id == testId && !t.IsDeleted);
         if (test == null)
         {
             return (false, "Không tìm thấy bài test.");
@@ -342,6 +372,11 @@ public sealed class TestAdministrationService : ITestAdministrationService
         if (!TryGetAssessmentCourseId(test, out var courseId))
         {
             return (true, "Không thể giao bài: test chưa được gắn Course. Vui lòng vào Edit Test và chọn Course trước khi assign.");
+        }
+
+        if (startAt.HasValue && endAt.HasValue && startAt.Value >= endAt.Value)
+        {
+            return (true, "Không thể giao bài: thời gian bắt đầu phải trước thời gian kết thúc.");
         }
 
         if (!test.IsPublished)
@@ -382,21 +417,48 @@ public sealed class TestAdministrationService : ITestAdministrationService
         return (true, $"Đã assign test '{test.Title}' cho sinh viên '{userId}'.");
     }
 
-    public async Task<(bool Found, string Message)> AssignUsersAsync(string testId, IReadOnlyCollection<string>? userIds, DateTime? startAt = null, DateTime? endAt = null)
+    public async Task<(bool Found, string Message)> AssignUsersAsync(
+        string testId,
+        IReadOnlyCollection<string>? userIds,
+        DateTime? startAt = null,
+        DateTime? endAt = null,
+        string? currentUserId = null,
+        bool isPrivileged = false)
     {
-        var test = await _testRepo.FirstOrDefaultAsync(t => t.Id == testId);
-        if (test == null)
+        var (allowed, found, test, course, _, isAdmin, denialMessage) =
+            await ValidateAssignContextAsync(testId, currentUserId, isPrivileged);
+        if (!found || test == null)
         {
             return (false, "Không tìm thấy bài test.");
         }
+        if (!allowed || course == null)
+        {
+            return (true, denialMessage);
+        }
 
-        var newAssigned = (userIds ?? Array.Empty<string>())
+        if (startAt.HasValue && endAt.HasValue && startAt.Value >= endAt.Value)
+        {
+            return (true, "Không thể assign: thời gian bắt đầu phải trước thời gian kết thúc.");
+        }
+
+        var requestedUserIds = (userIds ?? Array.Empty<string>())
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
-        var courseId = string.Empty;
-        if (newAssigned.Count > 0 && !TryGetAssessmentCourseId(test, out courseId))
+        var enrolledStudentIds = await GetEnrolledStudentIdsAsync(course.Id);
+        var validUserIds = isAdmin
+            ? requestedUserIds
+            : requestedUserIds.Where(id => enrolledStudentIds.Contains(id)).ToList();
+        var skippedCount = requestedUserIds.Count - validUserIds.Count;
+
+        foreach (var invalidUserId in requestedUserIds.Except(validUserIds, StringComparer.Ordinal))
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[TestAdministrationService] Skip assigning test '{testId}' to user '{invalidUserId}' because user is not enrolled in course '{course.Id}'.");
+        }
+
+        if (!TryGetAssessmentCourseId(test, out var courseId))
         {
             return (true, "Không thể giao bài: test chưa được gắn Course. Vui lòng vào Edit Test và chọn Course trước khi assign.");
         }
@@ -416,14 +478,16 @@ public sealed class TestAdministrationService : ITestAdministrationService
             await _assessmentRepo.DeleteAsync(a => a.TargetType == "Student" && a.Id == test.AssessmentId);
         }
 
-        if (newAssigned.Count == 0)
+        if (validUserIds.Count == 0)
         {
             test.AssessmentId = "";
             await _testRepo.UpsertAsync(x => x.Id == test.Id, test);
-            return (true, "Đã lưu: không có sinh viên nào được assign.");
+            return skippedCount > 0
+                ? (true, $"Đã assign 0 sinh viên. Bỏ qua {skippedCount} (không enrolled).")
+                : (true, "Đã lưu: không có sinh viên nào được assign.");
         }
 
-        foreach (var uid in newAssigned)
+        foreach (var uid in validUserIds)
         {
             var assessment = new Assessment
             {
@@ -440,27 +504,85 @@ public sealed class TestAdministrationService : ITestAdministrationService
         }
         await _testRepo.UpsertAsync(x => x.Id == test.Id, test);
 
-        var allStudents = await _studentRepo.GetAllAsync();
+        var allStudents = await _studentRepo.GetAllAsync(su => !su.IsDeleted);
         var targets = allStudents
-            .Where(u => newAssigned.Contains(u.Id))
+            .Where(u => validUserIds.Contains(u.Id))
             .Select(u => new AssignmentNotifyTarget { User = (User)u, SessionId = string.Empty })
             .ToList();
         await NotifySafe(test, targets, s, e);
 
-        return (true, "Đã lưu danh sách assign và publish test.");
+        return skippedCount > 0
+            ? (true, $"Đã assign {validUserIds.Count} sinh viên. Bỏ qua {skippedCount} (không enrolled).")
+            : (true, $"Đã assign {validUserIds.Count} sinh viên.");
     }
 
-    public async Task<(bool Found, string Message)> AssignByFacultyAsync(string testId, string faculty, DateTime? startAt = null, DateTime? endAt = null)
+    public Task<(bool Found, string Message)> AssignByFacultyAsync(
+        string testId,
+        string faculty,
+        DateTime? startAt = null,
+        DateTime? endAt = null,
+        string? currentUserId = null,
+        bool isPrivileged = false)
     {
-        var test = await _testRepo.FirstOrDefaultAsync(t => t.Id == testId);
-        if (test == null)
+        return AssignByClassAsync(testId, faculty, startAt, endAt, currentUserId, isPrivileged);
+    }
+
+    public async Task<(bool Found, string Message)> AssignByClassAsync(
+        string testId,
+        string classId,
+        DateTime? startAt = null,
+        DateTime? endAt = null,
+        string? currentUserId = null,
+        bool isPrivileged = false)
+    {
+        if (string.IsNullOrWhiteSpace(classId))
+        {
+            return (true, "Không thể assign theo lớp: thiếu ClassId.");
+        }
+
+        var (allowed, found, test, course, _, isAdmin, denialMessage) =
+            await ValidateAssignContextAsync(testId, currentUserId, isPrivileged);
+        if (!found || test == null)
         {
             return (false, "Không tìm thấy bài test.");
+        }
+        if (!allowed || course == null)
+        {
+            return (true, denialMessage);
+        }
+
+        if (startAt.HasValue && endAt.HasValue && startAt.Value >= endAt.Value)
+        {
+            return (true, "Không thể assign theo lớp: thời gian bắt đầu phải trước thời gian kết thúc.");
+        }
+
+        var studentClass = await _studentClassRepo.FirstOrDefaultAsync(c => c.Id == classId && !c.IsDeleted);
+        if (studentClass == null)
+        {
+            return (true, "Không thể assign theo lớp: lớp không tồn tại.");
         }
 
         if (!TryGetAssessmentCourseId(test, out var courseId))
         {
             return (true, "Không thể giao bài: test chưa được gắn Course. Vui lòng vào Edit Test và chọn Course trước khi assign.");
+        }
+
+        var allStudents = await _studentRepo.GetAllAsync(s => !s.IsDeleted);
+        var classStudents = allStudents
+            .Where(s => string.Equals(s.StudentClassId, classId, StringComparison.Ordinal))
+            .ToList();
+
+        if (!isAdmin)
+        {
+            var enrolledStudentIds = await GetEnrolledStudentIdsAsync(courseId);
+            classStudents = classStudents
+                .Where(s => enrolledStudentIds.Contains(s.Id))
+                .ToList();
+        }
+
+        if (classStudents.Count == 0)
+        {
+            return (true, $"Không thể assign theo lớp: không có sinh viên hợp lệ trong lớp '{studentClass.Code}'.");
         }
 
         if (!test.IsPublished)
@@ -470,24 +592,45 @@ public sealed class TestAdministrationService : ITestAdministrationService
             await _testRepo.UpsertAsync(t => t.Id == testId, test);
         }
 
-        var s = startAt ?? DateTime.UtcNow.AddDays(-1);
-        var e = endAt ?? DateTime.UtcNow.AddDays(30);
+        var sAt = startAt ?? DateTime.UtcNow.AddDays(-1);
+        var eAt = endAt ?? DateTime.UtcNow.AddDays(30);
 
-        var assessment = new Assessment
+        var classAssessment = new Assessment
         {
             Title = test.Title,
-            StartTime = s,
-            EndTime = e,
+            StartTime = sAt,
+            EndTime = eAt,
             TargetType = "Class",
-            TargetValue = faculty,
+            TargetValue = classId,
             CourseId = courseId,
             Type = AssessmentType.Quiz
         };
-        await _assessmentRepo.InsertAsync(assessment);
+        await _assessmentRepo.InsertAsync(classAssessment);
 
-        test.AssessmentId = assessment.Id;
+        foreach (var student in classStudents)
+        {
+            var studentAssessment = new Assessment
+            {
+                Title = test.Title,
+                StartTime = sAt,
+                EndTime = eAt,
+                TargetType = "Student",
+                TargetValue = student.Id,
+                CourseId = courseId,
+                Type = AssessmentType.Quiz
+            };
+            await _assessmentRepo.InsertAsync(studentAssessment);
+        }
+
+        test.AssessmentId = classAssessment.Id;
         await _testRepo.UpsertAsync(x => x.Id == test.Id, test);
-        return (true, $"Đã gán bài thi cho các sinh viên của Lớp/Khoa '{faculty}'.");
+
+        var notifyTargets = classStudents
+            .Select(student => new AssignmentNotifyTarget { User = student, SessionId = string.Empty })
+            .ToList();
+        await NotifySafe(test, notifyTargets, sAt, eAt);
+
+        return (true, $"Đã assign {classStudents.Count} sinh viên lớp '{studentClass.Code}'.");
     }
 
     public async Task<string> BulkAssignAsync(IReadOnlyCollection<string>? testIds, string userId, DateTime? startAt = null, DateTime? endAt = null)
@@ -635,6 +778,101 @@ public sealed class TestAdministrationService : ITestAdministrationService
             msg += $" Bỏ qua {skippedNoCourse.Count} test chưa gắn Course: {string.Join("; ", skippedNoCourse.Take(3))}{(skippedNoCourse.Count > 3 ? "..." : "")}";
         }
         return msg;
+    }
+
+    private async Task<(bool Allowed, bool Found, Test? Test, Course? Course, bool IsOwner, bool IsAdmin, string Message)> ValidateAssignContextAsync(
+        string testId,
+        string? currentUserId,
+        bool isPrivileged)
+    {
+        var test = await _testRepo.FirstOrDefaultAsync(t => t.Id == testId && !t.IsDeleted);
+        if (test == null)
+        {
+            return (false, false, null, null, false, false, "Không tìm thấy bài test.");
+        }
+
+        if (!TryGetAssessmentCourseId(test, out var courseId))
+        {
+            return (false, true, test, null, false, false, "Không thể assign: test chưa được gắn Course.");
+        }
+
+        var course = await _courseRepo.FirstOrDefaultAsync(c => c.Id == courseId && !c.IsDeleted);
+        if (course == null)
+        {
+            return (false, true, test, null, false, false, "Không thể assign: Course không tồn tại hoặc đã bị xóa.");
+        }
+
+        var isOwner = !string.IsNullOrWhiteSpace(currentUserId) &&
+                      string.Equals(course.LecturerId, currentUserId, StringComparison.Ordinal);
+
+        var isAdmin = false;
+        if (!string.IsNullOrWhiteSpace(currentUserId))
+        {
+            var caller = await _userRepo.FirstOrDefaultAsync(u => u.Id == currentUserId && !u.IsDeleted);
+            isAdmin = caller?.Role == Role.Admin;
+        }
+
+        if (!isPrivileged && !isOwner)
+        {
+            return (false, true, test, course, false, isAdmin, "Không thể assign: bạn không có quyền trên Course này.");
+        }
+
+        return (true, true, test, course, isOwner, isAdmin, string.Empty);
+    }
+
+    private async Task<HashSet<string>> GetEnrolledStudentIdsAsync(string courseId)
+    {
+        return (await _enrollmentRepo.GetAllAsync(e => e.CourseId == courseId && !e.IsDeleted))
+            .Select(e => e.StudentId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private async Task<List<StudentClass>> ResolveAvailableClassesAsync(IEnumerable<Student> students)
+    {
+        var classIds = students
+            .Select(s => s.StudentClassId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (classIds.Count == 0)
+        {
+            return new List<StudentClass>();
+        }
+
+        var classes = await _studentClassRepo.GetAllAsync(c => !c.IsDeleted);
+        var matched = classes
+            .Where(c => classIds.Contains(c.Id))
+            .OrderBy(c => c.Code, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var knownIds = matched.Select(c => c.Id).ToHashSet(StringComparer.Ordinal);
+        var missingIds = classIds.Where(id => !knownIds.Contains(id)).OrderBy(id => id, StringComparer.Ordinal).ToList();
+        foreach (var missingId in missingIds)
+        {
+            matched.Add(new StudentClass
+            {
+                Id = missingId,
+                Code = missingId,
+                Name = missingId
+            });
+        }
+
+        return matched;
+    }
+
+    private async Task<string> ResolveLecturerNameAsync(string lecturerId)
+    {
+        if (string.IsNullOrWhiteSpace(lecturerId))
+        {
+            return "Chưa gán";
+        }
+
+        var lecturer = await _userRepo.FirstOrDefaultAsync(u => u.Id == lecturerId && !u.IsDeleted);
+        return !string.IsNullOrWhiteSpace(lecturer?.Name) ? lecturer.Name : lecturerId;
     }
 
     private static bool TryGetAssessmentCourseId(Test test, out string courseId)

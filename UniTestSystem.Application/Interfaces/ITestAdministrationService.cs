@@ -18,10 +18,11 @@ public interface ITestAdministrationService
     Task<(bool Found, string Message)> ToggleStatusAsync(string id);
     Task<bool> CloneAsync(string id, string createdBy);
     Task<bool> ArchiveAsync(string id);
-    Task<TestAssignData?> GetAssignDataAsync(string testId, string? faculty);
+    Task<TestAssignData?> GetAssignDataAsync(string testId, string? classFilter, string? currentUserId = null, bool isPrivileged = false);
     Task<(bool Found, string Message)> AssignToUserAsync(string testId, string userId, DateTime? startAt = null, DateTime? endAt = null);
-    Task<(bool Found, string Message)> AssignUsersAsync(string testId, IReadOnlyCollection<string>? userIds, DateTime? startAt = null, DateTime? endAt = null);
-    Task<(bool Found, string Message)> AssignByFacultyAsync(string testId, string faculty, DateTime? startAt = null, DateTime? endAt = null);
+    Task<(bool Found, string Message)> AssignUsersAsync(string testId, IReadOnlyCollection<string>? userIds, DateTime? startAt = null, DateTime? endAt = null, string? currentUserId = null, bool isPrivileged = false);
+    Task<(bool Found, string Message)> AssignByClassAsync(string testId, string classId, DateTime? startAt = null, DateTime? endAt = null, string? currentUserId = null, bool isPrivileged = false);
+    Task<(bool Found, string Message)> AssignByFacultyAsync(string testId, string faculty, DateTime? startAt = null, DateTime? endAt = null, string? currentUserId = null, bool isPrivileged = false);
     Task<string> BulkAssignAsync(IReadOnlyCollection<string>? testIds, string userId, DateTime? startAt = null, DateTime? endAt = null);
     Task<string> BulkAssignAutoAsync(IReadOnlyCollection<string>? testIds, DateTime? startAt = null, DateTime? endAt = null);
 }
@@ -51,8 +52,15 @@ public sealed class TestAssignData
 {
     public string TestId { get; set; } = "";
     public string TestTitle { get; set; } = "";
+    public string CourseName { get; set; } = "";
+    public string LecturerName { get; set; } = "";
+    public int TotalEnrolled { get; set; }
+    public List<StudentClass> AvailableClasses { get; set; } = new();
+    public List<string> AvailableClassCodes { get; set; } = new();
+    public bool IsOwner { get; set; }
     public List<User> Users { get; set; } = new();
     public HashSet<string> AssignedUserIds { get; set; } = new(StringComparer.Ordinal);
     public List<string> Faculties { get; set; } = new();
     public string? SelectedFaculty { get; set; }
+    public string? SelectedClassId { get; set; }
 }

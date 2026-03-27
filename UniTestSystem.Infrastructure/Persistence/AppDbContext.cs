@@ -577,7 +577,7 @@ public class AppDbContext : DbContext
                 Actor = actor,
                 Action = entry.State.ToString(),
                 EntityName = entry.Entity.GetType().Name,
-                EntityId = entry.Property("Id").CurrentValue?.ToString() ?? "0",
+                EntityId = GetEntityId(entry),
                 Before = entry.State == EntityState.Modified || entry.State == EntityState.Deleted 
                     ? JsonSerializer.Serialize(entry.OriginalValues.ToObject(), JsonOptions) 
                     : null,
@@ -589,5 +589,29 @@ public class AppDbContext : DbContext
         }
 
         return await base.SaveChangesAsync(cancellationToken);
+    }
+
+    private static string GetEntityId(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry)
+    {
+        var primaryKey = entry.Metadata.FindPrimaryKey();
+        if (primaryKey == null || primaryKey.Properties.Count == 0)
+        {
+            return "0";
+        }
+
+        var keyValues = primaryKey.Properties
+            .Select(keyProperty =>
+            {
+                var propertyEntry = entry.Properties.FirstOrDefault(p => p.Metadata.Name == keyProperty.Name);
+                if (propertyEntry == null)
+                {
+                    return $"{keyProperty.Name}=null";
+                }
+
+                var value = entry.State == EntityState.Deleted ? propertyEntry.OriginalValue : propertyEntry.CurrentValue;
+                return $"{keyProperty.Name}={value ?? "null"}";
+            });
+
+        return string.Join("|", keyValues);
     }
 }
