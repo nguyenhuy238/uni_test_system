@@ -1,5 +1,3 @@
-using System.Text;
-using System.Text.RegularExpressions;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Domain;
 
@@ -679,87 +677,6 @@ public sealed class TestAdministrationService : ITestAdministrationService
         return msg;
     }
 
-    public async Task<string> BulkAssignAutoAsync(IReadOnlyCollection<string>? testIds, DateTime? startAt = null, DateTime? endAt = null)
-    {
-        var ids = (testIds ?? Array.Empty<string>()).Distinct(StringComparer.Ordinal).ToList();
-        if (!ids.Any())
-        {
-            return "Bạn chưa chọn Test nào.";
-        }
-
-        var students = await _studentRepo.GetAllAsync();
-        var tests = await _testRepo.GetAllAsync();
-        var testMap = tests.ToDictionary(t => t.Id, StringComparer.Ordinal);
-
-        var s = startAt ?? DateTime.UtcNow.AddDays(-1);
-        var e = endAt ?? DateTime.UtcNow.AddDays(30);
-
-        var assigned = 0;
-        var skipped = new List<string>();
-        var skippedNoCourse = new List<string>();
-
-        foreach (var tid in ids)
-        {
-            if (!testMap.TryGetValue(tid, out var test))
-            {
-                skipped.Add($"{tid} (not found)");
-                continue;
-            }
-
-            var owner = ResolveOwnerUser(students.Cast<User>().ToList(), test);
-            if (owner == null)
-            {
-                skipped.Add(test.Title);
-                continue;
-            }
-
-            if (!TryGetAssessmentCourseId(test, out var courseId))
-            {
-                skippedNoCourse.Add(test.Title);
-                continue;
-            }
-
-            if (!test.IsPublished)
-            {
-                test.IsPublished = true;
-                test.PublishedAt = DateTime.UtcNow;
-                await _testRepo.UpsertAsync(x => x.Id == test.Id, test);
-            }
-
-            if (!string.IsNullOrWhiteSpace(test.AssessmentId))
-            {
-                await _assessmentRepo.DeleteAsync(a => a.Id == test.AssessmentId);
-            }
-
-            var assessment = new Assessment
-            {
-                Title = test.Title,
-                StartTime = s,
-                EndTime = e,
-                TargetType = "Student",
-                TargetValue = owner.Id,
-                CourseId = courseId,
-                Type = AssessmentType.Quiz
-            };
-            await _assessmentRepo.InsertAsync(assessment);
-
-            test.AssessmentId = assessment.Id;
-            await _testRepo.UpsertAsync(x => x.Id == test.Id, test);
-            assigned++;
-        }
-
-        var msg = $"Đã assign {assigned} test (auto by owner).";
-        if (skipped.Count > 0)
-        {
-            msg += $" Bỏ qua {skipped.Count}: {string.Join("; ", skipped.Take(5))}{(skipped.Count > 5 ? "..." : "")}";
-        }
-        if (skippedNoCourse.Count > 0)
-        {
-            msg += $" Bỏ qua {skippedNoCourse.Count} test chưa gắn Course: {string.Join("; ", skippedNoCourse.Take(3))}{(skippedNoCourse.Count > 3 ? "..." : "")}";
-        }
-        return msg;
-    }
-
     public async Task<List<Question>> PreviewQuestionsAsync(PreviewQuestionsRequest request)
     {
         if (request == null || string.IsNullOrWhiteSpace(request.CourseId))
@@ -967,53 +884,4 @@ public sealed class TestAdministrationService : ITestAdministrationService
         }
     }
 
-    private static string RemoveDiacritics(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-
-        var normalized = text.Normalize(NormalizationForm.FormD);
-        var sb = new StringBuilder();
-        foreach (var ch in normalized)
-        {
-            var category = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch);
-            if (category != System.Globalization.UnicodeCategory.NonSpacingMark)
-            {
-                sb.Append(ch);
-            }
-        }
-        return sb.ToString().Normalize(NormalizationForm.FormC);
-    }
-
-    private static User? ResolveOwnerUser(List<User> users, Test test)
-    {
-        var title = test.Title ?? "";
-
-        var mUid = Regex.Match(title, @"uid\s*:\s*(?<id>[A-Za-z0-9\-_]+)", RegexOptions.IgnoreCase);
-        if (mUid.Success)
-        {
-            var id = mUid.Groups["id"].Value.Trim();
-            var byId = users.FirstOrDefault(u => string.Equals(u.Id, id, StringComparison.Ordinal));
-            if (byId != null) return byId;
-        }
-
-        var mName = Regex.Match(title, @"^Auto\s*-\s*(?<name>[^-]+?)\s*-", RegexOptions.IgnoreCase);
-        if (mName.Success)
-        {
-            var nameInTitle = mName.Groups["name"].Value.Trim();
-            var normalizedTitleName = RemoveDiacritics(nameInTitle).ToLowerInvariant();
-
-            var byName = users.FirstOrDefault(u =>
-                RemoveDiacritics(u.Name ?? "").ToLowerInvariant() == normalizedTitleName);
-            if (byName != null) return byName;
-
-            var byEmailLocal = users.FirstOrDefault(u =>
-            {
-                var local = (u.Email ?? "").Split('@')[0];
-                return RemoveDiacritics(local).ToLowerInvariant() == normalizedTitleName.Replace(" ", "");
-            });
-            if (byEmailLocal != null) return byEmailLocal;
-        }
-
-        return null;
-    }
 }

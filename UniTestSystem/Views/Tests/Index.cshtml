@@ -18,8 +18,7 @@
         <a href="/Tests?status=Archived" class="btn btn-outline-secondary @(Context.Request.Query["status"].ToString() == "Archived" ? "active" : "")">Archived</a>
     </div>
 
-    <!-- ===== Bulk toolbar (2 chế độ) =================================== -->
-    <!-- 1) Assign tất cả đã chọn CHO MỘT USER (nhập userId) -->
+    <!-- ===== Bulk toolbar =================================== -->
     <form id="bulkAssignForm" method="post" action="/Tests/BulkAssign" class="d-flex flex-wrap align-items-end gap-2 ms-auto">
         @Html.AntiForgeryToken()
         <div>
@@ -51,29 +50,6 @@
             </button>
         </div>
     </form>
-
-    <!-- 2) Assign tự động cho ĐÚNG NGƯỜI của từng Test -->
-    <form id="bulkAssignAutoForm" method="post" action="/Tests/BulkAssignAuto" class="d-flex flex-wrap align-items-end gap-2">
-        @Html.AntiForgeryToken()
-        <div>
-            <label class="form-label mb-1 small">Start (UTC)</label>
-            <input type="datetime-local" name="startAt" id="autoStart" class="form-control form-control-sm" />
-        </div>
-        <div>
-            <label class="form-label mb-1 small">End (UTC)</label>
-            <input type="datetime-local" name="endAt" id="autoEnd" class="form-control form-control-sm" />
-        </div>
-        <div id="selectedBucketAuto"></div>
-        <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-outline-dark btn-sm" id="btnAutoAssignSelected" title="Mỗi test sẽ gán về đúng chủ sở hữu (suy ra từ Title)">
-                Assign selected (auto by owner)
-            </button>
-            <button type="button" class="btn btn-outline-dark btn-sm" id="btnAutoAssignAllListed" title="Assign tất cả hàng đang hiển thị (auto by owner)">
-                Assign ALL (listed, auto)
-            </button>
-        </div>
-    </form>
-    <!-- ================================================================== -->
 </div>
 
 <table class="table table-hover align-middle" id="testsTable">
@@ -113,7 +89,7 @@
                 <td>@(t.PublishedAt?.ToLocalTime().ToString("g") ?? "-")</td>
                 <td class="text-nowrap">
                     <a class="btn btn-outline-primary btn-sm" href="/Tests/Assign/@t.Id">Assign Users</a>
-                    <a class="btn btn-outline-secondary btn-sm" href="/Tests/Edit/@t.Id">Edit</a>
+                    <a class="btn btn-outline-secondary btn-sm" href="/Tests/Edit/@t.Id">Sửa</a>
 
                     <form class="d-inline" method="post" action="/Tests/Clone">
                         @Html.AntiForgeryToken()
@@ -146,15 +122,7 @@
                     <form class="d-inline" method="post" action="/Tests/Delete" onsubmit="return confirm('Delete this test?');">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="id" value="@t.Id" />
-                        <button class="btn btn-danger btn-sm">Delete</button>
-                    </form>
-
-                    <!-- Quick Assign 1 test (giữ nguyên) -->
-                    <form class="d-inline" method="post" action="/Tests/AssignToUser">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="testId" value="@t.Id" />
-                        <input class="form-control form-control-sm d-inline-block" style="width:160px;" name="userId" placeholder="userId (vd: u-emp)" />
-                        <button class="btn btn-primary btn-sm ms-1">Quick Assign</button>
+                        <button class="btn btn-danger btn-sm">Xóa</button>
                     </form>
                 </td>
             </tr>
@@ -170,7 +138,6 @@
 
           const selectors = $$("#testsTable .row-selector");
           const bucketManual = $("#selectedBucket");
-          const bucketAuto = $("#selectedBucketAuto");
 
           // Select/Clear
           $("#btnSelectAll")?.addEventListener("click", () => {
@@ -204,29 +171,6 @@
             const count = fillBucket(bucketManual);
             if(count === 0){ alert("Không có Test nào."); return; }
             $("#bulkAssignForm").submit();
-          });
-
-          // AUTO (by owner)
-          function copyDateToAuto(){
-            const s = document.getElementById("bulkStart");
-            const e = document.getElementById("bulkEnd");
-            const sa = document.getElementById("autoStart");
-            const ea = document.getElementById("autoEnd");
-            if(s && sa) sa.value = s.value;
-            if(e && ea) ea.value = e.value;
-          }
-          $("#btnAutoAssignSelected")?.addEventListener("click", () => {
-            const count = fillBucket(bucketAuto);
-            if(count === 0){ alert("Hãy chọn ít nhất 1 Test."); return; }
-            copyDateToAuto();
-            $("#bulkAssignAutoForm").submit();
-          });
-          $("#btnAutoAssignAllListed")?.addEventListener("click", () => {
-            selectors.forEach(cb => cb.checked = true);
-            const count = fillBucket(bucketAuto);
-            if(count === 0){ alert("Không có Test nào."); return; }
-            copyDateToAuto();
-            $("#bulkAssignAutoForm").submit();
           });
         })();
     </script>

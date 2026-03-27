@@ -3,6 +3,7 @@ using UniTestSystem.Application;
 using UniTestSystem.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace UniTestSystem.Controllers
 {
@@ -12,23 +13,27 @@ namespace UniTestSystem.Controllers
     {
         private readonly ITestGenerationService _svc;
         private readonly ITestAdministrationService _testAdministrationService;
+        private readonly IAcademicService _academicService;
         private readonly INotificationService? _noti;
 
         public AutoTestsController(
             ITestGenerationService svc,
             ITestAdministrationService testAdministrationService,
+            IAcademicService academicService,
             INotificationService? noti = null)
-        { _svc = svc; _testAdministrationService = testAdministrationService; _noti = noti; }
+        { _svc = svc; _testAdministrationService = testAdministrationService; _academicService = academicService; _noti = noti; }
 
         [HttpGet("generate")]
         public async Task<IActionResult> Generate()
         {
             var classes = await _testAdministrationService.GetDepartmentOptionsAsync();
-            ViewBag.Faculties = classes;
+            ViewBag.Classes = classes;
+            var courses = await _academicService.GetAllCoursesAsync();
+            ViewBag.Courses = new SelectList(courses.OrderBy(c => c.Name), "Id", "Name");
 
             return View(new AutoTestOptions
             {
-                Mode = "Faculty",
+                Mode = "Class",
                 DifficultyPolicy = "ByYear",
                 McqCount = 8,
                 TfCount = 2,

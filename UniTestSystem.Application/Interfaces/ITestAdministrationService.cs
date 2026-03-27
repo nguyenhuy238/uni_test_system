@@ -24,7 +24,6 @@ public interface ITestAdministrationService
     Task<(bool Found, string Message)> AssignByClassAsync(string testId, string classId, DateTime? startAt = null, DateTime? endAt = null, string? currentUserId = null, bool isPrivileged = false);
     Task<(bool Found, string Message)> AssignByFacultyAsync(string testId, string faculty, DateTime? startAt = null, DateTime? endAt = null, string? currentUserId = null, bool isPrivileged = false);
     Task<string> BulkAssignAsync(IReadOnlyCollection<string>? testIds, string userId, DateTime? startAt = null, DateTime? endAt = null);
-    Task<string> BulkAssignAutoAsync(IReadOnlyCollection<string>? testIds, DateTime? startAt = null, DateTime? endAt = null);
     Task<List<Question>> PreviewQuestionsAsync(PreviewQuestionsRequest request);
 }
 

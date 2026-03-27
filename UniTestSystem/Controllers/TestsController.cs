@@ -437,18 +437,6 @@ namespace UniTestSystem.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        // ---------- Assign nhanh (1 user) ----------
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [Authorize(Policy = PermissionCodes.Exam_Schedule)]
-        public async Task<IActionResult> AssignToUser(string testId, string userId)
-        {
-            var (found, message) = await _testAdministrationService.AssignToUserAsync(testId, userId);
-            if (!found) return NotFound();
-            SetFlashMessageByContent(message);
-            return RedirectToAction(nameof(Index));
-        }
-
         // ---------- Assign (GET) ----------
         [HttpGet("Tests/Assign/{id}")]
         [HttpGet("/Tests/Assign")]
@@ -549,14 +537,5 @@ namespace UniTestSystem.Controllers
             return RedirectToAction(nameof(Index), new { status = "Draft" });
         }
 
-        // ---------- BulkAssignAuto ----------
-        [HttpPost("/Tests/BulkAssignAuto")]
-        [ValidateAntiForgeryToken]
-        [Authorize(Policy = PermissionCodes.Exam_Schedule)]
-        public async Task<IActionResult> BulkAssignAuto([FromForm] List<string> testIds, DateTime? startAt, DateTime? endAt)
-        {
-            TempData["Msg"] = await _testAdministrationService.BulkAssignAutoAsync(testIds, startAt, endAt);
-            return RedirectToAction(nameof(Index), new { status = "Draft" });
-        }
     }
 }
