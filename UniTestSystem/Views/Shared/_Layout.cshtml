@@ -62,6 +62,7 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/UniTestSystem.styles.css" asp-append-version="true" />
+    @await RenderSectionAsync("HeadScripts", required: false)
 </head>
 <body>
     <header>
@@ -111,6 +112,10 @@
                                         <li><a class="dropdown-item" asp-controller="Lecturer" asp-action="Dashboard">Lecturer Dashboard</a></li>
                                         <li><a class="dropdown-item" asp-controller="Questions" asp-action="Index">Ngân hàng câu hỏi</a></li>
                                         <li><a class="dropdown-item" asp-controller="Tests" asp-action="Index">Quản lý bài thi</a></li>
+                                    }
+                                    @if (role == "Admin" || role == "Lecturer")
+                                    {
+                                        <li><a class="dropdown-item" asp-controller="Proctor" asp-action="Global">Giám sát phòng thi</a></li>
                                     }
                                     @if (role == "Admin" || role == "Staff")
                                     {

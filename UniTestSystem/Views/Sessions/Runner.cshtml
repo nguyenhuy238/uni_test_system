@@ -16,6 +16,10 @@
     ViewData["Title"] = testTitle;
 }
 
+@section HeadScripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+}
+
 <style>
     /* Header */
     .runner-header {
@@ -356,6 +360,60 @@
     .sync-error .sync-dot {
         background: #dc2626;
     }
+
+    .hub-indicator {
+        position: fixed;
+        right: 16px;
+        top: 62px;
+        z-index: 1200;
+        border-radius: 999px;
+        padding: .45rem .8rem;
+        font-size: .85rem;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        border: 1px solid transparent;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, .12);
+    }
+
+    .hub-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        flex: 0 0 8px;
+    }
+
+    .hub-connected {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+        color: #166534;
+    }
+
+    .hub-connected .hub-dot {
+        background: #16a34a;
+    }
+
+    .hub-reconnecting {
+        background: #fffbeb;
+        border-color: #fde68a;
+        color: #92400e;
+    }
+
+    .hub-reconnecting .hub-dot {
+        background: #f59e0b;
+    }
+
+    .hub-disconnected {
+        background: #fef2f2;
+        border-color: #fecaca;
+        color: #991b1b;
+    }
+
+    .hub-disconnected .hub-dot {
+        background: #dc2626;
+    }
 </style>
 
 <div class="runner-header">
@@ -380,6 +438,11 @@
 <div id="syncIndicator" class="sync-indicator sync-ok" role="status" aria-live="polite">
     <span class="sync-dot"></span>
     <span id="syncIndicatorText">Đã lưu</span>
+</div>
+
+<div id="hubIndicator" class="hub-indicator hub-reconnecting" role="status" aria-live="polite">
+    <span class="hub-dot"></span>
+    <span id="hubIndicatorText">Đang kết nối realtime...</span>
 </div>
 
 <div class="layout">
@@ -487,12 +550,34 @@
     let secs = @remainingSeconds;
     let running = true;
     let timer = null;
+    let examHubConnection = null;
+    let timeUpNoticeShown = false;
 
-    const elTimeTop  = document.getElementById('t');
+    const elTimeTop = document.getElementById('t');
     const elTimeSide = document.getElementById('t_side');
     const sid = "@Model.Id";
     const totalQs = @questionCount;
     const DEVICE_FP_KEY = 'unitest_device_fp';
+    const hubIndicatorEl = document.getElementById('hubIndicator');
+    const hubIndicatorTextEl = document.getElementById('hubIndicatorText');
+
+    function setHubStatus(cssClass, message){
+        if(!hubIndicatorEl || !hubIndicatorTextEl) return;
+        hubIndicatorEl.classList.remove('hub-connected', 'hub-reconnecting', 'hub-disconnected');
+        hubIndicatorEl.classList.add(cssClass);
+        hubIndicatorTextEl.textContent = message;
+    }
+
+    function isHubConnected(){
+        return !!(examHubConnection && window.signalR && examHubConnection.state === signalR.HubConnectionState.Connected);
+    }
+
+    function payloadValue(obj, camel, pascal){
+        if(!obj || typeof obj !== 'object') return undefined;
+        if(Object.prototype.hasOwnProperty.call(obj, camel)) return obj[camel];
+        if(Object.prototype.hasOwnProperty.call(obj, pascal)) return obj[pascal];
+        return undefined;
+    }
 
     function getDeviceFingerprint(){
         let fp = localStorage.getItem(DEVICE_FP_KEY);
@@ -514,7 +599,6 @@
 
     function startTimer(){
         if(timer) return;
-        running = true;
         timer = setInterval(()=>{
             if(!running) return;
             secs = Math.max(0, secs - 1);
@@ -522,14 +606,101 @@
             if(secs === 120){ toast("Only 2 minutes left. Please submit soon.", "warn"); }
             if(secs <= 0){
                 stopTimer();
-                toast("Time is up. Auto-submitting...", "warn");
-                submitNow(true);
+                if(!timeUpNoticeShown){
+                    timeUpNoticeShown = true;
+                    toast("Time is up. Waiting for server auto-submit...", "warn");
+                }
             }
         }, 1000);
     }
-    function stopTimer(){ running = false; if(timer){ clearInterval(timer); timer = null; } }
+    function stopTimer(){
+        running = false;
+        if(timer){
+            clearInterval(timer);
+            timer = null;
+        }
+    }
+
+    function applyTimerSync(data){
+        const remainingRaw = payloadValue(data, 'remainingSeconds', 'RemainingSeconds');
+        const runningRaw = payloadValue(data, 'running', 'Running');
+        if(typeof remainingRaw === 'number' && Number.isFinite(remainingRaw)){
+            secs = Math.max(0, Math.floor(remainingRaw));
+            if(secs > 0) timeUpNoticeShown = false;
+        }
+        if(typeof runningRaw === 'boolean'){
+            running = runningRaw;
+        }
+
+        renderTime();
+        if(running){
+            startTimer();
+        }else{
+            stopTimer();
+        }
+    }
+
+    async function connectExamHub(){
+        if(!window.signalR){
+            setHubStatus('hub-disconnected', 'Realtime unavailable - using REST fallback');
+            return;
+        }
+
+        examHubConnection = new signalR.HubConnectionBuilder()
+            .withUrl('/hubs/exam-session')
+            .withAutomaticReconnect()
+            .build();
+
+        examHubConnection.on('TimerSync', (data)=>{
+            applyTimerSync(data);
+        });
+
+        examHubConnection.on('SessionAutoSubmitted', ()=>{
+            toast('Session auto-submitted by server.', 'warn');
+            submitNow(true);
+        });
+
+        examHubConnection.on('SessionTerminated', ()=>{
+            submitted = true;
+            toast('Session was terminated by proctor. Redirecting...', 'warn');
+            window.location = '/mytests';
+        });
+
+        examHubConnection.onreconnecting(()=>{
+            setHubStatus('hub-reconnecting', 'Đang kết nối lại...');
+        });
+
+        examHubConnection.onreconnected(async ()=>{
+            setHubStatus('hub-connected', 'Realtime connected');
+            try{
+                await examHubConnection.invoke('JoinSession', sid);
+            }catch(e){}
+        });
+
+        examHubConnection.onclose(()=>{
+            setHubStatus('hub-disconnected', 'Realtime disconnected - using REST fallback');
+        });
+
+        try{
+            setHubStatus('hub-reconnecting', 'Đang kết nối realtime...');
+            await examHubConnection.start();
+            await examHubConnection.invoke('JoinSession', sid);
+            setHubStatus('hub-connected', 'Realtime connected');
+        }catch(e){
+            setHubStatus('hub-disconnected', 'Realtime disconnected - using REST fallback');
+        }
+    }
 
     async function callResume(){
+        if(isHubConnected()){
+            try{
+                await examHubConnection.invoke('ResumeTimer', sid);
+                running = true;
+                startTimer();
+                return;
+            }catch(e){}
+        }
+
         try{
             const r = await authFetch(`/api/tests/sessions/${sid}/resume`, { method:'POST' });
             if(r.ok){
@@ -537,11 +708,25 @@
                 secs = data.remainingSeconds ?? secs;
                 running = !!data.running;
                 renderTime();
-                startTimer();
+                if(running){
+                    startTimer();
+                }else{
+                    stopTimer();
+                }
             }
         }catch(e){}
     }
+
     async function callPause(){
+        if(isHubConnected()){
+            try{
+                await examHubConnection.invoke('PauseTimer', sid);
+                running = false;
+                stopTimer();
+                return;
+            }catch(e){}
+        }
+
         try{
             const r = await authFetch(`/api/tests/sessions/${sid}/pause`, { method:'POST' });
             if(r.ok){
@@ -549,7 +734,11 @@
                 secs = data.remainingSeconds ?? secs;
                 running = !!data.running;
                 renderTime();
-                stopTimer();
+                if(running){
+                    startTimer();
+                }else{
+                    stopTimer();
+                }
             }
         }catch(e){}
     }
@@ -562,7 +751,11 @@
             }).catch(()=>{});
         }
 
-        renderTime(); startTimer(); callResume();
+        renderTime();
+        startTimer();
+        callResume();
+        connectExamHub();
+
         document.addEventListener('visibilitychange', ()=>{
             if(document.hidden){
                 callPause();
@@ -580,6 +773,9 @@
                 });
                 navigator.sendBeacon?.(`/api/tests/sessions/${sid}/save-answer`, new Blob([payload], { type: 'application/json' }));
             }catch(e){}
+            if(examHubConnection){
+                try{ examHubConnection.invoke('LeaveSession', sid); }catch(e){}
+            }
             navigator.sendBeacon?.(`/api/tests/sessions/${sid}/pause`);
         });
 
@@ -1081,6 +1277,20 @@
       if(submitting) return;
       submitting = true;
       submitBtn.disabled = true; submitBtn2.disabled = true;
+
+      if(auto){
+        submitted = true;
+        stopTimer();
+        try{
+          localStorage.removeItem(KEY);
+          localStorage.removeItem(KEY_FLAGS);
+          localStorage.removeItem(KEY_SYNC_QUEUE);
+        }catch(e){}
+        setTimeout(()=>{
+          window.location = `/mytests/result/${sid}`;
+        }, 350);
+        return;
+      }
 
       saveDraft(true);
       enqueueAllAnswersForSync();
