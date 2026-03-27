@@ -6,7 +6,10 @@
     bool hasPendingRegrade = (bool)(ViewBag.HasPendingRegrade ?? false);
     string pendingReason = (string?)(ViewBag.PendingRegradeReason) ?? "";
     var moderationLogs = ViewBag.ModerationLogs as List<UniTestSystem.Domain.SessionLog> ?? new List<UniTestSystem.Domain.SessionLog>();
-    bool canModerateLock = User.IsInRole(UniTestSystem.Domain.Role.Admin.ToString()) || User.IsInRole(UniTestSystem.Domain.Role.Staff.ToString());
+    bool canModerateLock =
+        User.IsInRole(UniTestSystem.Domain.Role.Admin.ToString()) ||
+        User.IsInRole(UniTestSystem.Domain.Role.Staff.ToString()) ||
+        User.IsInRole(UniTestSystem.Domain.Role.Lecturer.ToString());
 }
 
 <div class="container py-4">

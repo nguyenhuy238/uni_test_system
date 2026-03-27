@@ -64,15 +64,29 @@ namespace UniTestSystem.Application
             if (s.Status == SessionStatus.Submitted) return s;
 
             var test = await GetTestWithQuestionsAsync(s.TestId) ?? throw new Exception("Test not found");
-            var allQuestions = await _qRepo.GetAllAsync();
-            var qMap = allQuestions.ToDictionary(q => q.Id, q => q);
+            var questionIds = s.StudentAnswers
+                .Select(x => x.QuestionId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var questionSpec = new Specification<Question>(q => questionIds.Contains(q.Id))
+                .Include(q => q.Options);
+            var questions = await _qRepo.ListAsync(questionSpec);
+            var qMap = questions.ToDictionary(q => q.Id, q => q, StringComparer.Ordinal);
 
             decimal autoScore = 0.0m;
             decimal autoMax = 0.0m;
             decimal manualMax = 0.0m;
 
             // Map points
-            var pointsByQ = BuildPointsMap(test, s.StudentAnswers.Select(sa => qMap[sa.QuestionId]).ToList());
+            var pointsByQ = BuildPointsMap(
+                test,
+                s.StudentAnswers
+                    .Select(sa => qMap.TryGetValue(sa.QuestionId, out var question) ? question : null)
+                    .Where(q => q != null)
+                    .Cast<Question>()
+                    .ToList());
 
             foreach (var sa in s.StudentAnswers)
             {
@@ -89,10 +103,9 @@ namespace UniTestSystem.Application
                     case QType.MCQ:
                     case QType.TrueFalse:
                         {
-                            var correct = q.Options.Where(o => o.IsCorrect).Select(o => o.Content).ToList();
                             var sel = selRaw.Trim();
-                            grade = (!string.IsNullOrEmpty(sel) && correct.Any() && correct.Contains(sel)) ? 1.0m : 0.0m;
-                            sa.SelectedOptionId = sel; // Reuse field for content if ID not available
+                            grade = CalculateSingleChoiceGrade(q, sel);
+                            sa.SelectedOptionId = string.IsNullOrWhiteSpace(sel) ? null : sel;
                             sa.Score = grade;
                             break;
                         }
@@ -251,6 +264,80 @@ namespace UniTestSystem.Application
 
         private static string NormalizeToken(string? input)
             => (input ?? string.Empty).Trim().ToLowerInvariant();
+
+        private static decimal CalculateSingleChoiceGrade(Question question, string selectedRaw)
+        {
+            if (string.IsNullOrWhiteSpace(selectedRaw))
+            {
+                return 0m;
+            }
+
+            var selected = selectedRaw.Trim();
+            var options = question.Options
+                .Where(o => !o.IsDeleted)
+                .OrderBy(o => o.Id, StringComparer.Ordinal)
+                .ToList();
+            if (!options.Any())
+            {
+                return 0m;
+            }
+
+            // 1) Client sends option id.
+            var selectedById = options.FirstOrDefault(o =>
+                string.Equals(o.Id, selected, StringComparison.OrdinalIgnoreCase));
+            if (selectedById != null)
+            {
+                return selectedById.IsCorrect ? 1m : 0m;
+            }
+
+            // 2) Web runner sends A/B/C labels (based on option order by id).
+            if (TryParseOptionLabel(selected, out var optionIndex) && optionIndex < options.Count)
+            {
+                return options[optionIndex].IsCorrect ? 1m : 0m;
+            }
+
+            // 3) Legacy clients may send 1-based numeric choice.
+            if (int.TryParse(selected, out var oneBased) &&
+                oneBased >= 1 &&
+                oneBased <= options.Count)
+            {
+                return options[oneBased - 1].IsCorrect ? 1m : 0m;
+            }
+
+            // 4) Legacy clients may send option content directly.
+            var selectedByContent = options.FirstOrDefault(o =>
+                string.Equals(NormalizeToken(o.Content), NormalizeToken(selected), StringComparison.Ordinal));
+            if (selectedByContent != null)
+            {
+                return selectedByContent.IsCorrect ? 1m : 0m;
+            }
+
+            return 0m;
+        }
+
+        private static bool TryParseOptionLabel(string value, out int index)
+        {
+            index = -1;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            var trimmed = value.Trim();
+            if (trimmed.Length != 1)
+            {
+                return false;
+            }
+
+            var upper = char.ToUpperInvariant(trimmed[0]);
+            if (upper < 'A' || upper > 'Z')
+            {
+                return false;
+            }
+
+            index = upper - 'A';
+            return true;
+        }
 
         private async Task<Test?> GetTestWithQuestionsAsync(string testId)
         {

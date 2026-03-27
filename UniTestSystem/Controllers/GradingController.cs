@@ -17,6 +17,12 @@ namespace UniTestSystem.Controllers
             _gradingService = gradingService;
         }
 
+        [HttpGet("/grading")]
+        public IActionResult Index()
+        {
+            return RedirectToAction(nameof(Pending));
+        }
+
         [HttpGet("/grading/pending")]
         public async Task<IActionResult> Pending()
         {

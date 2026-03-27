@@ -116,6 +116,8 @@
                                     @if (role == "Admin" || role == "Lecturer")
                                     {
                                         <li><a class="dropdown-item" asp-controller="Proctor" asp-action="Global">Giám sát phòng thi</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Grading" asp-action="Pending">Chấm điểm</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Grading" asp-action="RegradeRequests">Yêu cầu phúc khảo</a></li>
                                     }
                                     @if (role == "Admin" || role == "Staff")
                                     {
@@ -159,6 +161,8 @@
                                     <li><a class="dropdown-item" asp-controller="Users" asp-action="Index">Người dùng</a></li>
                                     <li><a class="dropdown-item" asp-controller="Transcripts" asp-action="Index">Bảng điểm sinh viên</a></li>
                                     <li><a class="dropdown-item" asp-controller="Exams" asp-action="Index">Lập lịch thi</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Grading" asp-action="Pending">Chấm điểm</a></li>
+                                    <li><a class="dropdown-item" asp-controller="Grading" asp-action="RegradeRequests">Yêu cầu phúc khảo</a></li>
                                     @if (canViewOrg)
                                     {
                                         <li><hr class="dropdown-divider" /></li>

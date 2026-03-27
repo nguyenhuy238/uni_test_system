@@ -52,16 +52,86 @@
                     _ => q.Type.ToString()
                 };
 
-                string yourAnswer = q.Type switch
+                var orderedOptions = q.Options.OrderBy(o => o.Id, StringComparer.Ordinal).ToList();
+                string yourAnswer;
+                if (q.Type == QType.MCQ || q.Type == QType.TrueFalse)
                 {
-                    QType.MCQ or QType.TrueFalse => a?.SelectedOptionId ?? "(chưa chọn)",
-                    QType.Essay => string.IsNullOrWhiteSpace(a?.EssayAnswer) ? "(chưa trả lời)" : a!.EssayAnswer!,
-                    _ => a?.SelectedOptionId ?? ""
-                };
+                    var selectedRaw = a?.SelectedOptionId?.Trim();
+                    if (string.IsNullOrWhiteSpace(selectedRaw))
+                    {
+                        yourAnswer = "(chưa chọn)";
+                    }
+                    else
+                    {
+                        var selectedOption = orderedOptions.FirstOrDefault(o => string.Equals(o.Id, selectedRaw, StringComparison.OrdinalIgnoreCase));
+                        if (selectedOption == null &&
+                            selectedRaw.Length == 1 &&
+                            char.IsLetter(selectedRaw[0]))
+                        {
+                            var idx = char.ToUpperInvariant(selectedRaw[0]) - 'A';
+                            if (idx >= 0 && idx < orderedOptions.Count)
+                            {
+                                selectedOption = orderedOptions[idx];
+                            }
+                        }
+                        if (selectedOption == null)
+                        {
+                            selectedOption = orderedOptions.FirstOrDefault(o =>
+                                string.Equals(o.Content?.Trim(), selectedRaw, StringComparison.OrdinalIgnoreCase));
+                        }
 
-                string correct = (q.Type == QType.MCQ || q.Type == QType.TrueFalse)
-                ? string.Join(", ", q.Options.Where(o => o.IsCorrect).Select(o => o.Content))
-                : "(chấm tay)";
+                        if (selectedOption == null)
+                        {
+                            yourAnswer = selectedRaw;
+                        }
+                        else
+                        {
+                            var selectedIndex = orderedOptions.FindIndex(o => o.Id == selectedOption.Id);
+                            var selectedLabel = selectedIndex >= 0 ? ((char)('A' + selectedIndex)).ToString() : "";
+                            yourAnswer = q.Type == QType.MCQ
+                                ? $"{selectedLabel}) {selectedOption.Content}"
+                                : selectedOption.Content;
+                        }
+                    }
+                }
+                else if (q.Type == QType.Essay)
+                {
+                    yourAnswer = string.IsNullOrWhiteSpace(a?.EssayAnswer) ? "(chưa trả lời)" : a!.EssayAnswer!;
+                }
+                else
+                {
+                    yourAnswer = a?.EssayAnswer ?? a?.SelectedOptionId ?? "";
+                }
+
+                string correct;
+                if (q.Type == QType.MCQ || q.Type == QType.TrueFalse)
+                {
+                    var correctParts = new List<string>();
+                    for (int optionIndex = 0; optionIndex < orderedOptions.Count; optionIndex++)
+                    {
+                        var option = orderedOptions[optionIndex];
+                        if (!option.IsCorrect)
+                        {
+                            continue;
+                        }
+
+                        if (q.Type == QType.MCQ)
+                        {
+                            var label = ((char)('A' + optionIndex)).ToString();
+                            correctParts.Add($"{label}) {option.Content}");
+                        }
+                        else
+                        {
+                            correctParts.Add(option.Content);
+                        }
+                    }
+
+                    correct = correctParts.Any() ? string.Join(", ", correctParts) : "(không xác định)";
+                }
+                else
+                {
+                    correct = "(chấm tay)";
+                }
 
                 var rowClass = (q.Type == QType.MCQ || q.Type == QType.TrueFalse)
                 ? ((a?.Score ?? 0) > 0 ? "table-success" : "table-danger")
