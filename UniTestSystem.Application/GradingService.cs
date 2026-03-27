@@ -110,14 +110,19 @@ namespace UniTestSystem.Application
 
             if (s != null)
             {
-                var pointsByQuestion = BuildPointsMap(s.Test);
+                var answerQuestionIds = s.StudentAnswers
+                    .Select(a => a.QuestionId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+                var pointsByQuestion = BuildPointsMap(s.Test, answerQuestionIds);
                 decimal autoScore = 0m;
                 decimal manualScore = 0m;
 
                 foreach (var answer in s.StudentAnswers)
                 {
-                    var maxPoints = pointsByQuestion.TryGetValue(answer.QuestionId, out var p) ? p : 1m;
-                    if (maxPoints <= 0) maxPoints = 1m;
+                    var maxPoints = pointsByQuestion.TryGetValue(answer.QuestionId, out var p) ? p : 0m;
+                    if (maxPoints < 0m) maxPoints = 0m;
 
                     var clampedScore = Math.Clamp(answer.Score, 0m, maxPoints);
                     var isManualBucket = answer.Question?.Type == QType.Essay || answer.GradedAt.HasValue;
@@ -135,6 +140,7 @@ namespace UniTestSystem.Application
                 s.AutoScore = Math.Round(autoScore, 2, MidpointRounding.AwayFromZero);
                 s.ManualScore = Math.Round(manualScore, 2, MidpointRounding.AwayFromZero);
                 s.TotalScore = Math.Round(s.AutoScore + s.ManualScore, 2, MidpointRounding.AwayFromZero);
+                s.MaxScore = Math.Round(pointsByQuestion.Values.Sum(), 2, MidpointRounding.AwayFromZero);
                 if (s.MaxScore > 0)
                 {
                     s.Percent = Math.Round((s.TotalScore / s.MaxScore) * 100, 2);
@@ -396,14 +402,20 @@ namespace UniTestSystem.Application
             return $"Actor={actor}; Note={cleanNote}";
         }
 
-        private static Dictionary<string, decimal> BuildPointsMap(Test? test)
+        private static Dictionary<string, decimal> BuildPointsMap(Test? test, IEnumerable<string>? questionIds = null)
         {
-            var map = new Dictionary<string, decimal>(StringComparer.Ordinal);
+            var orderedQuestionIds = (questionIds ?? Array.Empty<string>())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
             if (test == null)
             {
-                return map;
+                return TestScoreDistribution.AllocateEvenlyByQuestionIds(
+                    orderedQuestionIds,
+                    TestScoreDistribution.FixedTotalScore);
             }
 
+            var map = new Dictionary<string, decimal>(StringComparer.Ordinal);
             if (test.TestQuestions != null && test.TestQuestions.Count > 0)
             {
                 foreach (var item in test.TestQuestions)
@@ -413,33 +425,55 @@ namespace UniTestSystem.Application
                 }
             }
 
-            if (map.Count == 0 && test.QuestionSnapshots != null && test.QuestionSnapshots.Count > 0)
+            if (test.QuestionSnapshots != null && test.QuestionSnapshots.Count > 0)
             {
                 foreach (var item in test.QuestionSnapshots)
                 {
                     if (string.IsNullOrWhiteSpace(item.OriginalQuestionId)) continue;
-                    map[item.OriginalQuestionId] = item.Points > 0m ? item.Points : 1m;
+                    map.TryAdd(item.OriginalQuestionId, item.Points > 0m ? item.Points : 1m);
                 }
             }
 
-            return map;
+            if (orderedQuestionIds.Count == 0)
+            {
+                orderedQuestionIds = map.Keys.ToList();
+            }
+
+            return TestScoreDistribution.NormalizeOrAllocate(
+                orderedQuestionIds,
+                map,
+                TestScoreDistribution.FixedTotalScore);
         }
 
         private async Task<decimal> ResolveMaxPointsAsync(string sessionId, string questionId)
         {
             var sessionSpec = new Specification<Session>(x => x.Id == sessionId)
+                .Include(x => x.StudentAnswers)
                 .Include("Test.TestQuestions")
                 .Include("Test.QuestionSnapshots");
             var session = await _sRepo.FirstOrDefaultAsync(sessionSpec);
-            if (session?.Test == null)
+            if (session == null)
             {
                 return 1m;
             }
 
-            var pointsByQuestion = BuildPointsMap(session.Test);
+            var questionIds = session.StudentAnswers
+                .Select(a => a.QuestionId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            var pointsByQuestion = BuildPointsMap(session.Test, questionIds);
             if (pointsByQuestion.TryGetValue(questionId, out var points) && points > 0m)
             {
                 return points;
+            }
+
+            if (questionIds.Count > 0)
+            {
+                return Math.Round(
+                    TestScoreDistribution.FixedTotalScore / questionIds.Count,
+                    2,
+                    MidpointRounding.AwayFromZero);
             }
 
             return 1m;

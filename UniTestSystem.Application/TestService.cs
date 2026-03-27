@@ -184,45 +184,104 @@ namespace UniTestSystem.Application
 
         private static Dictionary<string, decimal> BuildPointsMap(Test t, IEnumerable<Question> snapshot)
         {
-            var map = new Dictionary<string, decimal>();
+            var snapshotQuestions = snapshot.ToList();
+            var snapshotQuestionIdSet = snapshotQuestions
+                .Select(q => q.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .ToHashSet(StringComparer.Ordinal);
+
+            var orderedQuestionIds = new List<string>();
             if (t.TestQuestions != null && t.TestQuestions.Count > 0)
             {
-                var testQMap = t.TestQuestions.ToDictionary(i => i.QuestionId, i => i.Points);
-                foreach (var q in snapshot)
-                    map[q.Id] = testQMap.TryGetValue(q.Id, out var p) ? p : 1m;
+                orderedQuestionIds = t.TestQuestions
+                    .OrderBy(i => i.Order)
+                    .ThenBy(i => i.QuestionId, StringComparer.Ordinal)
+                    .Select(i => i.QuestionId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id) && snapshotQuestionIdSet.Contains(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+            }
+
+            if (orderedQuestionIds.Count == 0 && t.QuestionSnapshots != null && t.QuestionSnapshots.Count > 0)
+            {
+                orderedQuestionIds = t.QuestionSnapshots
+                    .OrderBy(i => i.Order)
+                    .ThenBy(i => i.OriginalQuestionId, StringComparer.Ordinal)
+                    .Select(i => i.OriginalQuestionId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id) && snapshotQuestionIdSet.Contains(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+            }
+
+            if (orderedQuestionIds.Count == 0)
+            {
+                orderedQuestionIds = snapshotQuestions
+                    .Select(q => q.Id)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+            }
+
+            var existingPoints = new Dictionary<string, decimal>(StringComparer.Ordinal);
+            if (t.TestQuestions != null && t.TestQuestions.Count > 0)
+            {
+                foreach (var item in t.TestQuestions
+                    .Where(i => !string.IsNullOrWhiteSpace(i.QuestionId))
+                    .GroupBy(i => i.QuestionId, StringComparer.Ordinal))
+                {
+                    existingPoints[item.Key] = item.First().Points;
+                }
             }
             else if (t.QuestionSnapshots != null && t.QuestionSnapshots.Count > 0)
             {
-                var snapshotPointMap = t.QuestionSnapshots
-                    .GroupBy(i => i.OriginalQuestionId)
-                    .ToDictionary(g => g.Key, g => g.First().Points);
-                foreach (var q in snapshot)
-                    map[q.Id] = snapshotPointMap.TryGetValue(q.Id, out var p) ? p : 1m;
+                foreach (var item in t.QuestionSnapshots
+                    .Where(i => !string.IsNullOrWhiteSpace(i.OriginalQuestionId))
+                    .GroupBy(i => i.OriginalQuestionId, StringComparer.Ordinal))
+                {
+                    existingPoints[item.Key] = item.First().Points;
+                }
             }
-            else
-            {
-                foreach (var q in snapshot) map[q.Id] = 1m;
-            }
-            return map;
+
+            return TestScoreDistribution.NormalizeOrAllocate(
+                orderedQuestionIds,
+                existingPoints,
+                TestScoreDistribution.FixedTotalScore);
         }
 
         private Task<List<Question>> BuildSnapshotAsync(Test t, IEnumerable<Question> all)
         {
             if (t.TestQuestions != null && t.TestQuestions.Any())
             {
-                var qIds = t.TestQuestions.Select(i => i.QuestionId).ToHashSet();
-                return Task.FromResult(all.Where(q => qIds.Contains(q.Id)).ToList());
+                var qMap = all
+                    .Where(q => !string.IsNullOrWhiteSpace(q.Id))
+                    .GroupBy(q => q.Id, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+                var orderedQuestions = t.TestQuestions
+                    .OrderBy(i => i.Order)
+                    .ThenBy(i => i.QuestionId, StringComparer.Ordinal)
+                    .Select(i => qMap.TryGetValue(i.QuestionId, out var question) ? question : null)
+                    .Where(q => q != null)
+                    .Cast<Question>()
+                    .ToList();
+                return Task.FromResult(orderedQuestions);
             }
 
             if (t.QuestionSnapshots != null && t.QuestionSnapshots.Any())
             {
-                var qIds = t.QuestionSnapshots
+                var qMap = all
+                    .Where(q => !string.IsNullOrWhiteSpace(q.Id))
+                    .GroupBy(q => q.Id, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+                var orderedQuestions = t.QuestionSnapshots
                     .OrderBy(i => i.Order)
                     .Select(i => i.OriginalQuestionId)
                     .Where(id => !string.IsNullOrWhiteSpace(id))
                     .Distinct(StringComparer.Ordinal)
-                    .ToHashSet(StringComparer.Ordinal);
-                return Task.FromResult(all.Where(q => qIds.Contains(q.Id)).ToList());
+                    .Select(id => qMap.TryGetValue(id, out var question) ? question : null)
+                    .Where(q => q != null)
+                    .Cast<Question>()
+                    .ToList();
+                return Task.FromResult(orderedQuestions);
             }
 
             return Task.FromResult(new List<Question>());

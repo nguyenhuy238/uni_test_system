@@ -1,4 +1,5 @@
 using UniTestSystem.Application.Interfaces;
+using UniTestSystem.Application;
 using UniTestSystem.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -48,7 +49,9 @@ namespace UniTestSystem.Controllers
             var s = await _gradingService.GetSessionForGradingAsync(id);
             if (s == null) return NotFound();
 
-            var testQPoints = BuildQuestionPointsMap(s.Test);
+            var testQPoints = BuildQuestionPointsMap(
+                s.Test,
+                s.StudentAnswers.Select(sa => sa.QuestionId));
             var questionOrder = BuildQuestionOrderMap(s.Test);
 
             var vm = new GradeSessionViewModel
@@ -180,12 +183,18 @@ namespace UniTestSystem.Controllers
             return RedirectToAction(nameof(RegradeRequests));
         }
 
-        private static Dictionary<string, decimal> BuildQuestionPointsMap(Test? test)
+        private static Dictionary<string, decimal> BuildQuestionPointsMap(Test? test, IEnumerable<string>? questionIds)
         {
             var map = new Dictionary<string, decimal>(StringComparer.Ordinal);
+            var orderedQuestionIds = (questionIds ?? Array.Empty<string>())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
             if (test == null)
             {
-                return map;
+                return TestScoreDistribution.AllocateEvenlyByQuestionIds(
+                    orderedQuestionIds,
+                    TestScoreDistribution.FixedTotalScore);
             }
 
             if (test.TestQuestions != null && test.TestQuestions.Count > 0)
@@ -197,16 +206,24 @@ namespace UniTestSystem.Controllers
                 }
             }
 
-            if (map.Count == 0 && test.QuestionSnapshots != null && test.QuestionSnapshots.Count > 0)
+            if (test.QuestionSnapshots != null && test.QuestionSnapshots.Count > 0)
             {
                 foreach (var item in test.QuestionSnapshots)
                 {
                     if (string.IsNullOrWhiteSpace(item.OriginalQuestionId)) continue;
-                    map[item.OriginalQuestionId] = item.Points > 0m ? item.Points : 1m;
+                    map.TryAdd(item.OriginalQuestionId, item.Points > 0m ? item.Points : 1m);
                 }
             }
 
-            return map;
+            if (orderedQuestionIds.Count == 0)
+            {
+                orderedQuestionIds = map.Keys.ToList();
+            }
+
+            return TestScoreDistribution.NormalizeOrAllocate(
+                orderedQuestionIds,
+                map,
+                TestScoreDistribution.FixedTotalScore);
         }
 
         private static Dictionary<string, int> BuildQuestionOrderMap(Test? test)

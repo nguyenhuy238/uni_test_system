@@ -85,6 +85,17 @@ public sealed class TestAdministrationService : ITestAdministrationService
     {
         test.Id = string.IsNullOrWhiteSpace(test.Id) ? Guid.NewGuid().ToString("N") : test.Id;
         if (test.CreatedAt == default) test.CreatedAt = DateTime.UtcNow;
+        var inputQuestionIds = test.TestQuestions
+            .OrderBy(q => q.Order)
+            .ThenBy(q => q.QuestionId, StringComparer.Ordinal)
+            .Select(q => q.QuestionId)
+            .Where(qid => !string.IsNullOrWhiteSpace(qid))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        test.TestQuestions = inputQuestionIds.Count > 0
+            ? BuildBalancedTestQuestions(inputQuestionIds, test.Id)
+            : new List<TestQuestion>();
+        test.TotalMaxScore = TestScoreDistribution.FixedTotalScore;
         await _testRepo.InsertAsync(test);
     }
 
@@ -96,6 +107,17 @@ public sealed class TestAdministrationService : ITestAdministrationService
         test.Id = id;
         test.CreatedAt = existing.CreatedAt;
         test.UpdatedAt = DateTime.UtcNow;
+        var inputQuestionIds = test.TestQuestions
+            .OrderBy(q => q.Order)
+            .ThenBy(q => q.QuestionId, StringComparer.Ordinal)
+            .Select(q => q.QuestionId)
+            .Where(qid => !string.IsNullOrWhiteSpace(qid))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        test.TestQuestions = inputQuestionIds.Count > 0
+            ? BuildBalancedTestQuestions(inputQuestionIds, test.Id)
+            : new List<TestQuestion>();
+        test.TotalMaxScore = TestScoreDistribution.FixedTotalScore;
         await _testRepo.UpsertAsync(x => x.Id == id, test);
         return true;
     }
@@ -143,11 +165,14 @@ public sealed class TestAdministrationService : ITestAdministrationService
 
         if (selectedIds.Any())
         {
-            test.TestQuestions = selectedIds
-                .Select(qid => new TestQuestion { QuestionId = qid })
-                .ToList();
+            test.TestQuestions = BuildBalancedTestQuestions(selectedIds, test.Id);
+        }
+        else
+        {
+            test.TestQuestions = new List<TestQuestion>();
         }
 
+        test.TotalMaxScore = TestScoreDistribution.FixedTotalScore;
         test.IsPublished = true;
         test.CreatedAt = DateTime.UtcNow;
         test.PublishedAt = DateTime.UtcNow;
@@ -184,15 +209,14 @@ public sealed class TestAdministrationService : ITestAdministrationService
                           ?? new List<string>();
         if (selectedIds.Any())
         {
-            test.TestQuestions = selectedIds
-                .Select(qid => new TestQuestion { TestId = test.Id, QuestionId = qid })
-                .ToList();
+            test.TestQuestions = BuildBalancedTestQuestions(selectedIds, test.Id);
         }
         else
         {
             test.TestQuestions = new List<TestQuestion>();
         }
 
+        test.TotalMaxScore = TestScoreDistribution.FixedTotalScore;
         await _testRepo.UpsertAsync(x => x.Id == test.Id, test);
         return true;
     }
@@ -249,6 +273,19 @@ public sealed class TestAdministrationService : ITestAdministrationService
             return false;
         }
 
+        var cloneQuestionIds = test.TestQuestions
+            .Select(q => q.QuestionId)
+            .Where(qid => !string.IsNullOrWhiteSpace(qid))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var cloneQuestionPoints = TestScoreDistribution.NormalizeOrAllocate(
+            cloneQuestionIds,
+            test.TestQuestions
+                .Where(q => !string.IsNullOrWhiteSpace(q.QuestionId))
+                .GroupBy(q => q.QuestionId, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.First().Points, StringComparer.Ordinal),
+            TestScoreDistribution.FixedTotalScore);
+
         var clone = new Test
         {
             Title = test.Title + " (Clone)",
@@ -257,13 +294,18 @@ public sealed class TestAdministrationService : ITestAdministrationService
             AssessmentType = test.AssessmentType,
             ShuffleQuestions = test.ShuffleQuestions,
             ShuffleOptions = test.ShuffleOptions,
-            TotalMaxScore = test.TotalMaxScore,
+            TotalMaxScore = TestScoreDistribution.FixedTotalScore,
             CourseId = test.CourseId,
             IsPublished = false,
             CreatedBy = createdBy,
             CreatedAt = DateTime.UtcNow,
-            TestQuestions = test.TestQuestions
-                .Select(q => new TestQuestion { QuestionId = q.QuestionId, Points = q.Points })
+            TestQuestions = cloneQuestionIds
+                .Select((qid, index) => new TestQuestion
+                {
+                    QuestionId = qid,
+                    Points = cloneQuestionPoints[qid],
+                    Order = index
+                })
                 .ToList()
         };
 
@@ -844,6 +886,25 @@ public sealed class TestAdministrationService : ITestAdministrationService
     {
         courseId = (test.CourseId ?? string.Empty).Trim();
         return !string.IsNullOrWhiteSpace(courseId);
+    }
+
+    private static List<TestQuestion> BuildBalancedTestQuestions(
+        IReadOnlyList<string> selectedQuestionIds,
+        string testId)
+    {
+        var pointsByQuestion = TestScoreDistribution.AllocateEvenlyByQuestionIds(
+            selectedQuestionIds,
+            TestScoreDistribution.FixedTotalScore);
+
+        return selectedQuestionIds
+            .Select((qid, index) => new TestQuestion
+            {
+                TestId = testId,
+                QuestionId = qid,
+                Points = pointsByQuestion[qid],
+                Order = index
+            })
+            .ToList();
     }
 
     private async Task CreateSnapshotsAsync(Test test)
