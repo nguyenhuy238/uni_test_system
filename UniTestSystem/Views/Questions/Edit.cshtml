@@ -1,7 +1,10 @@
 @model UniTestSystem.Domain.Question
 @using UniTestSystem.Domain
+@using UniTestSystem.Application
+@inject UniTestSystem.Application.IPermissionService PermissionService
 @{
     var versions = ViewBag.QuestionVersions as List<AuditEntry> ?? new List<AuditEntry>();
+    var canApproveQuestion = PermissionService.HasAsync(User!, PermissionCodes.Question_Approve).GetAwaiter().GetResult();
 }
 <h2>Edit Question</h2>
 
@@ -36,7 +39,7 @@
             <button type="submit" asp-action="Submit" class="btn btn-info ms-2">Submit for Approval</button>
         }
 
-        @if (Model.Status == QuestionStatus.Pending)
+        @if (Model.Status == QuestionStatus.Pending && canApproveQuestion)
         {
             <button type="submit" asp-action="Approve" class="btn btn-success ms-2">Approve</button>
             <button type="button" class="btn btn-danger ms-2" data-bs-toggle="collapse" data-bs-target="#rejectBlock">Reject</button>
@@ -46,13 +49,16 @@
     </div>
 </form>
 
-<div id="rejectBlock" class="collapse mt-3 alert alert-danger">
-    <form asp-action="Reject" asp-route-id="@Model.Id" method="post">
-        <label>Reason for Rejection:</label>
-        <textarea name="reason" class="form-control mb-2" required></textarea>
-        <button class="btn btn-danger">Confirm Reject</button>
-    </form>
-</div>
+@if (canApproveQuestion)
+{
+    <div id="rejectBlock" class="collapse mt-3 alert alert-danger">
+        <form asp-action="Reject" asp-route-id="@Model.Id" method="post">
+            <label>Reason for Rejection:</label>
+            <textarea name="reason" class="form-control mb-2" required></textarea>
+            <button class="btn btn-danger">Confirm Reject</button>
+        </form>
+    </div>
+}
 
 @if (versions.Any())
 {
