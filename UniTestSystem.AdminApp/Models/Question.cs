@@ -17,16 +17,19 @@ namespace UniTestSystem.AdminApp.Models
         public string Status { get; set; } = "Draft";
 
         [JsonPropertyName("options")]
-        public List<string>? Options { get; set; } = new();
+        public List<Option>? Options { get; set; } = new();
 
-        [JsonPropertyName("correctKeys")]
+        [JsonIgnore]
         public List<string>? CorrectKeys { get; set; } = new();
 
-        [JsonPropertyName("skill")]
+        [JsonPropertyName("skillId")]
         public string Skill { get; set; } = "General";
 
-        [JsonPropertyName("difficulty")]
+        [JsonPropertyName("difficultyLevelId")]
         public string Difficulty { get; set; } = "Junior";
+
+        [JsonPropertyName("subjectId")]
+        public string SubjectId { get; set; } = "";
 
         [JsonPropertyName("mediaUrl")]
         public string? MediaUrl { get; set; }

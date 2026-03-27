@@ -665,8 +665,30 @@ namespace UniTestSystem.AdminApp.ViewModels
             _selectedQuestionCorrectKeys.Clear();
             if (SelectedQuestion != null)
             {
-                if (SelectedQuestion.Options != null) foreach (var opt in SelectedQuestion.Options) _selectedQuestionOptions.Add(new OptionWrapper { Text = opt });
-                if (SelectedQuestion.CorrectKeys != null) foreach (var key in SelectedQuestion.CorrectKeys) _selectedQuestionCorrectKeys.Add(key);
+                if (SelectedQuestion.Options != null)
+                {
+                    foreach (var opt in SelectedQuestion.Options)
+                    {
+                        if (string.IsNullOrWhiteSpace(opt.Content))
+                        {
+                            continue;
+                        }
+
+                        _selectedQuestionOptions.Add(new OptionWrapper { Text = opt.Content });
+                        if (opt.IsCorrect)
+                        {
+                            _selectedQuestionCorrectKeys.Add(opt.Content);
+                        }
+                    }
+                }
+
+                if (SelectedQuestion.CorrectKeys != null)
+                {
+                    foreach (var key in SelectedQuestion.CorrectKeys.Where(key => !_selectedQuestionCorrectKeys.Contains(key)))
+                    {
+                        _selectedQuestionCorrectKeys.Add(key);
+                    }
+                }
             }
         }
 
@@ -696,8 +718,21 @@ namespace UniTestSystem.AdminApp.ViewModels
         private void UpdateQuestionModelFromUI()
         {
             if (SelectedQuestion == null) return;
-            SelectedQuestion.Options = _selectedQuestionOptions.Select(x => x.Text).ToList();
-            SelectedQuestion.CorrectKeys = _selectedQuestionCorrectKeys.ToList();
+
+            var correctSet = _selectedQuestionCorrectKeys
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            SelectedQuestion.Options = _selectedQuestionOptions
+                .Where(x => !string.IsNullOrWhiteSpace(x.Text))
+                .Select(x => new Option
+                {
+                    Content = x.Text.Trim(),
+                    IsCorrect = correctSet.Contains(x.Text.Trim())
+                })
+                .ToList();
+            SelectedQuestion.CorrectKeys = correctSet.ToList();
         }
 
         private void SyncTestItems()
