@@ -475,7 +475,7 @@
                                          Margin="0,0,0,10"/>
 
                                 <StackPanel Grid.Row="18" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}">
-                                    <Button Content="Create" Command="{Binding AddQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
+                                    <Button Content="Create" Click="CreateQuestion_Click" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
                                     <Button Content="Save" Command="{Binding SaveQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
                                     <Button Content="Submit" Command="{Binding SubmitQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
                                     <Button Content="Approve" Command="{Binding ApproveQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
@@ -552,7 +552,7 @@
                                           Margin="0,0,0,10"/>
 
                                 <StackPanel Grid.Row="10" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-                                    <Button Content="Create" Command="{Binding AddUserCommand}" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
+                                    <Button Content="Create" Click="CreateUser_Click" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
                                     <Button Content="Save" Command="{Binding SaveUserCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
                                     <Button Content="Delete" Command="{Binding DeleteUserCommand}" Width="70"/>
                                 </StackPanel>

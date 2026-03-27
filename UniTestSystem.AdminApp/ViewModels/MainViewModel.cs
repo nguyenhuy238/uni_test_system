@@ -1723,6 +1723,31 @@ namespace UniTestSystem.AdminApp.ViewModels
             }
         }
 
+        public async Task CreateUserFromDialogAsync(User draftUser)
+        {
+            if (draftUser == null)
+            {
+                return;
+            }
+
+            draftUser.Id = string.Empty;
+            SelectedUser = draftUser;
+            await SaveUserAsync();
+        }
+
+        public async Task CreateQuestionFromDialogAsync(Question draftQuestion)
+        {
+            if (draftQuestion == null)
+            {
+                return;
+            }
+
+            draftQuestion.Id = string.Empty;
+            draftQuestion.Status = string.IsNullOrWhiteSpace(draftQuestion.Status) ? "Draft" : draftQuestion.Status.Trim();
+            SelectedQuestion = draftQuestion;
+            await SaveQuestionAsync();
+        }
+
         private void StartNewUser()
         {
             SelectedUser = new User

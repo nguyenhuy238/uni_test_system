@@ -17,6 +17,8 @@
         Page = int.TryParse(Context.Request.Query["Page"], out var p) ? p : 1,
         PageSize = int.TryParse(Context.Request.Query["PageSize"], out var s) ? s : 20
     };
+    bool canSubmitQuestion = (ViewBag.CanSubmitQuestion as bool?) ?? false;
+    bool canApproveQuestion = (ViewBag.CanApproveQuestion as bool?) ?? false;
 }
 
 <h2>Question Bank</h2>
@@ -100,6 +102,28 @@
                 <td>@string.Join(", ", q.Tags)</td>
                 <td class="text-nowrap">
                     <a class="btn btn-sm btn-outline-primary" href="/Questions/Edit/@q.Id">Edit</a>
+                    @if (canSubmitQuestion && (q.Status == QuestionStatus.Draft || q.Status == QuestionStatus.Rejected))
+                    {
+                        <form asp-action="Submit" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@q.Id" />
+                            <button type="submit" class="btn btn-sm btn-outline-warning" onclick="return confirm('Gửi câu hỏi này để duyệt?')">Submit</button>
+                        </form>
+                    }
+                    @if (canApproveQuestion && q.Status == QuestionStatus.Pending)
+                    {
+                        <form asp-action="Approve" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@q.Id" />
+                            <button type="submit" class="btn btn-sm btn-outline-success" onclick="return confirm('Phê duyệt câu hỏi này?')">Approve</button>
+                        </form>
+                        <form asp-action="Reject" method="post" class="d-inline reject-form" data-question-id="@q.Id">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@q.Id" />
+                            <input type="hidden" name="reason" value="" />
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+                        </form>
+                    }
                     <form asp-action="Clone" method="post" class="d-inline">
                         <input type="hidden" name="id" value="@q.Id" /><button class="btn btn-sm btn-outline-secondary">Clone</button>
                     </form>
@@ -126,3 +150,17 @@
         }
     </ul>
 </nav>
+
+<script>
+    document.querySelectorAll('.reject-form').forEach(function(form) {
+        form.addEventListener('submit', function(event) {
+            const reason = prompt('Nhập lý do từ chối câu hỏi:', 'Rejected by reviewer');
+            if (reason === null) {
+                event.preventDefault();
+                return;
+            }
+
+            form.querySelector('input[name="reason"]').value = reason.trim();
+        });
+    });
+</script>

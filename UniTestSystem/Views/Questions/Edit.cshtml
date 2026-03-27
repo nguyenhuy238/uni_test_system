@@ -2,6 +2,8 @@
 @using UniTestSystem.Domain
 @{
     var versions = ViewBag.QuestionVersions as List<AuditEntry> ?? new List<AuditEntry>();
+    bool canSubmitQuestion = (ViewBag.CanSubmitQuestion as bool?) ?? false;
+    bool canApproveQuestion = (ViewBag.CanApproveQuestion as bool?) ?? false;
 }
 <h2>Edit Question</h2>
 
@@ -33,6 +35,55 @@
         <a asp-action="Index" class="btn btn-secondary ms-2">Back to List</a>
     </div>
 </form>
+
+<div class="mt-3 d-flex gap-2 flex-wrap">
+        @if (canSubmitQuestion && (Model.Status == QuestionStatus.Draft || Model.Status == QuestionStatus.Rejected))
+        {
+                <form asp-action="Submit" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button type="submit" class="btn btn-outline-warning" onclick="return confirm('Gửi câu hỏi này để duyệt?')">Submit For Review</button>
+                </form>
+        }
+
+        @if (canApproveQuestion && Model.Status == QuestionStatus.Pending)
+        {
+                <form asp-action="Approve" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button type="submit" class="btn btn-outline-success" onclick="return confirm('Phê duyệt câu hỏi này?')">Approve</button>
+                </form>
+
+                <form asp-action="Reject" method="post" class="d-inline" id="rejectForm">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <input type="hidden" name="reason" id="rejectReason" value="" />
+                        <button type="submit" class="btn btn-outline-danger">Reject</button>
+                </form>
+        }
+</div>
+
+<script>
+    (function() {
+        const rejectForm = document.getElementById('rejectForm');
+        if (!rejectForm) {
+            return;
+        }
+
+        rejectForm.addEventListener('submit', function(event) {
+            const reason = prompt('Nhập lý do từ chối câu hỏi:', 'Rejected by reviewer');
+            if (reason === null) {
+                event.preventDefault();
+                return;
+            }
+
+            const input = document.getElementById('rejectReason');
+            if (input) {
+                input.value = reason.trim();
+            }
+        });
+    })();
+</script>
 
 @if (versions.Any())
 {

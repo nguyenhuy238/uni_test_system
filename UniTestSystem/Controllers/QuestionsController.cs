@@ -17,6 +17,7 @@ public class QuestionsController : Controller
     private readonly IRepository<Skill> _skillRepo;
     private readonly IRepository<QuestionBank> _questionBankRepo;
     private readonly IRepository<Course> _courseRepo;
+    private readonly IPermissionService _permissionService;
     private readonly IWebHostEnvironment _env;
     private readonly IConfiguration _cfg;
 
@@ -28,6 +29,7 @@ public class QuestionsController : Controller
         IRepository<Skill> skillRepo,
         IRepository<QuestionBank> questionBankRepo,
         IRepository<Course> courseRepo,
+        IPermissionService permissionService,
         IWebHostEnvironment env,
         IConfiguration cfg)
     {
@@ -38,6 +40,7 @@ public class QuestionsController : Controller
         _skillRepo = skillRepo;
         _questionBankRepo = questionBankRepo;
         _courseRepo = courseRepo;
+        _permissionService = permissionService;
         _env = env;
         _cfg = cfg;
     }
@@ -60,6 +63,7 @@ public class QuestionsController : Controller
         await PopulateLookupOptionsAsync(
             selectedSubjectId: f.SubjectId,
             selectedDifficultyLevelId: f.DifficultyLevelId);
+        await PopulateQuestionActionPermissionFlagsAsync();
         return View(result);
     }
 
@@ -84,6 +88,7 @@ public class QuestionsController : Controller
             selectedDifficultyLevelId: model.DifficultyLevelId,
             selectedSkillId: model.SkillId,
             selectedQuestionBankId: model.QuestionBankId);
+        await PopulateQuestionActionPermissionFlagsAsync();
         return View(model);
     }
 
@@ -124,6 +129,7 @@ public class QuestionsController : Controller
                 selectedDifficultyLevelId: q.DifficultyLevelId,
                 selectedSkillId: q.SkillId,
                 selectedQuestionBankId: q.QuestionBankId);
+            await PopulateQuestionActionPermissionFlagsAsync();
             return View(q);
         }
     }
@@ -142,6 +148,7 @@ public class QuestionsController : Controller
             selectedDifficultyLevelId: editData.Question.DifficultyLevelId,
             selectedSkillId: editData.Question.SkillId,
             selectedQuestionBankId: editData.Question.QuestionBankId);
+        await PopulateQuestionActionPermissionFlagsAsync();
         return View(editData.Question);
     }
 
@@ -167,6 +174,7 @@ public class QuestionsController : Controller
                 selectedDifficultyLevelId: q.DifficultyLevelId,
                 selectedSkillId: q.SkillId,
                 selectedQuestionBankId: q.QuestionBankId);
+            await PopulateQuestionActionPermissionFlagsAsync();
             return View(q);
         }
 
@@ -194,6 +202,7 @@ public class QuestionsController : Controller
                     selectedDifficultyLevelId: q.DifficultyLevelId,
                     selectedSkillId: q.SkillId,
                     selectedQuestionBankId: q.QuestionBankId);
+                await PopulateQuestionActionPermissionFlagsAsync();
                 return View(q);
             }
             TempData["Msg"] = "Cập nhật thành công";
@@ -207,6 +216,7 @@ public class QuestionsController : Controller
                 selectedDifficultyLevelId: q.DifficultyLevelId,
                 selectedSkillId: q.SkillId,
                 selectedQuestionBankId: q.QuestionBankId);
+            await PopulateQuestionActionPermissionFlagsAsync();
             return View(q);
         }
     }
@@ -273,6 +283,7 @@ public class QuestionsController : Controller
     // WORKFLOW ACTIONS
     [HttpPost]
     [Authorize(Policy = PermissionCodes.Question_Edit)]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Submit(string id)
     {
         var (success, reason) = await _svc.SubmitAsync(id, User.Identity?.Name ?? "hr");
@@ -283,6 +294,7 @@ public class QuestionsController : Controller
 
     [HttpPost]
     [Authorize(Policy = PermissionCodes.Question_Approve)]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Approve(string id)
     {
         var (success, reason) = await _svc.ApproveAsync(id, User.Identity?.Name ?? "hr");
@@ -293,6 +305,7 @@ public class QuestionsController : Controller
 
     [HttpPost]
     [Authorize(Policy = PermissionCodes.Question_Approve)]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Reject(string id, string? reason)
     {
         var (success, r) = await _svc.RejectAsync(id, User.Identity?.Name ?? "hr", reason);
@@ -396,6 +409,22 @@ public class QuestionsController : Controller
             selectedDifficultyLevelId,
             includeEmpty: true,
             emptyText: "-- All difficulty levels --");
+    }
+
+    private async Task PopulateQuestionActionPermissionFlagsAsync()
+    {
+        ViewBag.CanSubmitQuestion = await HasPermissionAsync(PermissionCodes.Question_Edit);
+        ViewBag.CanApproveQuestion = await HasPermissionAsync(PermissionCodes.Question_Approve);
+    }
+
+    private async Task<bool> HasPermissionAsync(string permissionCode)
+    {
+        if (User.IsInRole(Role.Admin.ToString()))
+        {
+            return true;
+        }
+
+        return await _permissionService.HasAsync(User, permissionCode);
     }
 
     private static List<SelectListItem> BuildSelectList(
