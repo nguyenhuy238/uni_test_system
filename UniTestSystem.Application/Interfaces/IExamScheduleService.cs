@@ -9,6 +9,8 @@ public interface IExamScheduleService
     Task<bool> CreateScheduleAsync(ExamSchedule schedule);
     Task<bool> UpdateScheduleAsync(ExamSchedule schedule);
     Task<bool> DeleteScheduleAsync(string id);
+    Task<bool> LockScheduleAsync(string scheduleId, string staffId);
+    Task<bool> UnlockScheduleAsync(string scheduleId, string staffId);
     
     // Conflict detection
     Task<bool> HasConflictAsync(string room, DateTime start, DateTime end, string? excludeId = null);

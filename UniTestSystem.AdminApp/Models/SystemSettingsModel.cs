@@ -19,6 +19,15 @@ namespace UniTestSystem.AdminApp.Models
         [JsonPropertyName("currentAcademicYear")]
         public string? CurrentAcademicYear { get; set; }
 
+        [JsonPropertyName("warningGpaThreshold")]
+        public decimal WarningGpaThreshold { get; set; } = 2.0m;
+
+        [JsonPropertyName("failGpaThreshold")]
+        public decimal FailGpaThreshold { get; set; } = 1.0m;
+
+        [JsonPropertyName("treatOutstandingDebtAsFail")]
+        public bool TreatOutstandingDebtAsFail { get; set; } = true;
+
         [JsonPropertyName("updatedAt")]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

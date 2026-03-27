@@ -28,9 +28,24 @@ public class EfRepository<T> : IRepository<T> where T : class
         return await _dbSet.FirstOrDefaultAsync(predicate);
     }
 
-    public IQueryable<T> Query()
+    public async Task<List<T>> ListAsync(ISpecification<T>? specification = null)
     {
-        return _dbSet.AsQueryable();
+        return await ApplySpecification(specification).ToListAsync();
+    }
+
+    public async Task<T?> FirstOrDefaultAsync(ISpecification<T> specification)
+    {
+        return await ApplySpecification(specification).FirstOrDefaultAsync();
+    }
+
+    public async Task<int> CountAsync(Expression<Func<T, bool>>? predicate = null)
+    {
+        return predicate == null ? await _dbSet.CountAsync() : await _dbSet.CountAsync(predicate);
+    }
+
+    public async Task<bool> AnyAsync(Expression<Func<T, bool>> predicate)
+    {
+        return await _dbSet.AnyAsync(predicate);
     }
 
     public async Task InsertAsync(T entity)
@@ -67,5 +82,31 @@ public class EfRepository<T> : IRepository<T> where T : class
             _dbSet.RemoveRange(entities);
             await _context.SaveChangesAsync();
         }
+    }
+
+    private IQueryable<T> ApplySpecification(ISpecification<T>? specification)
+    {
+        IQueryable<T> query = _dbSet.AsQueryable();
+        if (specification == null)
+        {
+            return query;
+        }
+
+        if (specification.Criteria != null)
+        {
+            query = query.Where(specification.Criteria);
+        }
+
+        foreach (var include in specification.Includes)
+        {
+            query = query.Include(include);
+        }
+
+        foreach (var includeString in specification.IncludeStrings)
+        {
+            query = query.Include(includeString);
+        }
+
+        return query;
     }
 }

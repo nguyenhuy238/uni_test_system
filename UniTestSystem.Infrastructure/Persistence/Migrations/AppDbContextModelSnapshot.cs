@@ -286,6 +286,9 @@ namespace UniTestSystem.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsManuallyLocked")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Room")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -1030,6 +1033,9 @@ namespace UniTestSystem.Migrations
                     b.Property<string>("CurrentSemester")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal>("FailGpaThreshold")
+                        .HasColumnType("decimal(4,2)");
+
                     b.Property<string>("LogoUrl")
                         .HasColumnType("nvarchar(max)");
 
@@ -1037,11 +1043,17 @@ namespace UniTestSystem.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("TreatOutstandingDebtAsFail")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("WarningGpaThreshold")
+                        .HasColumnType("decimal(4,2)");
 
                     b.HasKey("Id");
 
@@ -1203,6 +1215,12 @@ namespace UniTestSystem.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<string>("AcademicStatus")
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("AcademicYear")
+                        .HasColumnType("nvarchar(450)");
+
                     b.Property<DateTime>("CalculatedAt")
                         .HasColumnType("datetime2");
 
@@ -1213,6 +1231,12 @@ namespace UniTestSystem.Migrations
                         .HasColumnType("decimal(3,2)");
 
                     b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsYearEndFinalized")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsYearEndLocked")
                         .HasColumnType("bit");
 
                     b.Property<byte[]>("RowVersion")
@@ -1230,9 +1254,24 @@ namespace UniTestSystem.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("YearEndFinalizedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("YearEndFinalizedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal?>("YearEndGpa10")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<decimal?>("YearEndGpa4")
+                        .HasColumnType("decimal(3,2)");
+
+                    b.Property<int?>("YearEndTotalCreditsEarned")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("StudentId");
+                    b.HasIndex("StudentId", "AcademicYear");
 
                     b.ToTable("Transcript", (string)null);
                 });

@@ -1,4 +1,4 @@
-@model UniTestSystem.Application.Models.EditTestViewModel
+@model UniTestSystem.ViewModels.Tests.EditTestViewModel
 @using UniTestSystem.Domain
 
 <h2>Edit Test</h2>
@@ -26,6 +26,7 @@
 
     <!-- NEW: carry left-form values across paging -->
     <input type="hidden" id="q_Title" name="Title" value="@Model.Title" />
+    <input type="hidden" id="q_CourseId" name="CourseId" value="@Model.CourseId" />
     <input type="hidden" id="q_DurationMinutes" name="DurationMinutes" value="@Model.DurationMinutes" />
     <input type="hidden" id="q_PassScore" name="PassScore" value="@Model.PassScore" />
     <input type="hidden" id="q_ShuffleQuestions" name="ShuffleQuestions" value="@Model.ShuffleQuestions" />
@@ -49,6 +50,14 @@
                 <label class="form-label">Title</label>
                 <input class="form-control" asp-for="Title" />
                 <span class="text-danger" asp-validation-for="Title"></span>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Course</label>
+                <select class="form-select" asp-for="CourseId" asp-items="ViewBag.Courses" required>
+                    <option value="">-- Chọn Course --</option>
+                </select>
+                <span class="text-danger" asp-validation-for="CourseId"></span>
             </div>
 
             <div class="mb-3">
@@ -243,6 +252,7 @@
         (function(){
           const map = {
             Title:           {src:'input[name="Title"]',            hid:'#q_Title'},
+            CourseId:        {src:'select[name="CourseId"]',        hid:'#q_CourseId'},
             DurationMinutes: {src:'input[name="DurationMinutes"]',  hid:'#q_DurationMinutes'},
             PassScore:       {src:'input[name="PassScore"]',        hid:'#q_PassScore'},
             ShuffleQuestions:{src:'input[name="ShuffleQuestions"]', hid:'#q_ShuffleQuestions', isCheckbox:true},

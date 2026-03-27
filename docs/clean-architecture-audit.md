@@ -1,101 +1,75 @@
 # Clean Architecture Audit (Current State)
 
-## 1) Current status summary
+## 1) Snapshot (2026-03-25)
 
-The solution already has 4 projects that match Clean Architecture layers:
-
+Current solution structure:
 - `UniTestSystem.Domain`
 - `UniTestSystem.Application`
 - `UniTestSystem.Infrastructure`
-- `UniTestSystem` (Presentation/Web)
+- `UniTestSystem` (Web/Presentation)
 
-However, boundaries are still mixed in several places.
+Completed architectural changes:
+- Repository contract no longer exposes `IQueryable` (`IRepository<T>.Query()` removed).
+- Specification-based query mechanism is in place (`ISpecification<T>`, `Specification<T>`, `ListAsync(...)`).
+- No remaining `.Query()` calls in codebase.
+- `TestsController` migrated to use-case service (`ITestAdministrationService`).
+- `UsersController` migrated to use-case service (`IUserAdministrationService`).
+- `ReportsController` migrated to use-case service (`IReportsUseCaseService`).
+- All remaining controllers no longer inject `IRepository<T>` directly (migrated to `IEntityStore<T>` transitional adapter).
+- Presentation `*ViewModel*` classes moved from `UniTestSystem.Application/Models` to `UniTestSystem/ViewModels`.
 
-## 2) Main boundary issues found
+## 2) What is fixed vs still open
 
-- `Application` still depends on framework/data access details (`Microsoft.EntityFrameworkCore`) and document/export libs (`ClosedXML`, `QuestPDF`).
-- `IRepository<T>` exposes `IQueryable<T>`, leaking query/infrastructure concerns into use-case and presentation layers.
-- Many controllers in `UniTestSystem/Controllers` still inject `IRepository<T>` directly instead of use-case services.
-- Some classes are oversized and bundle multiple responsibilities:
-  - `UniTestSystem.Application/ReportService.cs` (~580 lines)
-  - `UniTestSystem/Controllers/TestsController.cs` (~837 lines)
-- Runtime artifacts and local operational files were tracked in source tree (logs/build dumps/backups).
+Fixed:
+- `IQueryable` leakage from repository contract.
+- Feature-level controller-to-repository coupling for `Tests` and `Users`.
+- Application-layer `*ViewModel*` naming and placement issues.
 
-## 3) Cleanup done in this pass
+Still open:
+- Many controllers still use transitional `IEntityStore<T>` and need feature-level use-case services.
+- `ReportService` remains large and should be split by sub-domain use cases.
+- Application still contains export implementation dependencies (`ClosedXML`, `QuestPDF`) that should eventually move behind pure contracts to Infrastructure.
 
-- Removed tracked build/error artifacts in repo root and `UniTestSystem/`.
-- Removed tracked database backup file in `UniTestSystem/App_Data/Backups/`.
-- Updated `.gitignore` to block runtime/build artifacts from being re-tracked.
-- Reduced direct Infrastructure coupling in `AdminController` by introducing:
-  - `ISystemMaintenanceService` (Application abstraction)
-  - `SystemMaintenanceService` (Infrastructure implementation)
-- Renamed confusing maintenance API in `Seeder`:
-  - `ResetDatabaseAsync(...)` as the main method
-  - old `ResetAllJsonFilesAsync(...)` kept as obsolete compatibility wrapper
-- Replaced placeholder domain class intent (`Class1`) with a meaningful marker type.
+## 3) Enforced rules source of truth
 
-## 4) Recommended target folder structure
+All new architecture rules are formalized in:
+- `UNITSYSTEM_SOFTWARE_QUALITY_RULEBOOK.yaml` (v1.3.0)
 
-### `UniTestSystem.Domain`
+Key rule IDs for current refactor direction:
+- `MAIN_005`: no direct repository injection in new/modified controllers.
+- `MAIN_017`: no `IRepository<T>` at presentation boundary; `IEntityStore<T>` is transitional only.
+- `MAIN_018`: `ReportsController` must stay on `IReportsUseCaseService`.
+- `MAIN_009`: Presentation `ViewModel` classes stay in presentation projects.
+- `MAIN_012`: repository contract must not expose `IQueryable`.
+- `MAIN_013`: business workflow logic belongs in Application use-case services.
+- `MAIN_014`: Application contracts use DTO/Command/Query/Result naming.
+- `MAIN_015`: migrated features must use feature-level service interfaces.
+- `MAIN_016`: PR must pass Application + Web project builds.
 
-- `Entities/`
-- `ValueObjects/`
-- `Enums/`
-- `DomainServices/`
-- `Events/`
-- `Exceptions/`
+## 4) PR guard commands
 
-### `UniTestSystem.Application`
+Run these checks before merging architecture-related changes:
 
-- `Abstractions/`
-  - `Persistence/` (repositories, unit of work, query ports)
-  - `Integrations/` (email, file storage, external gateways)
-- `UseCases/`
-  - `<Feature>/Commands/`
-  - `<Feature>/Queries/`
-  - `<Feature>/Handlers/`
-- `DTOs/`
-- `Mappings/`
-- `Validation/`
-- `DependencyInjection/`
+```powershell
+rg "IRepository<" UniTestSystem/Controllers -g "*.cs"
+rg "IEntityStore<" UniTestSystem/Controllers -g "*.cs"
+rg "\.Query\(\)" UniTestSystem UniTestSystem.Application UniTestSystem.Infrastructure -g "*.cs"
+Get-ChildItem UniTestSystem.Application/Models -Recurse -Filter *ViewModel*.cs
+dotnet build UniTestSystem.Application/UniTestSystem.Application.csproj
+dotnet build UniTestSystem/UniTestSystem.csproj
+```
 
-### `UniTestSystem.Infrastructure`
+Expected result:
+- first command returns no results
+- second command returns migration backlog controllers still on transitional store (to be moved to use-case services)
+- third/fourth commands return no results
+- both build commands succeed
 
-- `Persistence/`
-  - `DbContext/`
-  - `Configurations/`
-  - `Repositories/`
-  - `Migrations/`
-- `Integrations/`
-  - `Email/`
-  - `Export/`
-  - `Storage/`
-- `Security/`
-- `DependencyInjection/`
+## 5) Next migration targets
 
-### `UniTestSystem` (Web/Presentation)
-
-- `Controllers/`
-  - `Mvc/`
-  - `Api/Admin/`
-  - `Api/User/`
-- `ViewModels/` (move UI-specific models from Application to here)
-- `Views/`
-- `Authorization/`
-- `Middleware/`
-- `Extensions/`
-
-## 5) Priority refactor order (safe and incremental)
-
-1. Stop controller-to-repository usage:
-   - Create use-case services per feature and move query/write logic out of controllers.
-2. Split giant classes:
-   - break `TestsController` and `ReportService` into focused use cases.
-3. Remove `IQueryable<T>` from `IRepository<T>`:
-   - replace with explicit query methods or specification/query objects.
-4. Push infra libraries out of Application:
-   - keep `ClosedXML`/`QuestPDF` implementations in Infrastructure behind interfaces.
-5. Move UI models:
-   - relocate `Application/Models/*ViewModel*` into Web `ViewModels/`.
-6. Add tests:
-   - at minimum `Application` unit tests for core use-cases.
+Recommended next order:
+1. `TranscriptsController` use-case service
+2. `QuestionsController` use-case service
+3. `SessionsController` / `TestApiController` use-case service
+4. Remaining `Api/Admin/*` feature services
+5. Split `ReportService` into smaller report modules

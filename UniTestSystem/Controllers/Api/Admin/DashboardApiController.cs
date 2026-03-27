@@ -1,8 +1,7 @@
 using UniTestSystem.Application.Interfaces;
-using UniTestSystem.Domain;
+using UniTestSystem.Application;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using DomainUser = UniTestSystem.Domain.User;
 
 namespace UniTestSystem.Controllers.Api.Admin;
 
@@ -11,38 +10,39 @@ namespace UniTestSystem.Controllers.Api.Admin;
 [Route("api/admin/dashboard")]
 public class DashboardApiController : ControllerBase
 {
-    private readonly IRepository<Question> _questions;
-    private readonly IRepository<Test> _tests;
-    private readonly IRepository<DomainUser> _users;
-    private readonly IRepository<Result> _results;
+    private readonly IQuestionService _questionService;
+    private readonly ITestAdministrationService _testAdministrationService;
+    private readonly IUserAdministrationService _userAdministrationService;
+    private readonly IResultsService _resultsService;
 
     public DashboardApiController(
-        IRepository<Question> questions,
-        IRepository<Test> tests,
-        IRepository<DomainUser> users,
-        IRepository<Result> results)
+        IQuestionService questionService,
+        ITestAdministrationService testAdministrationService,
+        IUserAdministrationService userAdministrationService,
+        IResultsService resultsService)
     {
-        _questions = questions;
-        _tests = tests;
-        _users = users;
-        _results = results;
+        _questionService = questionService;
+        _testAdministrationService = testAdministrationService;
+        _userAdministrationService = userAdministrationService;
+        _resultsService = resultsService;
     }
 
     [HttpGet("summary")]
     public async Task<IActionResult> GetSummary()
     {
-        var questionCount = (await _questions.GetAllAsync()).Count;
-        var testCount = (await _tests.GetAllAsync()).Count;
-        var userCount = (await _users.GetAllAsync()).Count;
-        var resultCount = (await _results.GetAllAsync()).Count;
+        var questions = await _questionService.GetAllAsync();
+        var tests = await _testAdministrationService.GetAllTestsAsync();
+        var users = await _userAdministrationService.GetAllUsersAsync();
+        var resultCount = await _resultsService.GetResultCountAsync();
 
         return Ok(new
         {
-            TotalQuestions = questionCount,
-            TotalTests = testCount,
-            TotalUsers = userCount,
+            TotalQuestions = questions.Count,
+            TotalTests = tests.Count,
+            TotalUsers = users.Count,
             TotalSubmissions = resultCount,
-            ActiveTestCount = (await _tests.GetAllAsync()).Count(t => t.IsPublished)
+            ActiveTestCount = tests.Count(t => t.IsPublished)
         });
     }
 }
+

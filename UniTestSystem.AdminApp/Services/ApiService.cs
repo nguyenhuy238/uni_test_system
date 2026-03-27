@@ -109,6 +109,9 @@ namespace UniTestSystem.AdminApp.Services
         public async Task<SystemSettingsModel?> GetSystemSettingsAsync() => await GetJsonAsync<SystemSettingsModel>($"{_baseUrl}/api/admin/system-settings");
         public async Task<List<BackupFileInfo>?> GetBackupsAsync() => await GetJsonAsync<List<BackupFileInfo>>($"{_baseUrl}/api/admin/maintenance/backups");
         public async Task<List<ExamSchedule>?> GetExamSchedulesAsync() => await GetJsonAsync<List<ExamSchedule>>($"{_baseUrl}/api/admin/exam-schedules");
+        public async Task<YearEndPreviewModel?> GetYearEndPreviewAsync(string academicYear, string? facultyId = null)
+            => await GetJsonAsync<YearEndPreviewModel>(
+                $"{_baseUrl}/api/admin/transcripts/year-end/preview?academicYear={Uri.EscapeDataString(academicYear)}&facultyId={Uri.EscapeDataString(facultyId ?? "")}");
 
         public async Task<bool> CreateTestAsync(Test test) => await SendJsonAsync(HttpMethod.Post, $"{_baseUrl}/api/admin/tests", test);
         public async Task<bool> UpdateTestAsync(string id, Test test) => await SendJsonAsync(HttpMethod.Put, $"{_baseUrl}/api/admin/tests/{id}", test);
@@ -205,6 +208,9 @@ namespace UniTestSystem.AdminApp.Services
                 settings.SystemName,
                 settings.CurrentSemester,
                 settings.CurrentAcademicYear,
+                settings.WarningGpaThreshold,
+                settings.FailGpaThreshold,
+                settings.TreatOutstandingDebtAsFail,
                 settings.LogoUrl
             };
             return await SendJsonAsync(HttpMethod.Put, $"{_baseUrl}/api/admin/system-settings", payload);
@@ -263,6 +269,18 @@ namespace UniTestSystem.AdminApp.Services
 
         public async Task<byte[]?> DownloadExamScheduleCsvAsync()
             => await DownloadBytesAsync($"{_baseUrl}/api/admin/exam-schedules/export/csv");
+
+        public async Task<YearEndFinalizeResultModel?> FinalizeYearEndAsync(string academicYear, string? facultyId = null)
+        {
+            var payload = new { academicYear, facultyId };
+            using var response = await SendJsonRawAsync(HttpMethod.Post, $"{_baseUrl}/api/admin/transcripts/year-end/finalize", payload, requiresAuth: true);
+            if (response == null)
+            {
+                return null;
+            }
+
+            return await ReadJsonAsync<YearEndFinalizeResultModel>(response);
+        }
 
         private void SetAuthState(string accessToken, string? refreshToken, User user)
         {

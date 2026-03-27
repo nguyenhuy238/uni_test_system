@@ -22,6 +22,9 @@ obj/
 /build*.txt
 /migration_log.txt
 /UniTestSystem/build_errors*.txt
+/msbuild*.log
+/restore*.log
+/infra*.log
 
 ## [Publish]
 publish/
@@ -43,3 +46,12 @@ Thumbs.db
 /UniTestSystem/wwwroot/uploads/*
 !/UniTestSystem/wwwroot/uploads/logo/
 !/UniTestSystem/wwwroot/uploads/logo/**
+
+## [.NET telemetry and temp]
+/.dotnet/
+*.trn
+
+## [Common temp files]
+*.tmp
+*.temp
+*.cache

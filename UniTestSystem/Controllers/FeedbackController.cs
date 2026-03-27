@@ -2,27 +2,20 @@ using UniTestSystem.Application.Interfaces;
 // UniTestSystem.Controllers/FeedbackController.cs
 using System.Security.Claims;
 using UniTestSystem.Domain;
-using UniTestSystem.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using UniTestSystem.ViewModels.Feedback;
 
 namespace UniTestSystem.Controllers
 {
     [Authorize]
     public class FeedbackController : Controller
     {
-        private readonly IRepository<Feedback> _fRepo;
-        private readonly IRepository<Session> _sRepo;
-        private readonly IRepository<Test> _tRepo;
+        private readonly IResultsService _resultsService;
 
-        public FeedbackController(
-            IRepository<Feedback> fRepo,
-            IRepository<Session> sRepo,
-            IRepository<Test> tRepo)
+        public FeedbackController(IResultsService resultsService)
         {
-            _fRepo = fRepo;
-            _sRepo = sRepo;
-            _tRepo = tRepo;
+            _resultsService = resultsService;
         }
 
         private string? CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -33,21 +26,17 @@ namespace UniTestSystem.Controllers
         {
             if (string.IsNullOrWhiteSpace(sessionId)) return BadRequest("Thiếu sessionId.");
 
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sessionId);
-            if (s == null) return NotFound("Session không tồn tại.");
-            if (s.UserId != CurrentUserId) return Forbid();
-            if (s.Status == SessionStatus.InProgress)
-                return BadRequest("Bạn cần nộp bài trước khi gửi feedback.");
+            var ctx = await _resultsService.GetFeedbackCreateContextAsync(sessionId, CurrentUserId ?? string.Empty);
+            if (ctx.Status == FeedbackAccessStatus.NotFound) return NotFound("Session không tồn tại.");
+            if (ctx.Status == FeedbackAccessStatus.Forbidden) return Forbid();
+            if (ctx.Status == FeedbackAccessStatus.InProgress) return BadRequest("Bạn cần nộp bài trước khi gửi feedback.");
+            if (!string.IsNullOrWhiteSpace(ctx.ExistingFeedbackId))
+                return RedirectToAction(nameof(Edit), new { id = ctx.ExistingFeedbackId });
 
-            // Nếu đã có feedback cho session -> chuyển sang Edit
-            var existed = await _fRepo.FirstOrDefaultAsync(x => x.SessionId == sessionId);
-            if (existed != null) return RedirectToAction(nameof(Edit), new { id = existed.Id });
-
-            var test = await _tRepo.FirstOrDefaultAsync(x => x.Id == s.TestId);
             var vm = new FeedbackCreateViewModel
             {
                 SessionId = sessionId,
-                TestTitle = test?.Title ?? s.TestId
+                TestTitle = ctx.TestTitle
             };
             return View(vm);
         }
@@ -59,50 +48,35 @@ namespace UniTestSystem.Controllers
         {
             if (!ModelState.IsValid) return View(vm);
 
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == vm.SessionId);
-            if (s == null) return NotFound("Session không tồn tại.");
-            if (s.UserId != CurrentUserId) return Forbid();
-            if (s.Status == SessionStatus.InProgress)
+            var result = await _resultsService.CreateFeedbackAsync(vm.SessionId, CurrentUserId ?? string.Empty, vm.Content, vm.Rating);
+            if (result.Status == FeedbackCommandStatus.NotFound) return NotFound("Session không tồn tại.");
+            if (result.Status == FeedbackCommandStatus.Forbidden) return Forbid();
+            if (result.Status == FeedbackCommandStatus.InProgress)
             {
                 ModelState.AddModelError("", "Bạn cần nộp bài trước khi gửi feedback.");
                 return View(vm);
             }
+            if (result.Status == FeedbackCommandStatus.Conflict && !string.IsNullOrWhiteSpace(result.ExistingFeedbackId))
+                return RedirectToAction(nameof(Edit), new { id = result.ExistingFeedbackId });
 
-            // Đảm bảo duy nhất
-            var existed = await _fRepo.FirstOrDefaultAsync(x => x.SessionId == vm.SessionId);
-            if (existed != null) return RedirectToAction(nameof(Edit), new { id = existed.Id });
-
-            var f = new Feedback
-            {
-                SessionId = vm.SessionId,
-                Content = vm.Content.Trim(),
-                Rating = vm.Rating,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await _fRepo.InsertAsync(f);
             TempData["Msg"] = "Cảm ơn bạn đã gửi feedback!";
-            return RedirectToAction("Result", "Sessions", new { id = vm.SessionId });
+            return RedirectToAction("Result", "Sessions", new { id = result.SessionId });
         }
 
         // GET /Feedback/Edit/{id}
         [HttpGet("/Feedback/Edit/{id}")]
         public async Task<IActionResult> Edit(string id)
         {
-            var f = await _fRepo.FirstOrDefaultAsync(x => x.Id == id);
-            if (f == null) return NotFound();
+            var ctx = await _resultsService.GetFeedbackEditContextAsync(id, CurrentUserId ?? string.Empty);
+            if (ctx.Status == FeedbackAccessStatus.NotFound) return NotFound();
+            if (ctx.Status == FeedbackAccessStatus.Forbidden) return Forbid();
 
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == f.SessionId);
-            if (s == null) return NotFound("Session không tồn tại.");
-            if (s.UserId != CurrentUserId) return Forbid();
-
-            var test = await _tRepo.FirstOrDefaultAsync(x => x.Id == s.TestId);
             var vm = new FeedbackCreateViewModel
             {
-                SessionId = f.SessionId,
-                Content = f.Content,
-                Rating = f.Rating,
-                TestTitle = test?.Title ?? s.TestId
+                SessionId = ctx.SessionId,
+                Content = ctx.Content,
+                Rating = ctx.Rating,
+                TestTitle = ctx.TestTitle
             };
             ViewBag.FeedbackId = id;
             return View(vm);
@@ -115,20 +89,13 @@ namespace UniTestSystem.Controllers
         {
             if (!ModelState.IsValid) { ViewBag.FeedbackId = id; return View(vm); }
 
-            var f = await _fRepo.FirstOrDefaultAsync(x => x.Id == id);
-            if (f == null) return NotFound();
+            var result = await _resultsService.UpdateFeedbackAsync(id, CurrentUserId ?? string.Empty, vm.Content, vm.Rating);
+            if (result.Status == FeedbackCommandStatus.NotFound) return NotFound();
+            if (result.Status == FeedbackCommandStatus.Forbidden) return Forbid();
 
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == f.SessionId);
-            if (s == null) return NotFound("Session không tồn tại.");
-            if (s.UserId != CurrentUserId) return Forbid();
-
-            f.Content = vm.Content.Trim();
-            f.Rating = vm.Rating;
-            // không đổi CreatedAt; nếu muốn, có thể thêm UpdatedAt
-
-            await _fRepo.UpsertAsync(x => x.Id == f.Id, f);
             TempData["Msg"] = "Đã cập nhật feedback.";
-            return RedirectToAction("Result", "Sessions", new { id = f.SessionId });
+            return RedirectToAction("Result", "Sessions", new { id = result.SessionId });
         }
     }
 }
+

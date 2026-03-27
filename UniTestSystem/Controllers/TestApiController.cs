@@ -1,6 +1,4 @@
 using UniTestSystem.Application.Interfaces;
-using UniTestSystem.Application;
-using UniTestSystem.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -12,158 +10,144 @@ namespace UniTestSystem.Controllers
     [Authorize]
     public class TestsApiController : ControllerBase
     {
-        private readonly TestService _svc;
-        private readonly AssessmentService _assessSvc;
-        private readonly IRepository<Test> _tRepo;
-        private readonly IRepository<Session> _sRepo;
-        private readonly IRepository<Question> _qRepo;
-        private readonly IRepository<SessionLog> _slRepo;
-        private readonly SessionDeviceGuardService _sessionDeviceGuard;
+        private readonly ISessionService _sessionService;
 
         public TestsApiController(
-            TestService svc,
-            AssessmentService assessSvc,
-            IRepository<Test> tRepo,
-            IRepository<Session> sRepo,
-            IRepository<Question> qRepo,
-            IRepository<SessionLog> slRepo,
-            SessionDeviceGuardService sessionDeviceGuard)
+            ISessionService sessionService)
         {
-            _svc = svc;
-            _assessSvc = assessSvc;
-            _tRepo = tRepo;
-            _sRepo = sRepo;
-            _qRepo = qRepo;
-            _slRepo = slRepo;
-            _sessionDeviceGuard = sessionDeviceGuard;
+            _sessionService = sessionService;
         }
 
         // ====================== START ======================
         [HttpPost("{id}/start")]
         public async Task<IActionResult> Start(string id)
         {
-            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var allowed = await _assessSvc.GetAvailableTestIdsAsync(uid, DateTime.UtcNow);
-            if (!allowed.Contains(id)) return Forbid();
+            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(uid)) return Forbid();
 
-            var requestFp = _sessionDeviceGuard.GetRequestFingerprint(
-                Request.Headers["User-Agent"].ToString(),
-                HttpContext.Connection.RemoteIpAddress?.ToString());
-            var hasOtherDeviceSession = await _sessionDeviceGuard.HasActiveSessionOnOtherDeviceAsync(uid, requestFp);
-            if (hasOtherDeviceSession)
+            var result = await _sessionService.StartSessionAsync(new StartSessionCommand
             {
-                return Conflict(new { message = "An in-progress session is active on another device." });
+                TestId = id,
+                UserId = uid,
+                BlockRestartAfterSubmit = false,
+                IncludeQuestionPayload = true,
+                ReturnNotFoundForUnavailableTest = false,
+                RequestContext = BuildRequestContext()
+            });
+
+            if (result.Status == SessionServiceStatus.Forbidden || result.Status == SessionServiceStatus.NotFound)
+            {
+                return Forbid();
             }
 
-            // Tạo mới hoặc trả về session đang làm (service của bạn)
-            var s = await _svc.StartAsync(id, uid);
-            var bound = await _sessionDeviceGuard.EnsureSessionDeviceAsync(
-                s.Id,
-                requestFp,
-                Request.Headers["User-Agent"].ToString(),
-                HttpContext.Connection.RemoteIpAddress?.ToString());
-            if (!bound)
+            if (result.Status == SessionServiceStatus.Conflict)
             {
-                return Conflict(new { message = "Session is bound to another device." });
+                var message = result.ErrorCode switch
+                {
+                    "ACTIVE_ON_OTHER_DEVICE" => "An in-progress session is active on another device.",
+                    "SESSION_BOUND_OTHER_DEVICE" => "Session is bound to another device.",
+                    _ => "Cannot start session."
+                };
+                return Conflict(new { message });
             }
 
-            var test = await _tRepo.FirstOrDefaultAsync(t => t.Id == id);
-            var duration = test?.DurationMinutes ?? 30;
-
-            var remainingSeconds = ComputeRemainingSeconds(s, duration);
-
-            // Fetch questions from StudentAnswers
-            var allQuestions = await _qRepo.GetAllAsync();
-            var qMap = allQuestions.ToDictionary(x => x.Id, x => x);
-            var q = s.StudentAnswers
-                .Select(sa => qMap.TryGetValue(sa.QuestionId, out var question) ? question : null)
-                .Where(x => x != null)
-                .Select(x => new { x!.Id, x.Type, x.Content, x.Options });
+            if (result.Data == null)
+            {
+                return BadRequest(new { message = result.Message ?? "Cannot start session." });
+            }
 
             return Ok(new
             {
-                sessionId = s.Id,
-                questions = q,
-                durationMinutes = duration,
-                remainingMinutes = (int)Math.Ceiling(remainingSeconds / 60.0)
+                sessionId = result.Data.SessionId,
+                questions = result.Data.Questions.Select(x => new { x.Id, x.Type, x.Content, x.Options }),
+                durationMinutes = result.Data.DurationMinutes,
+                remainingMinutes = (int)Math.Ceiling(result.Data.RemainingSeconds / 60.0)
             });
         }
 
         // ====================== SUBMIT ======================
         public class SubmitPayload { public Dictionary<string, string?> Answers { get; set; } = new(); }
 
-        public class SaveDraftPayload { public Dictionary<string, string?> Answers { get; set; } = new(); }
+        public class SaveAnswerPayload
+        {
+            public Dictionary<string, string?> Answers { get; set; } = new();
+            public DateTime? ClientTimestamp { get; set; }
+            public Dictionary<string, DateTime?> QuestionClientTimestamps { get; set; } = new();
+        }
+
+        [HttpPost("sessions/{sid}/save-answer")]
+        [HttpPost("/sessions/{sid}/save-answer")]
+        public async Task<IActionResult> SaveAnswer(string sid, [FromBody] SaveAnswerPayload p)
+        {
+            return await SaveAnswerCoreAsync(sid, p);
+        }
 
         [HttpPost("sessions/{sid}/save-draft")]
-        public async Task<IActionResult> SaveDraft(string sid, [FromBody] SaveDraftPayload p)
+        public async Task<IActionResult> SaveDraft(string sid, [FromBody] SaveAnswerPayload p)
         {
-            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sid);
-            if (s == null) return NotFound();
-            if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
-            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
-            if (s.Status != SessionStatus.InProgress)
-                return BadRequest(new { message = "Session is not active" });
+            return await SaveAnswerCoreAsync(sid, p);
+        }
 
-            var allQuestions = await _qRepo.GetAllAsync();
-            var qMap = allQuestions.ToDictionary(x => x.Id, x => x);
+        private async Task<IActionResult> SaveAnswerCoreAsync(string sid, SaveAnswerPayload p)
+        {
+            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(uid)) return Forbid();
 
-            var updated = 0;
-            var now = DateTime.UtcNow;
-
-            foreach (var sa in s.StudentAnswers)
+            var result = await _sessionService.SaveAnswerAsync(new SaveAnswerCommand
             {
-                if (!p.Answers.TryGetValue(sa.QuestionId, out var raw)) continue;
-                if (!qMap.TryGetValue(sa.QuestionId, out var q)) continue;
+                SessionId = sid,
+                UserId = uid,
+                Answers = p.Answers,
+                ClientTimestamp = p.ClientTimestamp,
+                QuestionClientTimestamps = p.QuestionClientTimestamps,
+                RequestContext = BuildRequestContext()
+            });
 
-                var value = (raw ?? string.Empty).Trim();
-                switch (q.Type)
+            if (result.Status == SessionServiceStatus.NotFound) return NotFound();
+            if (result.Status == SessionServiceStatus.Forbidden) return Forbid();
+            if (result.Status == SessionServiceStatus.Conflict)
+            {
+                var message = result.ErrorCode switch
                 {
-                    case QType.MCQ:
-                        sa.SelectedOptionId = string.IsNullOrEmpty(value) ? null : value;
-                        break;
-                    case QType.TrueFalse:
-                        if (string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)) value = "True";
-                        if (string.Equals(value, "false", StringComparison.OrdinalIgnoreCase)) value = "False";
-                        sa.SelectedOptionId = string.IsNullOrEmpty(value) ? null : value;
-                        break;
-                    case QType.Essay:
-                        sa.EssayAnswer = value;
-                        break;
-                    default:
-                        sa.EssayAnswer = value;
-                        break;
-                }
-
-                sa.AnsweredAt = now;
-                updated++;
+                    "SESSION_ALREADY_SUBMITTED" => "Session was already submitted.",
+                    "SESSION_BOUND_OTHER_DEVICE" => "Session is bound to another device.",
+                    _ => "Cannot save answer."
+                };
+                return Conflict(new { message, code = result.ErrorCode });
             }
+            if (result.Status == SessionServiceStatus.BadRequest) return BadRequest(new { message = "Session is not active" });
+            if (result.Data == null) return BadRequest(new { message = result.Message ?? "Cannot save draft." });
 
-            s.LastActivityAt = now;
-            await _sRepo.UpsertAsync(x => x.Id == s.Id, s);
-
-            return Ok(new { ok = true, updatedCount = updated, at = now });
+            return Ok(new { ok = true, updatedCount = result.Data.UpdatedCount, at = result.Data.At });
         }
 
         [HttpPost("sessions/{sid}/submit")]
         public async Task<IActionResult> Submit(string sid, [FromBody] SubmitPayload p)
         {
-            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var s0 = await _sRepo.FirstOrDefaultAsync(x => x.Id == sid);
-            if (s0 == null) return NotFound();
-            if (!string.Equals(s0.UserId, uid, StringComparison.Ordinal)) return Forbid();
-            if (!await EnsureSessionDeviceAsync(s0)) return Conflict(new { message = "Session is bound to another device." });
+            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(uid)) return Forbid();
 
-            var s = await _svc.SubmitAsync(sid, p.Answers);
+            var result = await _sessionService.SubmitSessionAsync(new SubmitSessionCommand
+            {
+                SessionId = sid,
+                UserId = uid,
+                Answers = p.Answers,
+                RequestContext = BuildRequestContext()
+            });
+
+            if (result.Status == SessionServiceStatus.NotFound) return NotFound();
+            if (result.Status == SessionServiceStatus.Forbidden) return Forbid();
+            if (result.Status == SessionServiceStatus.Conflict) return Conflict(new { message = "Session is bound to another device." });
+            if (result.Data == null) return BadRequest(new { message = result.Message ?? "Cannot submit session." });
 
             return Ok(new
             {
-                s.Id,
-                s.TotalScore,
-                s.MaxScore,
-                s.Percent,
-                s.IsPassed,
-                s.Status
+                result.Data.Id,
+                result.Data.TotalScore,
+                result.Data.MaxScore,
+                result.Data.Percent,
+                result.Data.IsPassed,
+                result.Data.Status
             });
         }
 
@@ -171,77 +155,67 @@ namespace UniTestSystem.Controllers
         [HttpPost("sessions/{sid}/pause")]
         public async Task<IActionResult> Pause(string sid)
         {
-            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sid);
-            if (s == null) return NotFound();
-            if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
-            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
+            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(uid)) return Forbid();
 
-            var t = await _tRepo.FirstOrDefaultAsync(x => x.Id == s.TestId);
-            if (t == null) return NotFound();
-
-            if (s.TimerStartedAt.HasValue)
+            var result = await _sessionService.PauseSessionAsync(new SessionTimerCommand
             {
-                var delta = (int)Math.Floor((DateTime.UtcNow - s.TimerStartedAt.Value).TotalSeconds);
-                s.ConsumedSeconds = Math.Max(0, s.ConsumedSeconds + Math.Max(0, delta));
-                s.TimerStartedAt = null;
-                s.LastActivityAt = DateTime.UtcNow;
-                await _sRepo.UpsertAsync(x => x.Id == s.Id, s);
-            }
+                SessionId = sid,
+                UserId = uid,
+                RequestContext = BuildRequestContext()
+            });
 
-            var remaining = ComputeRemainingSeconds(s, t.DurationMinutes);
-            return Ok(new { remainingSeconds = remaining, running = false });
+            if (result.Status == SessionServiceStatus.NotFound) return NotFound();
+            if (result.Status == SessionServiceStatus.Forbidden) return Forbid();
+            if (result.Status == SessionServiceStatus.Conflict) return Conflict(new { message = "Session is bound to another device." });
+            if (result.Data == null) return BadRequest(new { message = result.Message ?? "Cannot pause session." });
+
+            return Ok(new { remainingSeconds = result.Data.RemainingSeconds, running = result.Data.Running });
         }
 
         // ====================== RESUME ======================
         [HttpPost("sessions/{sid}/resume")]
         public async Task<IActionResult> Resume(string sid)
         {
-            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sid);
-            if (s == null) return NotFound();
-            if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
-            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
+            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(uid)) return Forbid();
 
-            var t = await _tRepo.FirstOrDefaultAsync(x => x.Id == s.TestId);
-            if (t == null) return NotFound();
-
-            var remaining = ComputeRemainingSeconds(s, t.DurationMinutes);
-            if (remaining <= 0 || s.Status != SessionStatus.InProgress)
-                return Ok(new { remainingSeconds = Math.Max(0, remaining), running = false });
-
-            if (!s.TimerStartedAt.HasValue)
+            var result = await _sessionService.ResumeTimerAsync(new SessionTimerCommand
             {
-                s.TimerStartedAt = DateTime.UtcNow;
-                s.LastActivityAt = DateTime.UtcNow;
-                await _sRepo.UpsertAsync(x => x.Id == s.Id, s);
-            }
+                SessionId = sid,
+                UserId = uid,
+                RequireInProgressState = true,
+                RequestContext = BuildRequestContext()
+            });
 
-            remaining = ComputeRemainingSeconds(s, t.DurationMinutes);
-            return Ok(new { remainingSeconds = remaining, running = true });
+            if (result.Status == SessionServiceStatus.NotFound) return NotFound();
+            if (result.Status == SessionServiceStatus.Forbidden) return Forbid();
+            if (result.Status == SessionServiceStatus.Conflict) return Conflict(new { message = "Session is bound to another device." });
+            if (result.Data == null) return BadRequest(new { message = result.Message ?? "Cannot resume session." });
+
+            return Ok(new { remainingSeconds = result.Data.RemainingSeconds, running = result.Data.Running });
         }
 
         // ====================== ANTI-CHEAT LOGS ======================
         [HttpPost("sessions/{sid}/log")]
         public async Task<IActionResult> LogEvent(string sid, [FromBody] SessionLogEvent model)
         {
-            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sid);
-            if (s == null) return NotFound();
-            if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
-            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
+            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(uid)) return Forbid();
 
-            var log = new SessionLog
+            var result = await _sessionService.LogEventAsync(new SessionLogEventCommand
             {
-                Id = Guid.NewGuid().ToString("N"),
                 SessionId = sid,
+                UserId = uid,
                 ActionType = model.ActionType,
                 Detail = model.Detail,
-                Timestamp = DateTime.UtcNow,
-                IPAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
-            };
+                RequestContext = BuildRequestContext()
+            });
 
-            await _slRepo.InsertAsync(log);
+            if (result.Status == SessionServiceStatus.NotFound) return NotFound();
+            if (result.Status == SessionServiceStatus.Forbidden) return Forbid();
+            if (result.Status == SessionServiceStatus.Conflict) return Conflict(new { message = "Session is bound to another device." });
+
             return Ok();
         }
 
@@ -251,27 +225,14 @@ namespace UniTestSystem.Controllers
             public string? Detail { get; set; }
         }
 
-        // ====================== Helpers ======================
-        private static int ComputeRemainingSeconds(Session s, int durationMinutes)
+        private SessionRequestContext BuildRequestContext()
         {
-            var total = Math.Max(1, durationMinutes) * 60;
-            var runningDelta = s.TimerStartedAt.HasValue
-                ? (int)Math.Floor((DateTime.UtcNow - s.TimerStartedAt.Value).TotalSeconds)
-                : 0;
-            var consumed = Math.Max(0, s.ConsumedSeconds + Math.Max(0, runningDelta));
-            return Math.Max(0, total - consumed);
-        }
-
-        private async Task<bool> EnsureSessionDeviceAsync(Session session)
-        {
-            var requestFp = _sessionDeviceGuard.GetRequestFingerprint(
-                Request.Headers["User-Agent"].ToString(),
-                HttpContext.Connection.RemoteIpAddress?.ToString());
-            return await _sessionDeviceGuard.EnsureSessionDeviceAsync(
-                session.Id,
-                requestFp,
-                Request.Headers["User-Agent"].ToString(),
-                HttpContext.Connection.RemoteIpAddress?.ToString());
+            return new SessionRequestContext
+            {
+                UserAgent = Request.Headers["User-Agent"].ToString(),
+                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
+            };
         }
     }
 }
+

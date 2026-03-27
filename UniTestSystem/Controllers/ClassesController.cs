@@ -9,13 +9,11 @@ namespace UniTestSystem.Controllers
     [Authorize(Policy = PermissionCodes.Org_Manage)]
     public class ClassesController : Controller
     {
-        private readonly IRepository<StudentClass> _classRepo;
-        private readonly IRepository<Faculty> _facultyRepo;
-        private readonly IRepository<Student> _studentRepo;
+        private readonly IAcademicService _academicService;
         private readonly IPermissionService _perms;
 
-        public ClassesController(IRepository<StudentClass> classRepo, IRepository<Faculty> facultyRepo, IRepository<Student> studentRepo, IPermissionService perms)
-        { _classRepo = classRepo; _facultyRepo = facultyRepo; _studentRepo = studentRepo; _perms = perms; }
+        public ClassesController(IAcademicService academicService, IPermissionService perms)
+        { _academicService = academicService; _perms = perms; }
 
         private bool IsAdmin => User?.IsInRole(nameof(Role.Admin)) == true;
         private bool IsStaff => User?.IsInRole(nameof(Role.Staff)) == true;
@@ -31,8 +29,8 @@ namespace UniTestSystem.Controllers
         {
             if (!await CanViewAsync()) return Redirect("/auth/denied");
 
-            var classes = (await _classRepo.GetAllAsync()).OrderBy(t => t.Name).ToList();
-            var faculties = await _facultyRepo.GetAllAsync();
+            var classes = (await _academicService.GetAllClassesAsync()).OrderBy(t => t.Name).ToList();
+            var faculties = await _academicService.GetAllFacultiesAsync();
             var facultyMap = faculties.ToDictionary(d => d.Id, d => d.Name);
             ViewBag.FacultyMap = facultyMap;
             return View("Index", classes);
@@ -42,7 +40,7 @@ namespace UniTestSystem.Controllers
         public async Task<IActionResult> Create()
         {
             if (!await CanManageAsync()) return Redirect("/auth/denied");
-            ViewBag.Faculties = (await _facultyRepo.GetAllAsync()).OrderBy(d => d.Name).ToList();
+            ViewBag.Faculties = (await _academicService.GetAllFacultiesAsync()).OrderBy(d => d.Name).ToList();
             return View("Create", new StudentClass());
         }
 
@@ -55,15 +53,15 @@ namespace UniTestSystem.Controllers
             if (string.IsNullOrWhiteSpace(model.Name) || model.Name.Trim().Length < 2)
             {
                 ModelState.AddModelError(nameof(StudentClass.Name), "Tên lớp tối thiểu 2 ký tự.");
-                ViewBag.Faculties = (await _facultyRepo.GetAllAsync()).OrderBy(d => d.Name).ToList();
+                ViewBag.Faculties = (await _academicService.GetAllFacultiesAsync()).OrderBy(d => d.Name).ToList();
                 return View("Create", model);
             }
 
-            var all = await _classRepo.GetAllAsync();
+            var all = await _academicService.GetAllClassesAsync();
             if (all.Any(t => t.Name.Equals(model.Name.Trim(), StringComparison.OrdinalIgnoreCase)))
             {
                 ModelState.AddModelError(nameof(StudentClass.Name), "Tên lớp đã tồn tại.");
-                ViewBag.Faculties = (await _facultyRepo.GetAllAsync()).OrderBy(d => d.Name).ToList();
+                ViewBag.Faculties = (await _academicService.GetAllFacultiesAsync()).OrderBy(d => d.Name).ToList();
                 return View("Create", model);
             }
 
@@ -71,7 +69,7 @@ namespace UniTestSystem.Controllers
             model.Name = model.Name.Trim();
             model.CreatedAt = DateTime.UtcNow;
 
-            await _classRepo.InsertAsync(model);
+            await _academicService.CreateClassAsync(model);
 
             TempData["Msg"] = "Đã tạo lớp.";
             return RedirectToAction(nameof(Index));
@@ -82,13 +80,13 @@ namespace UniTestSystem.Controllers
         {
             if (!await CanManageAsync()) return Redirect("/auth/denied");
 
-            var t = await _classRepo.FirstOrDefaultAsync(x => x.Id == id);
+            var t = await _academicService.GetClassByIdAsync(id);
             if (t == null)
             {
                 TempData["Err"] = "Không tìm thấy lớp.";
                 return RedirectToAction(nameof(Index));
             }
-            ViewBag.Faculties = (await _facultyRepo.GetAllAsync()).OrderBy(d => d.Name).ToList();
+            ViewBag.Faculties = (await _academicService.GetAllFacultiesAsync()).OrderBy(d => d.Name).ToList();
             return View("Edit", t);
         }
 
@@ -98,7 +96,7 @@ namespace UniTestSystem.Controllers
         {
             if (!await CanManageAsync()) return Redirect("/auth/denied");
 
-            var t = await _classRepo.FirstOrDefaultAsync(x => x.Id == id);
+            var t = await _academicService.GetClassByIdAsync(id);
             if (t == null)
             {
                 TempData["Err"] = "Không tìm thấy lớp.";
@@ -108,15 +106,15 @@ namespace UniTestSystem.Controllers
             if (string.IsNullOrWhiteSpace(model.Name) || model.Name.Trim().Length < 2)
             {
                 ModelState.AddModelError(nameof(StudentClass.Name), "Tên lớp tối thiểu 2 ký tự.");
-                ViewBag.Faculties = (await _facultyRepo.GetAllAsync()).OrderBy(d => d.Name).ToList();
+                ViewBag.Faculties = (await _academicService.GetAllFacultiesAsync()).OrderBy(d => d.Name).ToList();
                 return View("Edit", model);
             }
 
-            var all = await _classRepo.GetAllAsync();
+            var all = await _academicService.GetAllClassesAsync();
             if (all.Any(x => x.Id != id && x.Name.Equals(model.Name.Trim(), StringComparison.OrdinalIgnoreCase)))
             {
                 ModelState.AddModelError(nameof(StudentClass.Name), "Tên lớp đã tồn tại.");
-                ViewBag.Faculties = (await _facultyRepo.GetAllAsync()).OrderBy(d => d.Name).ToList();
+                ViewBag.Faculties = (await _academicService.GetAllFacultiesAsync()).OrderBy(d => d.Name).ToList();
                 return View("Edit", model);
             }
 
@@ -124,7 +122,7 @@ namespace UniTestSystem.Controllers
             t.FacultyId = model.FacultyId;
             t.UpdatedAt = DateTime.UtcNow;
 
-            await _classRepo.UpsertAsync(x => x.Id == t.Id, t);
+            await _academicService.UpdateClassAsync(t.Id, t);
 
             TempData["Msg"] = "Đã cập nhật lớp.";
             return RedirectToAction(nameof(Index));
@@ -136,16 +134,16 @@ namespace UniTestSystem.Controllers
         {
             if (!await CanManageAsync()) return Redirect("/auth/denied");
 
-            var students = await _studentRepo.GetAllAsync();
-            if (students.Any(u => (u.StudentClassId ?? "") == id))
+            if (await _academicService.HasStudentsInClassAsync(id))
             {
                 TempData["Err"] = "Không thể xóa: còn sinh viên thuộc lớp này.";
                 return RedirectToAction(nameof(Index));
             }
 
-            await _classRepo.DeleteAsync(x => x.Id == id);
+            await _academicService.DeleteClassAsync(id);
             TempData["Msg"] = "Đã xóa lớp.";
             return RedirectToAction(nameof(Index));
         }
     }
 }
+

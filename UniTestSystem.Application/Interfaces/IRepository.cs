@@ -6,7 +6,10 @@ namespace UniTestSystem.Application.Interfaces
     {
         Task<List<T>> GetAllAsync(Expression<Func<T, bool>>? predicate = null);
         Task<T?> FirstOrDefaultAsync(Expression<Func<T, bool>> predicate);
-        IQueryable<T> Query();
+        Task<List<T>> ListAsync(ISpecification<T>? specification = null);
+        Task<T?> FirstOrDefaultAsync(ISpecification<T> specification);
+        Task<int> CountAsync(Expression<Func<T, bool>>? predicate = null);
+        Task<bool> AnyAsync(Expression<Func<T, bool>> predicate);
         Task InsertAsync(T entity);
         Task UpdateAsync(T entity);
         Task UpsertAsync(Expression<Func<T, bool>> predicate, T entity);

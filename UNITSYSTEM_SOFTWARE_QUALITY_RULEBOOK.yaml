@@ -1,5 +1,5 @@
 system_name: UniTestSystem
-version: 1.1.0
+version: 1.3.0
 architecture_type: Clean Architecture (.NET 8)
 enforcement_level: Enterprise
 last_updated: 2026-03-25
@@ -142,7 +142,7 @@ rules:
         description: "Web/API Controllers must call Application Use Cases/Services; direct `IRepository<T>` injection in controllers is prohibited."
         severity: Critical
         validation_method: Static analysis / PR gate
-        measurable_criteria: "0 controller classes containing constructor parameters of type `IRepository<>`."
+        measurable_criteria: "New or modified controllers must have 0 constructor parameters of type `IRepository<>`; migration backlog tracked in docs."
       - rule_id: MAIN_006
         description: "Project dependency direction must follow Clean Architecture: Domain <- Application <- Infrastructure <- Web/API."
         severity: Critical
@@ -162,7 +162,7 @@ rules:
         description: "Presentation ViewModels must stay in presentation projects (Web/AdminApp), not in Application core."
         severity: Medium
         validation_method: Code review
-        measurable_criteria: "No MVC/WPF ViewModel classes under `UniTestSystem.Application/Models` except cross-layer DTO contracts."
+        measurable_criteria: "No `*ViewModel*.cs` under `UniTestSystem.Application`; Web view models must be under `UniTestSystem/ViewModels`."
       - rule_id: MAIN_010
         description: "Authorization handler implementations belong to Web/API boundary, while permission decision logic belongs to Application."
         severity: High
@@ -173,6 +173,41 @@ rules:
         severity: High
         validation_method: Static analysis / Code review
         measurable_criteria: "AdminApp startup composes dependencies via `IServiceProvider`; HTTP clients created through factory/typed clients."
+      - rule_id: MAIN_012
+        description: "Repository contract must be specification-based; exposing `IQueryable` from repository interfaces is prohibited."
+        severity: Critical
+        validation_method: Static analysis / PR gate
+        measurable_criteria: "`IRepository<T>` contains no `Query()` method and no return type `IQueryable`."
+      - rule_id: MAIN_013
+        description: "Controller actions must orchestrate only; business workflows (create/edit/assign/publish/bulk operations) must live in Application use-case services."
+        severity: High
+        validation_method: Code review / Architecture test
+        measurable_criteria: "Controller actions call 1..N application services and avoid direct persistence/transaction logic."
+      - rule_id: MAIN_014
+        description: "Cross-layer contracts in Application must be named DTO/Command/Query/Result, not ViewModel."
+        severity: Medium
+        validation_method: Static analysis / Code review
+        measurable_criteria: "No type names containing `ViewModel` in `UniTestSystem.Application`."
+      - rule_id: MAIN_015
+        description: "Feature use-case service pattern is mandatory for migration targets."
+        severity: High
+        validation_method: PR gate
+        measurable_criteria: "For migrated features, each MVC/API controller uses feature service interface (e.g., `ITestAdministrationService`, `IUserAdministrationService`) and not repositories."
+      - rule_id: MAIN_016
+        description: "Build verification must include at least Application and Web projects for every architectural refactor."
+        severity: High
+        validation_method: CI
+        measurable_criteria: "`dotnet build UniTestSystem.Application/UniTestSystem.Application.csproj` and `dotnet build UniTestSystem/UniTestSystem.csproj` pass in PR."
+      - rule_id: MAIN_017
+        description: "Presentation boundary must not depend directly on repository contract; temporary adapter `IEntityStore<T>` is allowed only as migration step."
+        severity: Critical
+        validation_method: Static analysis / PR gate
+        measurable_criteria: "0 occurrences of `IRepository<` in `UniTestSystem/Controllers`; controllers using `IEntityStore<>` must have tracked backlog item to move to feature use-case service."
+      - rule_id: MAIN_018
+        description: "Reports feature must use a dedicated use-case service at controller boundary."
+        severity: High
+        validation_method: Code review / Architecture test
+        measurable_criteria: "`ReportsController` depends on `IReportsUseCaseService` and policy services only; no direct repository/export/settings orchestration in controller actions."
 
   # 7. FLEXIBILITY RULES
   - group: FLEX_001
@@ -224,7 +259,7 @@ rules:
         description: "Architecture tests are mandatory for layer boundaries and dependency direction."
         severity: High
         validation_method: Automated CI
-        measurable_criteria: "CI fails if layering/dependency constraints (MAIN_004/005/006/010) are violated."
+        measurable_criteria: "CI fails if layering/dependency constraints (MAIN_004/005/006/010/012/013/014) are violated."
 
   # 10. SAFETY RULES
   - group: SAFETY

@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using UniTestSystem.Application;
 using UniTestSystem.Domain;
 
@@ -16,6 +18,7 @@ public class AdminAuthController : ControllerBase
         _authService = authService;
     }
 
+    [EnableRateLimiting("auth-login")]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
@@ -27,7 +30,9 @@ public class AdminAuthController : ControllerBase
             return Forbid(); // Only Admin, Lecturer and Staff can login via this endpoint
 
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
-        var token = _authService.GenerateJwtToken(user);
+        var userAgent = Request.Headers["User-Agent"].ToString();
+        var session = await _authService.CreateUserSessionAsync(user.Id, userAgent, ip);
+        var token = _authService.GenerateJwtToken(user, session.Id);
         var refreshToken = await _authService.GenerateRefreshTokenAsync(user.Id, ip);
 
         return Ok(new
@@ -66,7 +71,7 @@ public class AdminAuthController : ControllerBase
         });
     }
 
-    [Authorize]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] RefreshRequest request)
     {
@@ -76,6 +81,13 @@ public class AdminAuthController : ControllerBase
                 request.RefreshToken,
                 HttpContext.Connection.RemoteIpAddress?.ToString() ?? "");
         }
+
+        var sid = User.FindFirst("sid")?.Value;
+        if (!string.IsNullOrWhiteSpace(sid))
+        {
+            await _authService.RevokeSessionAsync(sid);
+        }
+        await _authService.RevokeAccessTokenAsync(User);
 
         return Ok(new { message = "Logged out." });
     }

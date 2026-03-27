@@ -20,6 +20,7 @@ namespace UniTestSystem.Domain
 
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
+        public bool IsManuallyLocked { get; set; } = false;
 
         public string ExamType { get; set; } = "Final";
 

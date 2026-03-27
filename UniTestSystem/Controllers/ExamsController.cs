@@ -14,19 +14,22 @@ namespace UniTestSystem.Controllers
     {
         private readonly IExamScheduleService _scheduleService;
         private readonly IAcademicService _academicService;
-        private readonly IRepository<Test> _testRepo;
+        private readonly ITestAdministrationService _testAdministrationService;
         private readonly ExamAccessTokenService _examAccessTokenService;
+        private readonly IExamScheduleExportService _exportService;
 
         public ExamsController(
             IExamScheduleService scheduleService, 
             IAcademicService academicService,
-            IRepository<Test> testRepo,
-            ExamAccessTokenService examAccessTokenService)
+            ITestAdministrationService testAdministrationService,
+            ExamAccessTokenService examAccessTokenService,
+            IExamScheduleExportService exportService)
         {
             _scheduleService = scheduleService;
             _academicService = academicService;
-            _testRepo = testRepo;
+            _testAdministrationService = testAdministrationService;
             _examAccessTokenService = examAccessTokenService;
+            _exportService = exportService;
         }
 
         // Student's View of their exams
@@ -85,7 +88,7 @@ namespace UniTestSystem.Controllers
         public async Task<IActionResult> Create()
         {
             ViewBag.Courses = new SelectList(await _academicService.GetAllCoursesAsync(), "Id", "Name");
-            ViewBag.Tests = new SelectList(await _testRepo.GetAllAsync(), "Id", "Title");
+            ViewBag.Tests = new SelectList(await _testAdministrationService.GetAllTestsAsync(), "Id", "Title");
             return View();
         }
 
@@ -108,7 +111,7 @@ namespace UniTestSystem.Controllers
             }
 
             ViewBag.Courses = new SelectList(await _academicService.GetAllCoursesAsync(), "Id", "Name", schedule.CourseId);
-            ViewBag.Tests = new SelectList(await _testRepo.GetAllAsync(), "Id", "Title", schedule.TestId);
+            ViewBag.Tests = new SelectList(await _testAdministrationService.GetAllTestsAsync(), "Id", "Title", schedule.TestId);
             return View(schedule);
         }
 
@@ -120,7 +123,7 @@ namespace UniTestSystem.Controllers
             if (schedule == null) return NotFound();
 
             ViewBag.Courses = new SelectList(await _academicService.GetAllCoursesAsync(), "Id", "Name", schedule.CourseId);
-            ViewBag.Tests = new SelectList(await _testRepo.GetAllAsync(), "Id", "Title", schedule.TestId);
+            ViewBag.Tests = new SelectList(await _testAdministrationService.GetAllTestsAsync(), "Id", "Title", schedule.TestId);
             return View(schedule);
         }
 
@@ -145,7 +148,7 @@ namespace UniTestSystem.Controllers
             }
 
             ViewBag.Courses = new SelectList(await _academicService.GetAllCoursesAsync(), "Id", "Name", schedule.CourseId);
-            ViewBag.Tests = new SelectList(await _testRepo.GetAllAsync(), "Id", "Title", schedule.TestId);
+            ViewBag.Tests = new SelectList(await _testAdministrationService.GetAllTestsAsync(), "Id", "Title", schedule.TestId);
             return View(schedule);
         }
 
@@ -159,6 +162,56 @@ namespace UniTestSystem.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+        [HttpPost]
+        [Authorize(Policy = "RequireStaffOrAdmin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Lock(string id)
+        {
+            var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "unknown";
+            var ok = await _scheduleService.LockScheduleAsync(id, actor);
+            TempData[ok ? "Msg" : "Err"] = ok ? "Đã khóa lịch thi." : "Không tìm thấy lịch thi để khóa.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        [HttpPost]
+        [Authorize(Policy = "RequireStaffOrAdmin")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Unlock(string id)
+        {
+            var actor = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "unknown";
+            var ok = await _scheduleService.UnlockScheduleAsync(id, actor);
+            TempData[ok ? "Msg" : "Err"] = ok ? "Đã mở khóa lịch thi." : "Không tìm thấy lịch thi để mở khóa.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        [HttpGet]
+        [Authorize(Policy = "RequireStaffOrAdmin")]
+        public async Task<IActionResult> ExportPdfById(string id)
+        {
+            var file = await _exportService.ExportSchedulePdfAsync(id);
+            if (file == null)
+            {
+                TempData["Err"] = "Không tìm thấy lịch thi để xuất PDF.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            return File(file.Content, file.ContentType, file.FileName);
+        }
+
+        [HttpGet]
+        [Authorize(Policy = "RequireStaffOrAdmin")]
+        public async Task<IActionResult> ExportExcelById(string id)
+        {
+            var file = await _exportService.ExportScheduleExcelAsync(id);
+            if (file == null)
+            {
+                TempData["Err"] = "Không tìm thấy lịch thi để xuất Excel.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            return File(file.Content, file.ContentType, file.FileName);
+        }
+
         private static string EscapeCsv(string? value)
         {
             var safe = (value ?? string.Empty).Replace("\"", "\"\"");
@@ -166,3 +219,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

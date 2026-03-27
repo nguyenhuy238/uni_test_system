@@ -10,6 +10,9 @@ namespace UniTestSystem.Domain
 
         public string? CurrentSemester { get; set; } // e.g., "Học kỳ 1"
         public string? CurrentAcademicYear { get; set; } // e.g., "2025-2026"
+        public decimal WarningGpaThreshold { get; set; } = 2.0m;
+        public decimal FailGpaThreshold { get; set; } = 1.0m;
+        public bool TreatOutstandingDebtAsFail { get; set; } = true;
 
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
         public string? UpdatedBy { get; set; }

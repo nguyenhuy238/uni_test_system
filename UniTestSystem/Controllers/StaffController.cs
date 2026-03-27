@@ -9,16 +9,16 @@ namespace UniTestSystem.Controllers
     [Authorize(Policy = "RequireStaffOrAdmin")]
     public class StaffController : Controller
     {
-        private readonly IRepository<ExamSchedule> _examScheduleRepo;
+        private readonly IExamScheduleService _examScheduleService;
         private readonly ITranscriptService _transcriptService;
         private readonly IGradingService _gradingService;
 
         public StaffController(
-            IRepository<ExamSchedule> examScheduleRepo,
+            IExamScheduleService examScheduleService,
             ITranscriptService transcriptService,
             IGradingService gradingService)
         {
-            _examScheduleRepo = examScheduleRepo;
+            _examScheduleService = examScheduleService;
             _transcriptService = transcriptService;
             _gradingService = gradingService;
         }
@@ -26,7 +26,7 @@ namespace UniTestSystem.Controllers
         [HttpGet]
         public async Task<IActionResult> Dashboard()
         {
-            var examSchedules = await _examScheduleRepo.GetAllAsync(x => !x.IsDeleted);
+            var examSchedules = await _examScheduleService.GetAllSchedulesAsync();
             var isSchoolLocked = await _transcriptService.IsSchoolTranscriptLockedAsync();
             var facultyLockMap = await _transcriptService.GetFacultyTranscriptLockMapAsync();
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
@@ -42,3 +42,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

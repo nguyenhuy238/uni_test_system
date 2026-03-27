@@ -300,6 +300,62 @@
         outline: 2px dashed #f59e0b;
         outline-offset: 4px
     }
+
+    .sync-indicator {
+        position: fixed;
+        right: 16px;
+        top: 16px;
+        z-index: 1200;
+        border-radius: 999px;
+        padding: .45rem .8rem;
+        font-size: .85rem;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        border: 1px solid transparent;
+        background: #ecfeff;
+        color: #155e75;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, .12);
+    }
+
+    .sync-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        flex: 0 0 8px;
+    }
+
+    .sync-ok {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+        color: #166534;
+    }
+
+    .sync-pending {
+        background: #fffbeb;
+        border-color: #fde68a;
+        color: #92400e;
+    }
+
+    .sync-error {
+        background: #fef2f2;
+        border-color: #fecaca;
+        color: #991b1b;
+    }
+
+    .sync-ok .sync-dot {
+        background: #16a34a;
+    }
+
+    .sync-pending .sync-dot {
+        background: #f59e0b;
+    }
+
+    .sync-error .sync-dot {
+        background: #dc2626;
+    }
 </style>
 
 <div class="runner-header">
@@ -319,6 +375,11 @@
             <button type="button" class="btn btn-primary" id="submitBtn">Submit & Finish</button>
         </div>
     </div>
+</div>
+
+<div id="syncIndicator" class="sync-indicator sync-ok" role="status" aria-live="polite">
+    <span class="sync-dot"></span>
+    <span id="syncIndicatorText">Đã lưu</span>
 </div>
 
 <div class="layout">
@@ -513,8 +574,11 @@
         });
         window.addEventListener('beforeunload', ()=>{
             try{
-                const payload = JSON.stringify({ answers: collect() });
-                navigator.sendBeacon?.(`/api/tests/sessions/${sid}/save-draft`, new Blob([payload], { type: 'application/json' }));
+                const payload = JSON.stringify({
+                    answers: collect(),
+                    clientTimestamp: new Date().toISOString()
+                });
+                navigator.sendBeacon?.(`/api/tests/sessions/${sid}/save-answer`, new Blob([payload], { type: 'application/json' }));
             }catch(e){}
             navigator.sendBeacon?.(`/api/tests/sessions/${sid}/pause`);
         });
@@ -522,11 +586,20 @@
     /* ===== Draft / Flags / Navigator ===== */
     const KEY = `runner_${sid}`;
     const KEY_FLAGS = `runner_flags_${sid}`;
+    const KEY_SYNC_QUEUE = `runner_sync_queue_${sid}`;
+    const MAX_SAVE_RETRY = 5;
+    const SAVE_TIMEOUT_MS = 8000;
     const formEl = document.getElementById('f');
     const navEl = document.getElementById('qnav');
     const onlyFlaggedChk = document.getElementById('onlyFlaggedChk');
     const pgBar = document.getElementById('pg');
     const pgText = document.getElementById('pgtext');
+    const syncIndicatorEl = document.getElementById('syncIndicator');
+    const syncIndicatorTextEl = document.getElementById('syncIndicatorText');
+    let saveSyncDebounceTO = null;
+    let syncingQueue = false;
+    let syncQueued = false;
+    let submittedConflictNotified = false;
 
     function collect(){
       const data = {};
@@ -550,47 +623,259 @@
         }
       });
     }
-        function saveDraft(silent=false){
+    function saveDraft(silent=false){
       localStorage.setItem(KEY, JSON.stringify(collect()));
       if(!silent) toast("Draft saved on this device.");
     }
     function clearDraft(){ localStorage.removeItem(KEY); toast("Local draft cleared."); }
 
-        let saveServerTO = null;
-        let savingServer = false;
-        let pendingServerSave = false;
+    function getAnswerValueByQuestionId(qid){
+      const radios = formEl.querySelectorAll(`[name="${CSS.escape(qid)}"][type="radio"]`);
+      if(radios.length){
+        const checked = Array.from(radios).find(r => r.checked);
+        return checked ? checked.value : '';
+      }
 
-        async function saveDraftToServer(silent=true){
-            if(savingServer){
-                pendingServerSave = true;
-                return;
-            }
-            savingServer = true;
+      const field = formEl.querySelector(`[name="${CSS.escape(qid)}"]:not([type="radio"])`);
+      return field ? (field.value ?? '') : '';
+    }
 
-            try{
-                const r = await authFetch(`/api/tests/sessions/${sid}/save-draft`, {
-                    method: 'POST',
-                    headers: { 'Content-Type':'application/json' },
-                    body: JSON.stringify({ answers: collect() })
-                });
-                if(!r.ok && !silent){
-                    toast('Cannot save draft to server right now.', 'warn');
-                }
-            }catch(e){
-                if(!silent) toast('Network issue while saving draft.', 'warn');
-            }finally{
-                savingServer = false;
-                if(pendingServerSave){
-                    pendingServerSave = false;
-                    setTimeout(()=>saveDraftToServer(true), 250);
-                }
-            }
+    function loadSyncQueue(){
+      try{
+        const raw = localStorage.getItem(KEY_SYNC_QUEUE);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      }catch(e){
+        return [];
+      }
+    }
+
+    function saveSyncQueue(queue){
+      localStorage.setItem(KEY_SYNC_QUEUE, JSON.stringify(queue || []));
+    }
+
+    function getQueueStats(){
+      const queue = loadSyncQueue();
+      const pendingCount = queue.filter(x => !x.failed).length;
+      const failedCount = queue.filter(x => !!x.failed).length;
+      return { queue, pendingCount, failedCount };
+    }
+
+    function setSyncIndicatorState(cssClass, message){
+      if(!syncIndicatorEl || !syncIndicatorTextEl) return;
+      syncIndicatorEl.classList.remove('sync-ok', 'sync-pending', 'sync-error');
+      syncIndicatorEl.classList.add(cssClass);
+      syncIndicatorTextEl.textContent = message;
+    }
+
+    function updateSyncIndicator(){
+      const { pendingCount, failedCount } = getQueueStats();
+
+      if(failedCount > 0){
+        setSyncIndicatorState('sync-error', `Lỗi đồng bộ: ${failedCount} câu cần kiểm tra`);
+        return;
+      }
+
+      if(!navigator.onLine && pendingCount > 0){
+        setSyncIndicatorState('sync-error', `Mất kết nối - ${pendingCount} câu chưa lưu`);
+        return;
+      }
+
+      if(pendingCount > 0){
+        setSyncIndicatorState('sync-pending', `Đang lưu offline... (${pendingCount} câu chưa đồng bộ)`);
+        return;
+      }
+
+      if(!navigator.onLine){
+        setSyncIndicatorState('sync-pending', 'Mất kết nối - chờ mạng để đồng bộ');
+        return;
+      }
+
+      setSyncIndicatorState('sync-ok', 'Đã lưu');
+    }
+
+    function enqueueAnswerForSync(questionId, answerValue, timestampIso){
+      if(!questionId) return;
+      const queue = loadSyncQueue().filter(x => x.questionId !== questionId);
+      queue.push({
+        sessionId: sid,
+        questionId: questionId,
+        answerId: answerValue ?? '',
+        timestamp: timestampIso ?? new Date().toISOString(),
+        retryCount: 0
+      });
+      saveSyncQueue(queue);
+      updateSyncIndicator();
+    }
+
+    function enqueueAllAnswersForSync(){
+      const answers = collect();
+      let queue = loadSyncQueue().filter(x => !!x.failed);
+      const timestampIso = new Date().toISOString();
+      Object.entries(answers).forEach(([questionId, answerValue])=>{
+        queue = queue.filter(x => x.questionId !== questionId);
+        queue.push({
+          sessionId: sid,
+          questionId: questionId,
+          answerId: answerValue ?? '',
+          timestamp: timestampIso,
+          retryCount: 0
+        });
+      });
+      saveSyncQueue(queue);
+      updateSyncIndicator();
+    }
+
+    function findQueueEntryIndex(queue, entry){
+      return queue.findIndex(x =>
+        x.sessionId === entry.sessionId &&
+        x.questionId === entry.questionId &&
+        x.timestamp === entry.timestamp &&
+        !x.failed
+      );
+    }
+
+    function markQueueEntryRetry(entry, forceFail){
+      const queue = loadSyncQueue();
+      const idx = findQueueEntryIndex(queue, entry);
+      if(idx < 0){
+        updateSyncIndicator();
+        return;
+      }
+
+      const item = queue[idx];
+      item.retryCount = Number(item.retryCount || 0) + 1;
+      if(forceFail || item.retryCount >= MAX_SAVE_RETRY){
+        item.failed = true;
+        toast(`Câu ${item.questionId} chưa thể đồng bộ sau ${item.retryCount} lần thử.`, 'warn');
+      }
+
+      queue[idx] = item;
+      saveSyncQueue(queue);
+      updateSyncIndicator();
+    }
+
+    function markAllPendingAsFailed(){
+      const queue = loadSyncQueue().map(x => x.failed ? x : { ...x, failed: true, retryCount: Math.max(Number(x.retryCount || 0), MAX_SAVE_RETRY) });
+      saveSyncQueue(queue);
+      updateSyncIndicator();
+    }
+
+    function removeQueueEntry(entry){
+      const queue = loadSyncQueue();
+      const idx = findQueueEntryIndex(queue, entry);
+      if(idx >= 0){
+        queue.splice(idx, 1);
+        saveSyncQueue(queue);
+      }
+      updateSyncIndicator();
+    }
+
+    async function saveQueueEntryToServer(entry){
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), SAVE_TIMEOUT_MS);
+      try{
+        return await authFetch(`/api/tests/sessions/${sid}/save-answer`, {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json' },
+          body: JSON.stringify({
+            answers: { [entry.questionId]: entry.answerId ?? '' },
+            clientTimestamp: entry.timestamp,
+            questionClientTimestamps: { [entry.questionId]: entry.timestamp }
+          }),
+          signal: controller.signal
+        });
+      }finally{
+        clearTimeout(timeoutId);
+      }
+    }
+
+    async function processSingleQueueEntry(entry){
+      try{
+        const r = await saveQueueEntryToServer(entry);
+        if(r.ok){
+          removeQueueEntry(entry);
+          return 'success';
         }
 
-        function queueServerSave(){
-            if(saveServerTO) clearTimeout(saveServerTO);
-            saveServerTO = setTimeout(()=> saveDraftToServer(true), 1200);
+        if(r.status === 409){
+          let code = '';
+          let message = 'Phiên làm bài đã được nộp ở thiết bị khác.';
+          try{
+            const payload = await r.json();
+            code = payload?.code ?? '';
+            message = payload?.message ?? message;
+          }catch(e){}
+
+          markQueueEntryRetry(entry, true);
+          if(code === 'SESSION_ALREADY_SUBMITTED'){
+            markAllPendingAsFailed();
+          }
+          if(!submittedConflictNotified){
+            submittedConflictNotified = true;
+            toast(message, 'warn');
+          }
+          return 'stop';
         }
+
+        const nonRetryable = r.status >= 400 && r.status < 500;
+        markQueueEntryRetry(entry, nonRetryable);
+        return 'stop';
+      }catch(e){
+        markQueueEntryRetry(entry, false);
+        return 'stop';
+      }
+    }
+
+    async function syncOfflineQueue(){
+      if(syncingQueue){
+        syncQueued = true;
+        return;
+      }
+
+      if(!navigator.onLine){
+        updateSyncIndicator();
+        return;
+      }
+
+      syncingQueue = true;
+      try{
+        while(navigator.onLine){
+          const next = loadSyncQueue().find(x => !x.failed);
+          if(!next){
+            break;
+          }
+
+          const state = await processSingleQueueEntry(next);
+          if(state !== 'success'){
+            break;
+          }
+        }
+      }finally{
+        syncingQueue = false;
+        updateSyncIndicator();
+        if(syncQueued){
+          syncQueued = false;
+          setTimeout(syncOfflineQueue, 250);
+        }
+      }
+    }
+
+    function scheduleQueueSync(){
+      if(saveSyncDebounceTO) clearTimeout(saveSyncDebounceTO);
+      saveSyncDebounceTO = setTimeout(syncOfflineQueue, 1200);
+    }
+
+    async function ensureQueueSyncedBeforeSubmit(){
+      await syncOfflineQueue();
+      const { pendingCount, failedCount } = getQueueStats();
+      if(pendingCount > 0 || failedCount > 0){
+        toast('Còn câu trả lời chưa đồng bộ. Vui lòng chờ có mạng rồi thử nộp lại.', 'warn');
+        return false;
+      }
+
+      return true;
+    }
 
     function loadFlags(){ try{ return JSON.parse(localStorage.getItem(KEY_FLAGS) || '{}'); }catch(e){ return {}; } }
     function saveFlags(flags){ localStorage.setItem(KEY_FLAGS, JSON.stringify(flags||{})); }
@@ -658,7 +943,8 @@
             if(t && t.name){
                 updateOneQuestion(t.name);
                 saveDraft(true);
-                queueServerSave();
+                enqueueAnswerForSync(t.name, getAnswerValueByQuestionId(t.name), new Date().toISOString());
+                scheduleQueueSync();
             }
     });
     formEl.addEventListener('input', (e)=>{
@@ -666,7 +952,8 @@
             if(t && t.name){
                 updateOneQuestion(t.name);
                 saveDraft(true);
-                queueServerSave();
+                enqueueAnswerForSync(t.name, getAnswerValueByQuestionId(t.name), new Date().toISOString());
+                scheduleQueueSync();
             }
     });
 
@@ -735,16 +1022,28 @@
     const saveLocalBtn2 = document.getElementById('saveLocalBtn2');
     const clearLocalBtn = document.getElementById('clearLocalBtn');
 
-        saveLocalBtn.addEventListener('click', async ()=>{
-            saveDraft(true);
-            await saveDraftToServer(false);
-            toast('Draft saved to device and server.');
-        });
-        saveLocalBtn2.addEventListener('click', async ()=>{
-            saveDraft(true);
-            await saveDraftToServer(false);
-            toast('Draft saved to device and server.');
-        });
+    saveLocalBtn.addEventListener('click', async ()=>{
+      saveDraft(true);
+      enqueueAllAnswersForSync();
+      await syncOfflineQueue();
+      const { pendingCount, failedCount } = getQueueStats();
+      if(pendingCount === 0 && failedCount === 0){
+        toast('Đã lưu lên thiết bị và đồng bộ lên máy chủ.');
+      }else{
+        toast('Đã lưu cục bộ. Sẽ tự đồng bộ khi có mạng.', 'warn');
+      }
+    });
+    saveLocalBtn2.addEventListener('click', async ()=>{
+      saveDraft(true);
+      enqueueAllAnswersForSync();
+      await syncOfflineQueue();
+      const { pendingCount, failedCount } = getQueueStats();
+      if(pendingCount === 0 && failedCount === 0){
+        toast('Đã lưu lên thiết bị và đồng bộ lên máy chủ.');
+      }else{
+        toast('Đã lưu cục bộ. Sẽ tự đồng bộ khi có mạng.', 'warn');
+      }
+    });
     clearLocalBtn.addEventListener('click', ()=>{ if(confirm("Clear local draft on this device?")) clearDraft(); });
 
     submitBtn.addEventListener('click', ()=> trySubmit(false));
@@ -783,7 +1082,14 @@
       submitting = true;
       submitBtn.disabled = true; submitBtn2.disabled = true;
 
-            await saveDraftToServer(true);
+      saveDraft(true);
+      enqueueAllAnswersForSync();
+      const queueSynced = await ensureQueueSyncedBeforeSubmit();
+      if(!queueSynced){
+        submitBtn.disabled = false; submitBtn2.disabled = false; submitting = false;
+        return;
+      }
+
       stopTimer(); await callPause();
 
       const payload = { answers: collect() };
@@ -799,7 +1105,11 @@
           return;
         }
         submitted = true;
-        try{ localStorage.removeItem(KEY); localStorage.removeItem(KEY_FLAGS); }catch(e){}
+        try{
+          localStorage.removeItem(KEY);
+          localStorage.removeItem(KEY_FLAGS);
+          localStorage.removeItem(KEY_SYNC_QUEUE);
+        }catch(e){}
         window.location = `/mytests/result/${sid}`;
       }catch(err){
         console.error(err);
@@ -822,7 +1132,8 @@
 
     /* Initial */
     try{ const raw = localStorage.getItem(KEY); if(raw){ applyDraft(JSON.parse(raw)); } }catch(e){}
-        saveDraftToServer(true);
+    updateSyncIndicator();
+    syncOfflineQueue();
     (function syncFlagButtons(){
       const flags = loadFlags();
       document.querySelectorAll('.flag-btn').forEach(btn=>{
@@ -835,13 +1146,22 @@
     refreshNavigatorFull();
     setActiveChip(0);
 
+    window.addEventListener('online', ()=>{
+      toast('Đã có kết nối mạng. Đang đồng bộ câu trả lời...', 'info');
+      updateSyncIndicator();
+      syncOfflineQueue();
+    });
+    window.addEventListener('offline', ()=>{
+      updateSyncIndicator();
+    });
+
     // Auto save
-        setInterval(()=>{
-            try{
-                saveDraft(true);
-                saveDraftToServer(true);
-            }catch(e){}
-        }, 20000);
+    setInterval(()=>{
+      try{
+        saveDraft(true);
+        syncOfflineQueue();
+      }catch(e){}
+    }, 20000);
 
         // Anti-cheat event logging and key blocking
         let antiCheatNoticeAt = 0;

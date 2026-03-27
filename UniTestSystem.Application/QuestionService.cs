@@ -9,13 +9,20 @@ namespace UniTestSystem.Application;
 public class QuestionService : IQuestionService
 {
     private readonly IRepository<Question> _qRepo;
+    private readonly IRepository<Option> _optionRepo;
     private readonly IRepository<Test> _tRepo;
     private readonly IRepository<AuditEntry> _auditRepo;
     private readonly IAuditService _audit;
 
-    public QuestionService(IRepository<Question> qRepo, IRepository<Test> tRepo, IRepository<AuditEntry> auditRepo, IAuditService audit)
+    public QuestionService(
+        IRepository<Question> qRepo,
+        IRepository<Option> optionRepo,
+        IRepository<Test> tRepo,
+        IRepository<AuditEntry> auditRepo,
+        IAuditService audit)
     {
         _qRepo = qRepo;
+        _optionRepo = optionRepo;
         _tRepo = tRepo;
         _auditRepo = auditRepo;
         _audit = audit;
@@ -52,7 +59,97 @@ public class QuestionService : IQuestionService
         return new PagedResult<Question> { Page = f.Page, PageSize = f.PageSize, Total = total, Items = items };
     }
 
-    public Task<Question?> GetAsync(string id) => _qRepo.FirstOrDefaultAsync(x => x.Id == id);
+    public Task<List<Question>> GetAllAsync()
+    {
+        var spec = new Specification<Question>()
+            .Include(q => q.Options);
+        return _qRepo.ListAsync(spec);
+    }
+
+    public Task<Question?> GetAsync(string id)
+    {
+        var spec = new Specification<Question>(x => x.Id == id)
+            .Include(x => x.Options);
+        return _qRepo.FirstOrDefaultAsync(spec);
+    }
+
+    public async Task<QuestionEditDataResult?> GetEditDataAsync(string id, int take = 20)
+    {
+        var question = await GetAsync(id);
+        if (question == null) return null;
+
+        var versions = (await _auditRepo.GetAllAsync(a =>
+                a.EntityName == "Question" &&
+                a.EntityId == id &&
+                (a.After != null || a.Before != null)))
+            .OrderByDescending(a => a.At)
+            .Take(take <= 0 ? 20 : take)
+            .ToList();
+
+        return new QuestionEditDataResult
+        {
+            Question = question,
+            Versions = versions
+        };
+    }
+
+    public async Task<string> CreateFromFormAsync(QuestionFormCommand command, string actor)
+    {
+        var question = command.Question;
+        NormalizeQuestionFieldsFromForm(
+            question,
+            command.Options,
+            command.CorrectKeys,
+            command.MatchingPairsRaw,
+            command.DragTokens,
+            command.DragSlotsRaw,
+            command.TagsCsv);
+
+        if (command.NewMedia?.Any() == true)
+            question.Media = command.NewMedia.ToList();
+
+        return await CreateAsync(question, actor);
+    }
+
+    public async Task<(bool Success, string? Reason)> UpdateFromFormAsync(QuestionFormCommand command, string actor)
+    {
+        var question = command.Question;
+        if (string.IsNullOrWhiteSpace(question.Id))
+            question.Id = command.Id ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(question.Id))
+            return (false, "Not found");
+
+        var original = await GetAsync(question.Id);
+        if (original == null)
+            return (false, "Not found");
+
+        NormalizeQuestionFieldsFromForm(
+            question,
+            command.Options,
+            command.CorrectKeys,
+            command.MatchingPairsRaw,
+            command.DragTokens,
+            command.DragSlotsRaw,
+            command.TagsCsv);
+
+        question.CreatedAt = original.CreatedAt;
+        question.CreatedBy = original.CreatedBy;
+
+        var mergedMedia = (original.Media ?? new List<MediaFile>()).ToList();
+        if (command.NewMedia?.Any() == true)
+        {
+            var exists = new HashSet<string>(mergedMedia.Select(m => m.Url), StringComparer.OrdinalIgnoreCase);
+            foreach (var media in command.NewMedia)
+            {
+                if (exists.Add(media.Url))
+                    mergedMedia.Add(media);
+            }
+        }
+
+        question.Media = mergedMedia;
+        return await UpdateAsync(question, actor);
+    }
 
     public async Task<string> CreateAsync(Question q, string actor)
     {
@@ -61,6 +158,7 @@ public class QuestionService : IQuestionService
             throw new ValidationException($"Possible duplicate question detected (ID: {duplicate.MatchedQuestionId}, similarity: {duplicate.Similarity:P0}).");
 
         ValidateQuestion(q, isNew: true);
+        AssignOptionQuestionIds(q);
         q.CreatedBy = actor; q.CreatedAt = DateTime.UtcNow;
         await _qRepo.InsertAsync(q);
         await _audit.LogAsync(actor, "Question.Create", "Question", q.Id, before: null, after: q);
@@ -87,6 +185,7 @@ public class QuestionService : IQuestionService
             return (false, $"Possible duplicate with Question {duplicate.MatchedQuestionId} (similarity: {duplicate.Similarity:P0}).");
 
         ValidateQuestion(q, isNew: false);
+        AssignOptionQuestionIds(q);
         q.UpdatedBy = actor; q.UpdatedAt = DateTime.UtcNow;
         
         // Reset status to Draft if it was Rejected or Approved (needs re-approval after major edit)
@@ -94,6 +193,16 @@ public class QuestionService : IQuestionService
             q.Status = QuestionStatus.Draft;
 
         await _qRepo.UpsertAsync(x => x.Id == q.Id, q);
+        await _optionRepo.DeleteAsync(o => o.QuestionId == q.Id);
+        if (q.Options != null && q.Options.Count > 0)
+        {
+            foreach (var option in q.Options)
+            {
+                option.QuestionId = q.Id;
+                await _optionRepo.InsertAsync(option);
+            }
+        }
+
         await _audit.LogAsync(actor, "Question.Update", "Question", q.Id, before, q);
         return (true, null);
     }
@@ -204,9 +313,142 @@ public class QuestionService : IQuestionService
             CreatedBy = actor
         };
 
+        AssignOptionQuestionIds(copy);
         await _qRepo.InsertAsync(copy);
         await _audit.LogAsync(actor, "Question.Clone", "Question", copy.Id, before: null, after: copy);
         return copy.Id;
+    }
+
+    public async Task<RemoveQuestionMediaResult> RemoveMediaAsync(string questionId, string mediaId, string actor)
+    {
+        var question = await GetAsync(questionId);
+        if (question == null)
+        {
+            return new RemoveQuestionMediaResult
+            {
+                Success = false,
+                Reason = "Not found"
+            };
+        }
+
+        var media = question.Media.FirstOrDefault(x => x.Id == mediaId);
+        if (media == null)
+        {
+            return new RemoveQuestionMediaResult
+            {
+                Success = true
+            };
+        }
+
+        question.Media.RemoveAll(x => x.Id == mediaId);
+        var (ok, reason) = await UpdateAsync(question, actor);
+        return new RemoveQuestionMediaResult
+        {
+            Success = ok,
+            Reason = reason,
+            MediaUrl = ok ? media.Url : null
+        };
+    }
+
+    public async Task<QuestionDuplicateCheckResult> CheckDuplicateAsync(QuestionDuplicateCheckQuery query)
+    {
+        var (isDuplicate, matchedQuestionId, similarity) =
+            await DetectAdvancedDuplicateAsync(query.Question, query.ExcludeQuestionId);
+
+        return new QuestionDuplicateCheckResult
+        {
+            IsDuplicate = isDuplicate,
+            MatchedQuestionId = matchedQuestionId,
+            Similarity = similarity
+        };
+    }
+
+    private static void NormalizeQuestionFieldsFromForm(
+        Question q,
+        List<string>? optionsRaw,
+        string? correctKeys,
+        string? matchingPairsRaw,
+        string? dragTokens,
+        string? dragSlotsRaw,
+        string? tagsCsv)
+    {
+        var correctSet = string.IsNullOrWhiteSpace(correctKeys)
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : correctKeys.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (q.Type == QType.MCQ || q.Type == QType.TrueFalse)
+        {
+            var rawStrings = q.Type == QType.TrueFalse
+                ? new List<string> { "True", "False" }
+                : (optionsRaw ?? new List<string>())
+                    .SelectMany(line => (line ?? string.Empty).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries))
+                    .Select(s => s.Trim())
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .ToList();
+
+            q.Options = rawStrings
+                .Select(s => new Option
+                {
+                    Content = s,
+                    IsCorrect = correctSet.Contains(s)
+                })
+                .ToList();
+        }
+
+        if (!string.IsNullOrWhiteSpace(tagsCsv))
+        {
+            q.Tags = tagsCsv
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+        }
+
+        if (q.Type == QType.Matching)
+        {
+            q.MatchingPairs = new();
+            var lines = (matchingPairsRaw ?? string.Empty).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var raw in lines)
+            {
+                var parts = raw.Split('|', StringSplitOptions.TrimEntries);
+                if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0]) && !string.IsNullOrWhiteSpace(parts[1]))
+                    q.MatchingPairs.Add(new MatchPair(parts[0], parts[1]));
+            }
+        }
+
+        if (q.Type == QType.DragDrop)
+        {
+            var tokens = string.IsNullOrWhiteSpace(dragTokens)
+                ? new List<string>()
+                : dragTokens.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+            var slots = new List<DragSlot>();
+            var lines = (dragSlotsRaw ?? string.Empty).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var raw in lines)
+            {
+                var parts = raw.Split('=', StringSplitOptions.TrimEntries);
+                if (parts.Length == 2 && !string.IsNullOrWhiteSpace(parts[0]))
+                    slots.Add(new DragSlot(parts[0], parts[1]));
+            }
+
+            q.DragDrop = new DragDropConfig
+            {
+                Tokens = tokens,
+                Slots = slots
+            };
+        }
+    }
+
+    private static void AssignOptionQuestionIds(Question q)
+    {
+        if (q.Options == null)
+            return;
+
+        foreach (var option in q.Options)
+        {
+            option.QuestionId = q.Id;
+            if (string.IsNullOrWhiteSpace(option.Id))
+                option.Id = Guid.NewGuid().ToString("N");
+        }
     }
 
     private static void ValidateQuestion(Question q, bool isNew)

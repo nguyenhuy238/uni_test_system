@@ -10,24 +10,23 @@ namespace UniTestSystem.Controllers.Api;
 [Route("api/admin/tests")]
 public class AdminTestsController : ControllerBase
 {
-    private readonly IRepository<Test> _tests;
+    private readonly ITestAdministrationService _testAdministrationService;
 
-    public AdminTestsController(IRepository<Test> tests)
+    public AdminTestsController(ITestAdministrationService testAdministrationService)
     {
-        _tests = tests;
+        _testAdministrationService = testAdministrationService;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var list = await _tests.GetAllAsync();
-        return Ok(list);
+        return Ok(await _testAdministrationService.GetAllTestsAsync());
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
-        var t = await _tests.FirstOrDefaultAsync(x => x.Id == id);
+        var t = await _testAdministrationService.GetTestByIdAsync(id);
         if (t == null) return NotFound();
         return Ok(t);
     }
@@ -36,7 +35,7 @@ public class AdminTestsController : ControllerBase
     [Authorize(Policy = PermissionCodes.Tests_Create)]
     public async Task<IActionResult> Create([FromBody] Test test)
     {
-        await _tests.InsertAsync(test);
+        await _testAdministrationService.CreateRawAsync(test);
         return CreatedAtAction(nameof(GetById), new { id = test.Id }, test);
     }
 
@@ -44,11 +43,8 @@ public class AdminTestsController : ControllerBase
     [Authorize(Policy = PermissionCodes.Tests_Create)]
     public async Task<IActionResult> Update(string id, [FromBody] Test test)
     {
-        var existing = await _tests.FirstOrDefaultAsync(x => x.Id == id);
-        if (existing == null) return NotFound();
-
-        test.Id = id;
-        await _tests.UpsertAsync(x => x.Id == id, test);
+        var updated = await _testAdministrationService.UpdateRawAsync(id, test);
+        if (!updated) return NotFound();
         return NoContent();
     }
 
@@ -56,7 +52,9 @@ public class AdminTestsController : ControllerBase
     [Authorize(Policy = PermissionCodes.Tests_Create)]
     public async Task<IActionResult> Delete(string id)
     {
-        await _tests.DeleteAsync(x => x.Id == id);
+        var deleted = await _testAdministrationService.DeleteRawAsync(id);
+        if (!deleted) return NotFound();
         return NoContent();
     }
 }
+

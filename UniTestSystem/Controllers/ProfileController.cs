@@ -2,32 +2,26 @@ using UniTestSystem.Application.Interfaces;
 using System.Security.Claims;
 using UniTestSystem.Application;
 using UniTestSystem.Domain;
-using UniTestSystem.Application.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
+using UniTestSystem.ViewModels.Profile;
 
 namespace UniTestSystem.Controllers
 {
     [Authorize]
     public class ProfileController : Controller
     {
-        private readonly IRepository<User> _userRepo;
-        private readonly IRepository<Student> _studentRepo;
-        private readonly IRepository<Lecturer> _lecturerRepo;
+        private readonly IUserAdministrationService _userAdministrationService;
         private readonly AuthService _authService;
         private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment _env;
 
         public ProfileController(
-            IRepository<User> userRepo, 
-            IRepository<Student> studentRepo, 
-            IRepository<Lecturer> lecturerRepo, 
+            IUserAdministrationService userAdministrationService, 
             AuthService authService,
             Microsoft.AspNetCore.Hosting.IWebHostEnvironment env)
         {
-            _userRepo = userRepo;
-            _studentRepo = studentRepo;
-            _lecturerRepo = lecturerRepo;
+            _userAdministrationService = userAdministrationService;
             _authService = authService;
             _env = env;
         }
@@ -41,7 +35,7 @@ namespace UniTestSystem.Controllers
             var uid = CurrentUserId;
             if (string.IsNullOrEmpty(uid)) return RedirectToAction("Login", "Auth");
 
-            var u = await _userRepo.FirstOrDefaultAsync(x => x.Id == uid);
+            var u = await _userAdministrationService.GetUserByIdAsync(uid);
             if (u == null) return NotFound();
 
             var vm = new ProfileViewModel
@@ -55,7 +49,7 @@ namespace UniTestSystem.Controllers
 
             if (u.Role == Role.Student)
             {
-                var s = await _studentRepo.FirstOrDefaultAsync(x => x.Id == uid);
+                var s = await _userAdministrationService.GetStudentByIdAsync(uid);
                 if (s != null)
                 {
                     vm.AcademicYear = s.AcademicYear;
@@ -65,7 +59,7 @@ namespace UniTestSystem.Controllers
             }
             else if (u.Role == Role.Lecturer)
             {
-                var l = await _lecturerRepo.FirstOrDefaultAsync(x => x.Id == uid);
+                var l = await _userAdministrationService.GetLecturerByIdAsync(uid);
                 if (l != null)
                 {
                     vm.FacultyName = l.FacultyId ?? ""; // Cannot access Faculty.Name directly without include if lazy loading is off. Wait, Does Lecturer have a Faculty navigation property? Yes. But no easy include in this basic repo. I will simply not fetch FacultyName or fetch it if needed. Let's just leave it empty or map it if we really need it. Ah wait, UserFormViewModel or Profile doesn't strictly need FacultyName to be perfect, but let's see. Let's just change it to l.FacultyId for now or empty. Let's look at the original replacement I did.
@@ -83,12 +77,10 @@ namespace UniTestSystem.Controllers
             if (string.IsNullOrEmpty(uid)) return RedirectToAction("Login", "Auth");
             if (!ModelState.IsValid) return View(vm);
 
-            var u = await _userRepo.FirstOrDefaultAsync(x => x.Id == uid);
+            var u = await _userAdministrationService.GetUserByIdAsync(uid);
             if (u == null) return NotFound();
 
-            var all = await _userRepo.GetAllAsync();
-            var emailExists = all.Any(x => x.Email.Equals(vm.Email, StringComparison.OrdinalIgnoreCase)
-                                           && x.Id != u.Id);
+            var emailExists = await _userAdministrationService.EmailExistsAsync(vm.Email, u.Id);
             if (emailExists)
             {
                 ModelState.AddModelError(nameof(vm.Email), "Email đã được sử dụng bởi tài khoản khác.");
@@ -110,7 +102,7 @@ namespace UniTestSystem.Controllers
 
             if (u.Role == Role.Student)
             {
-                var s = await _studentRepo.FirstOrDefaultAsync(x => x.Id == uid);
+                var s = await _userAdministrationService.GetStudentByIdAsync(uid);
                 if (s != null)
                 {
                     s.Name = vm.Name?.Trim() ?? "";
@@ -118,18 +110,18 @@ namespace UniTestSystem.Controllers
                     s.AcademicYear = vm.AcademicYear?.Trim() ?? "1";
                     s.StudentClassId = vm.StudentClassId?.Trim() ?? "";
                     s.Major = vm.Major?.Trim() ?? "";
-                    await _studentRepo.UpsertAsync(x => x.Id == s.Id, s);
+                    await _userAdministrationService.UpsertStudentAsync(s);
                     u = s; // Cho SignOut/SignIn
                 }
             }
             else if (u.Role == Role.Lecturer)
             {
-                var l = await _lecturerRepo.FirstOrDefaultAsync(x => x.Id == uid);
+                var l = await _userAdministrationService.GetLecturerByIdAsync(uid);
                 if (l != null)
                 {
                     l.Name = vm.Name?.Trim() ?? "";
                     l.Email = vm.Email?.Trim() ?? "";
-                    await _lecturerRepo.UpsertAsync(x => x.Id == l.Id, l);
+                    await _userAdministrationService.UpsertLecturerAsync(l);
                     u = l; // Cho SignOut/SignIn
                 }
             }
@@ -137,7 +129,7 @@ namespace UniTestSystem.Controllers
             {
                 u.Name = vm.Name?.Trim() ?? "";
                 u.Email = vm.Email?.Trim() ?? "";
-                await _userRepo.UpsertAsync(x => x.Id == u.Id, u);
+                await _userAdministrationService.UpsertUserAsync(u);
             }
 
             await HttpContext.SignOutAsync("cookie");
@@ -177,3 +169,4 @@ namespace UniTestSystem.Controllers
         }
     }
 }
+

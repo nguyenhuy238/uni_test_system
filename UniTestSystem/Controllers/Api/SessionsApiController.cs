@@ -1,7 +1,5 @@
 using UniTestSystem.Application.Interfaces;
-using UniTestSystem.Application;
 using System.Security.Claims;
-using UniTestSystem.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,30 +10,11 @@ namespace UniTestSystem.Controllers.Api
     [Route("api/internal/sessions")]
     public class SessionsApiController : ControllerBase
     {
-        private readonly IRepository<Session> _sRepo;
-        private readonly IRepository<Test> _tRepo;
-        private readonly SessionDeviceGuardService _sessionDeviceGuard;
+        private readonly ISessionService _sessionService;
 
-        public SessionsApiController(IRepository<Session> sRepo, IRepository<Test> tRepo, SessionDeviceGuardService sessionDeviceGuard)
+        public SessionsApiController(ISessionService sessionService)
         {
-            _sRepo = sRepo;
-            _tRepo = tRepo;
-            _sessionDeviceGuard = sessionDeviceGuard;
-        }
-
-        // Helper: tính remaining giây theo Session + Test
-        private async Task<int> GetRemainingSecondsAsync(Session s)
-        {
-            var t = await _tRepo.FirstOrDefaultAsync(x => x.Id == s.TestId);
-            var duration = Math.Max(1, t?.DurationMinutes ?? 30);
-            var total = duration * 60;
-
-            var runningDelta = s.TimerStartedAt.HasValue
-                ? (int)Math.Floor((DateTime.UtcNow - s.TimerStartedAt.Value).TotalSeconds)
-                : 0;
-
-            var consumed = Math.Max(0, s.ConsumedSeconds + runningDelta);
-            return Math.Max(0, total - consumed);
+            _sessionService = sessionService;
         }
 
         // POST /api/tests/sessions/{id}/touch (giữ nguyên)
@@ -43,15 +22,27 @@ namespace UniTestSystem.Controllers.Api
         public async Task<IActionResult> Touch(string id)
         {
             var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == id);
-            if (s == null) return NotFound();
-            if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
-            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
+            if (string.IsNullOrWhiteSpace(uid)) return Forbid();
 
-            s.LastActivityAt = DateTime.UtcNow;
-            await _sRepo.UpsertAsync(x => x.Id == id, s);
-            var remaining = await GetRemainingSecondsAsync(s);
-            return Ok(new { ok = true, at = s.LastActivityAt, remainingSeconds = remaining, running = s.TimerStartedAt.HasValue });
+            var result = await _sessionService.TouchSessionAsync(new SessionTouchCommand
+            {
+                SessionId = id,
+                UserId = uid,
+                RequestContext = BuildRequestContext()
+            });
+
+            if (result.Status == SessionServiceStatus.NotFound) return NotFound();
+            if (result.Status == SessionServiceStatus.Forbidden) return Forbid();
+            if (result.Status == SessionServiceStatus.Conflict) return Conflict(new { message = "Session is bound to another device." });
+            if (result.Data == null) return BadRequest(new { message = result.Message ?? "Cannot touch session." });
+
+            return Ok(new
+            {
+                ok = true,
+                at = result.Data.At,
+                remainingSeconds = result.Data.RemainingSeconds,
+                running = result.Data.Running
+            });
         }
 
         // ===== NEW: RESUME =====
@@ -59,20 +50,22 @@ namespace UniTestSystem.Controllers.Api
         public async Task<IActionResult> Resume(string id)
         {
             var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == id);
-            if (s == null) return NotFound();
-            if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
-            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
+            if (string.IsNullOrWhiteSpace(uid)) return Forbid();
 
-            if (!s.TimerStartedAt.HasValue)
+            var result = await _sessionService.ResumeTimerAsync(new SessionTimerCommand
             {
-                s.TimerStartedAt = DateTime.UtcNow;
-            }
-            s.LastActivityAt = DateTime.UtcNow;
+                SessionId = id,
+                UserId = uid,
+                RequireInProgressState = false,
+                RequestContext = BuildRequestContext()
+            });
 
-            await _sRepo.UpsertAsync(x => x.Id == id, s);
-            var remaining = await GetRemainingSecondsAsync(s);
-            return Ok(new { ok = true, remainingSeconds = remaining, running = true });
+            if (result.Status == SessionServiceStatus.NotFound) return NotFound();
+            if (result.Status == SessionServiceStatus.Forbidden) return Forbid();
+            if (result.Status == SessionServiceStatus.Conflict) return Conflict(new { message = "Session is bound to another device." });
+            if (result.Data == null) return BadRequest(new { message = result.Message ?? "Cannot resume session." });
+
+            return Ok(new { ok = true, remainingSeconds = result.Data.RemainingSeconds, running = result.Data.Running });
         }
 
         // ===== NEW: PAUSE =====
@@ -80,34 +73,31 @@ namespace UniTestSystem.Controllers.Api
         public async Task<IActionResult> Pause(string id)
         {
             var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == id);
-            if (s == null) return NotFound();
-            if (!string.Equals(s.UserId, uid, StringComparison.Ordinal)) return Forbid();
-            if (!await EnsureSessionDeviceAsync(s)) return Conflict(new { message = "Session is bound to another device." });
+            if (string.IsNullOrWhiteSpace(uid)) return Forbid();
 
-            if (s.TimerStartedAt.HasValue)
+            var result = await _sessionService.PauseSessionAsync(new SessionTimerCommand
             {
-                var delta = (int)Math.Floor((DateTime.UtcNow - s.TimerStartedAt.Value).TotalSeconds);
-                if (delta > 0) s.ConsumedSeconds += delta;
-                s.TimerStartedAt = null;
-            }
-            s.LastActivityAt = DateTime.UtcNow;
+                SessionId = id,
+                UserId = uid,
+                RequestContext = BuildRequestContext()
+            });
 
-            await _sRepo.UpsertAsync(x => x.Id == id, s);
-            var remaining = await GetRemainingSecondsAsync(s);
-            return Ok(new { ok = true, remainingSeconds = remaining, running = false });
+            if (result.Status == SessionServiceStatus.NotFound) return NotFound();
+            if (result.Status == SessionServiceStatus.Forbidden) return Forbid();
+            if (result.Status == SessionServiceStatus.Conflict) return Conflict(new { message = "Session is bound to another device." });
+            if (result.Data == null) return BadRequest(new { message = result.Message ?? "Cannot pause session." });
+
+            return Ok(new { ok = true, remainingSeconds = result.Data.RemainingSeconds, running = result.Data.Running });
         }
 
-        private async Task<bool> EnsureSessionDeviceAsync(Session session)
+        private SessionRequestContext BuildRequestContext()
         {
-            var requestFp = _sessionDeviceGuard.GetRequestFingerprint(
-                Request.Headers["User-Agent"].ToString(),
-                HttpContext.Connection.RemoteIpAddress?.ToString());
-            return await _sessionDeviceGuard.EnsureSessionDeviceAsync(
-                session.Id,
-                requestFp,
-                Request.Headers["User-Agent"].ToString(),
-                HttpContext.Connection.RemoteIpAddress?.ToString());
+            return new SessionRequestContext
+            {
+                UserAgent = Request.Headers["User-Agent"].ToString(),
+                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString()
+            };
         }
     }
 }
+

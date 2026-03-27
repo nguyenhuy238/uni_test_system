@@ -11,14 +11,10 @@ namespace UniTestSystem.Controllers.Api.Admin;
 [Route("api/admin/questions")]
 public class QuestionsController : ControllerBase
 {
-    private readonly IRepository<Question> _questions;
-    private readonly IRepository<Option> _options;
     private readonly IQuestionService _svc;
 
-    public QuestionsController(IRepository<Question> questions, IRepository<Option> options, IQuestionService svc)
+    public QuestionsController(IQuestionService svc)
     {
-        _questions = questions;
-        _options = options;
         _svc = svc;
     }
 
@@ -52,22 +48,19 @@ public class QuestionsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var questions = await _questions.GetAllAsync();
+        var questions = await _svc.GetAllAsync();
         return Ok(questions);
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(string id)
     {
-        var question = await _questions.FirstOrDefaultAsync(x => x.Id == id);
+        var question = await _svc.GetAsync(id);
         if (question == null) return NotFound();
-
-        var options = await _options.GetAllAsync();
-        var questionOptions = options.Where(o => o.QuestionId == id).ToList();
 
         return Ok(new {
             question,
-            options = questionOptions
+            options = question.Options ?? new List<Option>()
         });
     }
 
@@ -80,61 +73,48 @@ public class QuestionsController : ControllerBase
             Content = request.Content,
             Type = request.Type,
             SubjectId = request.SubjectId,
-            DifficultyLevelId = request.DifficultyLevelId ?? "Easy"
-        };
-
-        await _questions.InsertAsync(question);
-
-        // Add options if MCQ
-        if (request.Type == QType.MCQ && request.Options != null)
-        {
-            foreach (var optionRequest in request.Options)
-            {
-                var option = new Option
+            DifficultyLevelId = request.DifficultyLevelId ?? "Easy",
+            Options = (request.Options ?? new List<OptionRequest>())
+                .Select(optionRequest => new Option
                 {
-                    QuestionId = question.Id,
                     Content = optionRequest.Content,
                     IsCorrect = optionRequest.IsCorrect
-                };
-                await _options.InsertAsync(option);
-            }
-        }
+                })
+                .ToList()
+        };
 
-        return CreatedAtAction(nameof(GetById), new { id = question.Id }, question);
+        var actor = User.Identity?.Name ?? "admin";
+        var id = await _svc.CreateAsync(question, actor);
+        var created = await _svc.GetAsync(id);
+        return CreatedAtAction(nameof(GetById), new { id }, created ?? question);
     }
 
     [HttpPut("{id}")]
     [Authorize(Policy = PermissionCodes.Question_Edit)]
     public async Task<IActionResult> Update(string id, [FromBody] UpdateQuestionRequest request)
     {
-        var existingQuestion = await _questions.FirstOrDefaultAsync(x => x.Id == id);
+        var existingQuestion = await _svc.GetAsync(id);
         if (existingQuestion == null) return NotFound();
 
         existingQuestion.Content = request.Content ?? existingQuestion.Content;
         existingQuestion.Type = request.Type ?? existingQuestion.Type;
         existingQuestion.SubjectId = request.SubjectId ?? existingQuestion.SubjectId;
         existingQuestion.DifficultyLevelId = request.DifficultyLevelId ?? existingQuestion.DifficultyLevelId;
-
-        await _questions.UpsertAsync(x => x.Id == id, existingQuestion);
-
-        // Update options if provided
         if (request.Options != null)
         {
-            // Delete existing options
-            await _options.DeleteAsync(o => o.QuestionId == id);
-
-            // Add new options
-            foreach (var optionRequest in request.Options)
-            {
-                var option = new Option
+            existingQuestion.Options = request.Options
+                .Select(optionRequest => new Option
                 {
                     QuestionId = id,
                     Content = optionRequest.Content,
                     IsCorrect = optionRequest.IsCorrect
-                };
-                await _options.InsertAsync(option);
-            }
+                })
+                .ToList();
         }
+
+        var actor = User.Identity?.Name ?? "admin";
+        var (success, reason) = await _svc.UpdateAsync(existingQuestion, actor);
+        if (!success) return BadRequest(new { message = reason ?? "Update failed" });
 
         return NoContent();
     }
@@ -143,8 +123,15 @@ public class QuestionsController : ControllerBase
     [Authorize(Policy = PermissionCodes.Question_Delete)]
     public async Task<IActionResult> Delete(string id)
     {
-        await _options.DeleteAsync(o => o.QuestionId == id);
-        await _questions.DeleteAsync(x => x.Id == id);
+        var actor = User.Identity?.Name ?? "admin";
+        var (success, reason) = await _svc.DeleteAsync(id, actor);
+        if (!success)
+        {
+            if (string.Equals(reason, "Not found", StringComparison.OrdinalIgnoreCase))
+                return NotFound();
+            return BadRequest(new { message = reason ?? "Delete failed" });
+        }
+
         return NoContent();
     }
 }
@@ -172,3 +159,4 @@ public class OptionRequest
     public string Content { get; set; } = "";
     public bool IsCorrect { get; set; }
 }
+

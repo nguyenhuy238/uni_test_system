@@ -38,6 +38,13 @@ namespace UniTestSystem.Controllers
 
             var s = await _svc.GetAsync();
             s.SystemName = model.SystemName?.Trim() ?? s.SystemName;
+            s.CurrentSemester = model.CurrentSemester?.Trim();
+            s.CurrentAcademicYear = model.CurrentAcademicYear?.Trim();
+            s.WarningGpaThreshold = model.WarningGpaThreshold > 0 ? model.WarningGpaThreshold : s.WarningGpaThreshold;
+            s.FailGpaThreshold = model.FailGpaThreshold > 0 ? model.FailGpaThreshold : s.FailGpaThreshold;
+            if (s.WarningGpaThreshold < s.FailGpaThreshold)
+                s.WarningGpaThreshold = s.FailGpaThreshold;
+            s.TreatOutstandingDebtAsFail = model.TreatOutstandingDebtAsFail;
             s.UpdatedBy = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (logo != null && logo.Length > 0)

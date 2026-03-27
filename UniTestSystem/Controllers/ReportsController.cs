@@ -1,34 +1,26 @@
 using UniTestSystem.Application.Interfaces;
 using System.Globalization;
-using UniTestSystem.Application;
-using UniTestSystem.Domain;
 using UniTestSystem.Application.Models;
+using UniTestSystem.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
-using Microsoft.EntityFrameworkCore;
+using UniTestSystem.Application;
 
 namespace UniTestSystem.Controllers
 {
     [Authorize(Policy = PermissionCodes.Reports_View)]
     public class ReportsController : Controller
     {
-        private readonly ReportService _svc;
-        private readonly IExportService _export;
-        private readonly ISettingsService _settings;
-        private readonly IRepository<User> _userRepo;
-        private readonly IRepository<Course> _courseRepo;
+        private readonly IReportsUseCaseService _reportsUseCaseService;
         private readonly IPermissionService _perms;
 
         public ReportsController(
-            ReportService svc,
-            IExportService export,
-            ISettingsService settings,
-            IRepository<User> userRepo,
-            IRepository<Course> courseRepo,
+            IReportsUseCaseService reportsUseCaseService,
             IPermissionService perms)
         {
-            _svc = svc; _export = export; _settings = settings; _userRepo = userRepo; _courseRepo = courseRepo; _perms = perms;
+            _reportsUseCaseService = reportsUseCaseService;
+            _perms = perms;
         }
 
         [HttpGet("/reports")]
@@ -37,23 +29,12 @@ namespace UniTestSystem.Controllers
             if (!await _perms.HasAsync(User, PermissionCodes.Reports_View))
                 return Redirect("/auth/denied");
 
-            var toUtc = string.IsNullOrWhiteSpace(to) ? DateTime.UtcNow : DateTime.Parse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-            var fromUtc = string.IsNullOrWhiteSpace(from) ? toUtc.AddDays(-30) : DateTime.Parse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-
-            var facultyVm = await _svc.GetFacultyReportAsync(fromUtc, toUtc);
-            var yearVm = await _svc.GetAcademicYearReportAsync(fromUtc, toUtc);
+            var (fromUtc, toUtc) = ResolveRange(from, to, 30);
 
             var roleValue = User.FindFirstValue(ClaimTypes.Role);
             var role = Enum.TryParse<Role>(roleValue, out var parsedRole) ? parsedRole : Role.Staff;
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var dashboardVm = await _svc.GetWidgetDashboardAsync(fromUtc, toUtc, role, currentUserId);
-
-            var vm = new ReportsIndexVm
-            {
-                Faculty = facultyVm,
-                AcademicYear = yearVm,
-                Dashboard = dashboardVm
-            };
+            var vm = await _reportsUseCaseService.GetIndexVmAsync(fromUtc, toUtc, role, currentUserId);
 
             ViewBag.From = fromUtc.ToString("yyyy-MM-dd");
             ViewBag.To = toUtc.ToString("yyyy-MM-dd");
@@ -68,17 +49,15 @@ namespace UniTestSystem.Controllers
             if (!await _perms.HasAsync(User, PermissionCodes.Reports_View))
                 return Redirect("/auth/denied");
 
-            var toUtc = string.IsNullOrWhiteSpace(to) ? DateTime.UtcNow : DateTime.Parse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-            var fromUtc = string.IsNullOrWhiteSpace(from) ? toUtc.AddDays(-30) : DateTime.Parse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-
-            var vm = await _svc.GetQuestionAnalyticsAsync(fromUtc, toUtc, courseId, minAttempts);
-            var courses = await _courseRepo.GetAllAsync(c => !c.IsDeleted);
+            var (fromUtc, toUtc) = ResolveRange(from, to, 30);
+            var vm = await _reportsUseCaseService.GetQuestionAnalyticsVmAsync(fromUtc, toUtc, courseId, minAttempts);
+            var courses = await _reportsUseCaseService.GetActiveCoursesAsync();
 
             ViewBag.From = fromUtc.ToString("yyyy-MM-dd");
             ViewBag.To = toUtc.ToString("yyyy-MM-dd");
             ViewBag.MinAttempts = minAttempts < 1 ? 1 : minAttempts;
             ViewBag.CourseId = courseId;
-            ViewBag.Courses = courses.OrderBy(c => c.Name).ToList();
+            ViewBag.Courses = courses;
 
             return View("QuestionAnalytics", vm);
         }
@@ -89,8 +68,7 @@ namespace UniTestSystem.Controllers
             if (!await _perms.HasAsync(User, PermissionCodes.Reports_View))
                 return Redirect("/auth/denied");
 
-            var toUtc = string.IsNullOrWhiteSpace(to) ? DateTime.UtcNow : DateTime.Parse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-            var fromUtc = string.IsNullOrWhiteSpace(from) ? toUtc.AddDays(-30) : DateTime.Parse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            var (fromUtc, toUtc) = ResolveRange(from, to, 30);
 
             var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var isAdminOrStaff = User.IsInRole(Role.Admin.ToString()) || User.IsInRole(Role.Staff.ToString());
@@ -104,12 +82,8 @@ namespace UniTestSystem.Controllers
                 lecturerId = null;
             }
 
-            var vm = await _svc.GetLecturerPerformanceReportAsync(fromUtc, toUtc, lecturerId);
-
-            var lecturers = await _userRepo.Query()
-                .Where(x => x.Role == Role.Lecturer && x.IsActive)
-                .OrderBy(x => x.Name)
-                .ToListAsync();
+            var vm = await _reportsUseCaseService.GetLecturerPerformanceVmAsync(fromUtc, toUtc, lecturerId);
+            var lecturers = await _reportsUseCaseService.GetActiveLecturersAsync();
 
             ViewBag.From = fromUtc.ToString("yyyy-MM-dd");
             ViewBag.To = toUtc.ToString("yyyy-MM-dd");
@@ -123,7 +97,7 @@ namespace UniTestSystem.Controllers
         [HttpGet("/reports/student-subject")]
         public async Task<IActionResult> StudentSubject(string userId, string? from = null, string? to = null)
         {
-            var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var isAdmin = User.IsInRole(Role.Admin.ToString()) || User.IsInRole(Role.Staff.ToString());
 
             // [FIXED] IDOR Protection: Students can ONLY view their own report
@@ -132,13 +106,12 @@ namespace UniTestSystem.Controllers
                 return Redirect("/auth/denied");
             }
 
-            var toUtc = string.IsNullOrWhiteSpace(to) ? DateTime.UtcNow : DateTime.Parse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-            var fromUtc = string.IsNullOrWhiteSpace(from) ? toUtc.AddDays(-90) : DateTime.Parse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            var (fromUtc, toUtc) = ResolveRange(from, to, 90);
 
-            var vm = await _svc.GetStudentSubjectReportAsync(userId, fromUtc, toUtc);
-            var u = await _userRepo.FirstOrDefaultAsync(x => x.Id == userId);
+            var vm = await _reportsUseCaseService.GetStudentSubjectVmAsync(userId, fromUtc, toUtc);
+            var user = await _reportsUseCaseService.GetUserByIdAsync(userId);
             ViewBag.UserId = userId;
-            ViewBag.UserName = u?.Name ?? userId;
+            ViewBag.UserName = user?.Name ?? userId;
             ViewBag.From = fromUtc.ToString("yyyy-MM-dd");
             ViewBag.To = toUtc.ToString("yyyy-MM-dd");
             ViewBag.CanExport = await _perms.HasAsync(User, PermissionCodes.Reports_Export);
@@ -153,12 +126,8 @@ namespace UniTestSystem.Controllers
             if (!await _perms.HasAsync(User, PermissionCodes.Reports_Export))
                 return Redirect("/auth/denied");
 
-            var toUtc = string.IsNullOrWhiteSpace(to) ? DateTime.UtcNow : DateTime.Parse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-            var fromUtc = string.IsNullOrWhiteSpace(from) ? toUtc.AddDays(-30) : DateTime.Parse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-
-            var facultyVm = await _svc.GetFacultyReportAsync(fromUtc, toUtc);
-            var yearVm = await _svc.GetAcademicYearReportAsync(fromUtc, toUtc);
-            var bytes = _export.ExportFacultyYearExcel(facultyVm, yearVm, fromUtc, toUtc);
+            var (fromUtc, toUtc) = ResolveRange(from, to, 30);
+            var bytes = await _reportsUseCaseService.ExportFacultyYearExcelAsync(fromUtc, toUtc);
             return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"academic-reports-{fromUtc:yyyyMMdd}-{toUtc:yyyyMMdd}.xlsx");
         }
 
@@ -168,53 +137,50 @@ namespace UniTestSystem.Controllers
             if (!await _perms.HasAsync(User, PermissionCodes.Reports_Export))
                 return Redirect("/auth/denied");
 
-            var toUtc = string.IsNullOrWhiteSpace(to) ? DateTime.UtcNow : DateTime.Parse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-            var fromUtc = string.IsNullOrWhiteSpace(from) ? toUtc.AddDays(-30) : DateTime.Parse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-
-            var facultyVm = await _svc.GetFacultyReportAsync(fromUtc, toUtc);
-            var yearVm = await _svc.GetAcademicYearReportAsync(fromUtc, toUtc);
-            var settings = await _settings.GetAsync();
-
-            var bytes = _export.ExportFacultyYearPdf(facultyVm, yearVm, settings, fromUtc, toUtc);
+            var (fromUtc, toUtc) = ResolveRange(from, to, 30);
+            var bytes = await _reportsUseCaseService.ExportFacultyYearPdfAsync(fromUtc, toUtc);
             return File(bytes, "application/pdf", $"academic-reports-{fromUtc:yyyyMMdd}-{toUtc:yyyyMMdd}.pdf");
         }
 
         [HttpGet("/reports/student-subject/export/xlsx")]
         public async Task<IActionResult> ExportStudentSubjectXlsx(string userId, string? from = null, string? to = null)
         {
-            var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var isAdmin = User.IsInRole(Role.Admin.ToString()) || User.IsInRole(Role.Staff.ToString());
 
             if (!await _perms.HasAsync(User, PermissionCodes.Reports_Export) || (userId != currentUserId && !isAdmin))
                 return Redirect("/auth/denied");
 
-            var toUtc = string.IsNullOrWhiteSpace(to) ? DateTime.UtcNow : DateTime.Parse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-            var fromUtc = string.IsNullOrWhiteSpace(from) ? toUtc.AddDays(-90) : DateTime.Parse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-
-            var vm = await _svc.GetStudentSubjectReportAsync(userId, fromUtc, toUtc);
-            var u = await _userRepo.FirstOrDefaultAsync(x => x.Id == userId);
-            var bytes = _export.ExportStudentSubjectExcel(vm, u?.Name ?? userId, fromUtc, toUtc);
+            var (fromUtc, toUtc) = ResolveRange(from, to, 90);
+            var bytes = await _reportsUseCaseService.ExportStudentSubjectExcelAsync(userId, fromUtc, toUtc);
             return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"student-subject-{userId}-{fromUtc:yyyyMMdd}-{toUtc:yyyyMMdd}.xlsx");
         }
 
         [HttpGet("/reports/student-subject/export/pdf")]
         public async Task<IActionResult> ExportStudentSubjectPdf(string userId, string? from = null, string? to = null)
         {
-            var currentUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var isAdmin = User.IsInRole(Role.Admin.ToString()) || User.IsInRole(Role.Staff.ToString());
 
             if (!await _perms.HasAsync(User, PermissionCodes.Reports_Export) || (userId != currentUserId && !isAdmin))
                 return Redirect("/auth/denied");
 
-            var toUtc = string.IsNullOrWhiteSpace(to) ? DateTime.UtcNow : DateTime.Parse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-            var fromUtc = string.IsNullOrWhiteSpace(from) ? toUtc.AddDays(-90) : DateTime.Parse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
-
-            var vm = await _svc.GetStudentSubjectReportAsync(userId, fromUtc, toUtc);
-            var u = await _userRepo.FirstOrDefaultAsync(x => x.Id == userId);
-            var settings = await _settings.GetAsync();
-
-            var bytes = _export.ExportStudentSubjectPdf(vm, u?.Name ?? userId, settings, fromUtc, toUtc);
+            var (fromUtc, toUtc) = ResolveRange(from, to, 90);
+            var bytes = await _reportsUseCaseService.ExportStudentSubjectPdfAsync(userId, fromUtc, toUtc);
             return File(bytes, "application/pdf", $"student-subject-{userId}-{fromUtc:yyyyMMdd}-{toUtc:yyyyMMdd}.pdf");
+        }
+
+        private static (DateTime FromUtc, DateTime ToUtc) ResolveRange(string? from, string? to, int defaultDays)
+        {
+            var toUtc = string.IsNullOrWhiteSpace(to)
+                ? DateTime.UtcNow
+                : DateTime.Parse(to, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+
+            var fromUtc = string.IsNullOrWhiteSpace(from)
+                ? toUtc.AddDays(-Math.Abs(defaultDays))
+                : DateTime.Parse(from, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+
+            return (fromUtc, toUtc);
         }
     }
 }
