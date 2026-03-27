@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Text;
 using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
 using UniTestSystem.ViewModels.Feedback;
@@ -45,6 +46,32 @@ namespace UniTestSystem.Controllers
             return View(items);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> ExportFeedbacksCsv(string? testId = null)
+        {
+            var data = await _resultsService.GetAdminFeedbacksAsync(testId);
+
+            var sb = new StringBuilder();
+            sb.AppendLine("CreatedAtUtc,TestTitle,StudentName,StudentEmail,Rating,Content,SessionId,FeedbackId");
+
+            foreach (var x in data.Items.OrderByDescending(i => i.CreatedAt))
+            {
+                sb.AppendLine(
+                    $"{x.CreatedAt:O}," +
+                    $"{EscapeCsv(x.TestTitle)}," +
+                    $"{EscapeCsv(x.UserName)}," +
+                    $"{EscapeCsv(x.UserEmail)}," +
+                    $"{x.Rating}," +
+                    $"{EscapeCsv(x.Content)}," +
+                    $"{EscapeCsv(x.SessionId)}," +
+                    $"{EscapeCsv(x.FeedbackId)}");
+            }
+
+            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var fileName = $"feedbacks-admin-{DateTime.UtcNow:yyyyMMdd-HHmmss}.csv";
+            return File(bytes, "text/csv; charset=utf-8", fileName);
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ResetData()
@@ -52,6 +79,12 @@ namespace UniTestSystem.Controllers
             await _systemMaintenanceService.ResetDatabaseAsync(reseed: true);
             TempData["Msg"] = "Đã reset toàn bộ cơ sở dữ liệu và seed lại dữ liệu mặc định.";
             return RedirectToAction(nameof(Dashboard));
+        }
+
+        private static string EscapeCsv(string? value)
+        {
+            var safe = (value ?? string.Empty).Replace("\"", "\"\"");
+            return $"\"{safe}\"";
         }
     }
 }

@@ -106,12 +106,14 @@
                                         <li><a class="dropdown-item" asp-controller="Admin" asp-action="Dashboard">Admin Dashboard</a></li>
                                         <li><a class="dropdown-item" asp-controller="Users" asp-action="Index">Người dùng</a></li>
                                         <li><a class="dropdown-item" asp-controller="Transcripts" asp-action="Index">Bảng điểm sinh viên</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Admin" asp-action="Feedbacks">Feedback bài test</a></li>
                                     }
                                     @if (role == "Lecturer")
                                     {
                                         <li><a class="dropdown-item" asp-controller="Lecturer" asp-action="Dashboard">Lecturer Dashboard</a></li>
                                         <li><a class="dropdown-item" asp-controller="Questions" asp-action="Index">Ngân hàng câu hỏi</a></li>
                                         <li><a class="dropdown-item" asp-controller="Tests" asp-action="Index">Quản lý bài thi</a></li>
+                                        <li><a class="dropdown-item" asp-controller="Lecturer" asp-action="Feedbacks">Feedback từ sinh viên</a></li>
                                     }
                                     @if (role == "Admin" || role == "Lecturer")
                                     {

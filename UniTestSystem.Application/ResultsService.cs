@@ -10,19 +10,22 @@ public sealed class ResultsService : IResultsService
     private readonly IRepository<Test> _testRepo;
     private readonly IRepository<Feedback> _feedbackRepo;
     private readonly IRepository<Session> _sessionRepo;
+    private readonly IRepository<Course> _courseRepo;
 
     public ResultsService(
         IRepository<Result> resultRepo,
         IRepository<User> userRepo,
         IRepository<Test> testRepo,
         IRepository<Feedback> feedbackRepo,
-        IRepository<Session> sessionRepo)
+        IRepository<Session> sessionRepo,
+        IRepository<Course> courseRepo)
     {
         _resultRepo = resultRepo;
         _userRepo = userRepo;
         _testRepo = testRepo;
         _feedbackRepo = feedbackRepo;
         _sessionRepo = sessionRepo;
+        _courseRepo = courseRepo;
     }
 
     public async Task<List<AdminResultItem>> GetResultsAsync(string? testId = null)
@@ -299,5 +302,92 @@ public sealed class ResultsService : IResultsService
                 .Select(x => new TestLookupItem { Id = x.Id, Title = x.Title })
                 .ToList()
         };
+    }
+
+    public async Task<AdminFeedbackListData> GetLecturerFeedbacksAsync(string lecturerId, string? testId = null)
+    {
+        if (string.IsNullOrWhiteSpace(lecturerId))
+        {
+            return new AdminFeedbackListData();
+        }
+
+        var feedbacks = await _feedbackRepo.GetAllAsync(x => !x.IsDeleted);
+        var sessions = await _sessionRepo.GetAllAsync();
+        var users = await _userRepo.GetAllAsync();
+        var tests = await _testRepo.GetAllAsync();
+        var courses = await _courseRepo.GetAllAsync(x => !x.IsDeleted);
+        var lecturer = await _userRepo.FirstOrDefaultAsync(x => x.Id == lecturerId && !x.IsDeleted);
+
+        var courseById = courses.ToDictionary(x => x.Id, StringComparer.Ordinal);
+        var allowedTestIds = tests
+            .Where(x => IsOwnedByLecturer(x, lecturerId, lecturer, courseById))
+            .Select(x => x.Id)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var joined = feedbacks
+            .Join(sessions, f => f.SessionId, s => s.Id, (f, s) => new { f, s })
+            .Join(users, fs => fs.s.UserId, u => u.Id, (fs, u) => new { fs.f, fs.s, u })
+            .Join(tests, fsu => fsu.s.TestId, t => t.Id, (fsu, t) => new { fsu.f, fsu.s, fsu.u, t })
+            .Where(x => allowedTestIds.Contains(x.t.Id));
+
+        if (!string.IsNullOrWhiteSpace(testId))
+        {
+            joined = joined.Where(x => x.t.Id == testId);
+        }
+
+        return new AdminFeedbackListData
+        {
+            Items = joined
+                .Select(x => new AdminFeedbackItem
+                {
+                    FeedbackId = x.f.Id,
+                    SessionId = x.s.Id,
+                    UserName = x.u.Name,
+                    UserEmail = x.u.Email,
+                    TestTitle = x.t.Title,
+                    CreatedAt = x.f.CreatedAt,
+                    Rating = x.f.Rating,
+                    Content = x.f.Content
+                })
+                .OrderByDescending(x => x.CreatedAt)
+                .ToList(),
+            Tests = tests
+                .Where(x => allowedTestIds.Contains(x.Id))
+                .Select(x => new TestLookupItem { Id = x.Id, Title = x.Title })
+                .ToList()
+        };
+    }
+
+    private static bool IsOwnedByLecturer(
+        Test test,
+        string lecturerId,
+        User? lecturer,
+        IReadOnlyDictionary<string, Course> courseById)
+    {
+        if (!string.IsNullOrWhiteSpace(test.CourseId) &&
+            courseById.TryGetValue(test.CourseId, out var course) &&
+            string.Equals(course.LecturerId, lecturerId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (lecturer == null)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(lecturer.Email) &&
+            string.Equals(test.CreatedBy, lecturer.Email, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(lecturer.Name) &&
+            string.Equals(test.CreatedBy, lecturer.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
     }
 }

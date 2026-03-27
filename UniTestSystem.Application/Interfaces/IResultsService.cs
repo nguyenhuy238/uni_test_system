@@ -15,6 +15,7 @@ public interface IResultsService
     Task<FeedbackCommandResult> UpdateFeedbackAsync(string feedbackId, string userId, string content, int rating);
 
     Task<AdminFeedbackListData> GetAdminFeedbacksAsync(string? testId = null);
+    Task<AdminFeedbackListData> GetLecturerFeedbacksAsync(string lecturerId, string? testId = null);
 }
 
 public sealed class AdminResultItem
