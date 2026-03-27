@@ -139,6 +139,44 @@ namespace UniTestSystem.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+        [HttpPost("Tests/PreviewQuestions")]
+        [ValidateAntiForgeryToken]
+        [Authorize(Policy = PermissionCodes.Tests_Create)]
+        public async Task<IActionResult> PreviewQuestions([FromBody] PreviewQuestionsRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.CourseId))
+            {
+                return BadRequest(new { message = "Vui lòng chọn Course trước khi preview câu hỏi." });
+            }
+
+            var questions = await _testAdministrationService.PreviewQuestionsAsync(request);
+            var warnings = BuildPreviewWarnings(request, questions);
+            var warning = warnings.Count > 0
+                ? "Không đủ câu hỏi trong pool cho một số loại. Hệ thống đã lấy tối đa theo dữ liệu hiện có."
+                : null;
+
+            var result = questions
+                .Select((q, index) => new PreviewQuestionItem
+                {
+                    Stt = index + 1,
+                    Id = q.Id,
+                    Content = q.Content ?? string.Empty,
+                    Type = q.Type.ToString(),
+                    Difficulty = q.DifficultyLevelId ?? string.Empty,
+                    EstimatedPoints = EstimatePoints(q.Type)
+                })
+                .ToList();
+
+            return Ok(new
+            {
+                questions = result,
+                warnings,
+                warning,
+                requestedTotal = GetRequestedTotal(request),
+                actualTotal = result.Count
+            });
+        }
+
         // ---------- Edit (GET) ----------
         [HttpGet]
         [Authorize(Policy = PermissionCodes.Tests_Create)]
@@ -294,6 +332,62 @@ namespace UniTestSystem.Controllers
         private bool IsPrivilegedCaller()
         {
             return User.IsInRole(Role.Admin.ToString()) || User.IsInRole(Role.Staff.ToString());
+        }
+
+        private static int GetRequestedTotal(PreviewQuestionsRequest request)
+        {
+            return Math.Max(0, request.McqCount)
+                 + Math.Max(0, request.TfCount)
+                 + Math.Max(0, request.EssayCount)
+                 + Math.Max(0, request.MatchingCount)
+                 + Math.Max(0, request.DragDropCount);
+        }
+
+        private static List<string> BuildPreviewWarnings(PreviewQuestionsRequest request, IReadOnlyCollection<Question> picked)
+        {
+            var pickedByType = picked
+                .GroupBy(x => x.Type)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            var warnings = new List<string>();
+            AddMissingWarning(warnings, "MCQ", request.McqCount, pickedByType.GetValueOrDefault(QType.MCQ));
+            AddMissingWarning(warnings, "True/False", request.TfCount, pickedByType.GetValueOrDefault(QType.TrueFalse));
+            AddMissingWarning(warnings, "Essay", request.EssayCount, pickedByType.GetValueOrDefault(QType.Essay));
+            AddMissingWarning(warnings, "Matching", request.MatchingCount, pickedByType.GetValueOrDefault(QType.Matching));
+            AddMissingWarning(warnings, "DragDrop", request.DragDropCount, pickedByType.GetValueOrDefault(QType.DragDrop));
+            return warnings;
+        }
+
+        private static void AddMissingWarning(List<string> warnings, string label, int requested, int actual)
+        {
+            var safeRequested = Math.Max(0, requested);
+            if (safeRequested <= actual)
+            {
+                return;
+            }
+
+            warnings.Add($"{label}: yêu cầu {safeRequested}, chỉ có {actual} câu.");
+        }
+
+        private static decimal EstimatePoints(QType type)
+        {
+            return type switch
+            {
+                QType.Essay => 2.0m,
+                QType.Matching => 1.5m,
+                QType.DragDrop => 1.5m,
+                _ => 1.0m
+            };
+        }
+
+        private sealed class PreviewQuestionItem
+        {
+            public int Stt { get; set; }
+            public string Id { get; set; } = string.Empty;
+            public string Content { get; set; } = string.Empty;
+            public string Type { get; set; } = string.Empty;
+            public string Difficulty { get; set; } = string.Empty;
+            public decimal EstimatedPoints { get; set; }
         }
 
         // ---------- Delete ----------

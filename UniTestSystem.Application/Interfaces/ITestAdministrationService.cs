@@ -25,6 +25,7 @@ public interface ITestAdministrationService
     Task<(bool Found, string Message)> AssignByFacultyAsync(string testId, string faculty, DateTime? startAt = null, DateTime? endAt = null, string? currentUserId = null, bool isPrivileged = false);
     Task<string> BulkAssignAsync(IReadOnlyCollection<string>? testIds, string userId, DateTime? startAt = null, DateTime? endAt = null);
     Task<string> BulkAssignAutoAsync(IReadOnlyCollection<string>? testIds, DateTime? startAt = null, DateTime? endAt = null);
+    Task<List<Question>> PreviewQuestionsAsync(PreviewQuestionsRequest request);
 }
 
 public sealed class TestUserAssignment
@@ -60,4 +61,15 @@ public sealed class TestAssignData
     public List<string> Faculties { get; set; } = new();
     public string? SelectedFaculty { get; set; }
     public string? SelectedClassId { get; set; }
+}
+
+public sealed class PreviewQuestionsRequest
+{
+    public string CourseId { get; set; } = "";
+    public AssessmentType AssessmentType { get; set; }
+    public int McqCount { get; set; }
+    public int TfCount { get; set; }
+    public int EssayCount { get; set; }
+    public int MatchingCount { get; set; }
+    public int DragDropCount { get; set; }
 }

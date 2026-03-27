@@ -8,6 +8,8 @@ namespace UniTestSystem.Application;
 public sealed class TestAdministrationService : ITestAdministrationService
 {
     private readonly IRepository<Test> _testRepo;
+    private readonly IRepository<Question> _questionRepo;
+    private readonly IRepository<QuestionBank> _questionBankRepo;
     private readonly IRepository<Assessment> _assessmentRepo;
     private readonly IRepository<Student> _studentRepo;
     private readonly IRepository<Enrollment> _enrollmentRepo;
@@ -19,6 +21,8 @@ public sealed class TestAdministrationService : ITestAdministrationService
 
     public TestAdministrationService(
         IRepository<Test> testRepo,
+        IRepository<Question> questionRepo,
+        IRepository<QuestionBank> questionBankRepo,
         IRepository<Assessment> assessmentRepo,
         IRepository<Student> studentRepo,
         IRepository<Enrollment> enrollmentRepo,
@@ -29,6 +33,8 @@ public sealed class TestAdministrationService : ITestAdministrationService
         INotificationService? notificationService = null)
     {
         _testRepo = testRepo;
+        _questionRepo = questionRepo;
+        _questionBankRepo = questionBankRepo;
         _assessmentRepo = assessmentRepo;
         _studentRepo = studentRepo;
         _enrollmentRepo = enrollmentRepo;
@@ -754,6 +760,45 @@ public sealed class TestAdministrationService : ITestAdministrationService
         return msg;
     }
 
+    public async Task<List<Question>> PreviewQuestionsAsync(PreviewQuestionsRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.CourseId))
+        {
+            return new List<Question>();
+        }
+
+        var courseId = request.CourseId.Trim();
+        var bankIds = (await _questionBankRepo.GetAllAsync(x =>
+                !x.IsDeleted &&
+                x.CourseId == courseId))
+            .Select(x => x.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (bankIds.Count == 0)
+        {
+            return new List<Question>();
+        }
+
+        var approvedQuestions = await _questionRepo.GetAllAsync(x =>
+            !x.IsDeleted &&
+            x.IsActive &&
+            x.Status == QuestionStatus.Approved);
+
+        var coursePool = approvedQuestions
+            .Where(x => !string.IsNullOrWhiteSpace(x.QuestionBankId) && bankIds.Contains(x.QuestionBankId!))
+            .ToList();
+
+        var picked = new List<Question>();
+        picked.AddRange(PickRandomByType(coursePool, QType.MCQ, request.McqCount));
+        picked.AddRange(PickRandomByType(coursePool, QType.TrueFalse, request.TfCount));
+        picked.AddRange(PickRandomByType(coursePool, QType.Essay, request.EssayCount));
+        picked.AddRange(PickRandomByType(coursePool, QType.Matching, request.MatchingCount));
+        picked.AddRange(PickRandomByType(coursePool, QType.DragDrop, request.DragDropCount));
+
+        return Shuffle(picked);
+    }
+
     private async Task<(bool Allowed, bool Found, Test? Test, Course? Course, bool IsOwner, bool IsAdmin, string Message)> ValidateAssignContextAsync(
         string testId,
         string? currentUserId,
@@ -792,6 +837,35 @@ public sealed class TestAdministrationService : ITestAdministrationService
         }
 
         return (true, true, test, course, isOwner, isAdmin, string.Empty);
+    }
+
+    private static List<Question> PickRandomByType(IReadOnlyCollection<Question> pool, QType type, int count)
+    {
+        var safeCount = Math.Max(0, count);
+        if (safeCount == 0 || pool.Count == 0)
+        {
+            return new List<Question>();
+        }
+
+        return Shuffle(pool.Where(x => x.Type == type).ToList())
+            .Take(safeCount)
+            .ToList();
+    }
+
+    private static List<Question> Shuffle(List<Question> items)
+    {
+        if (items.Count <= 1)
+        {
+            return items;
+        }
+
+        for (var i = items.Count - 1; i > 0; i--)
+        {
+            var j = Random.Shared.Next(i + 1);
+            (items[i], items[j]) = (items[j], items[i]);
+        }
+
+        return items;
     }
 
     private async Task<HashSet<string>> GetEnrolledStudentIdsAsync(string courseId)

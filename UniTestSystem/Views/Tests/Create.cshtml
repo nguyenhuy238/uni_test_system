@@ -4,6 +4,16 @@
 @{
     var hasSelectedCourse = !string.IsNullOrWhiteSpace(Model.CourseId);
     var selectedCourseName = (string?)ViewBag.SelectedCourseName ?? "N/A";
+    string qv(string key, string fallback = "0")
+    {
+        var value = Context.Request.Query[key].ToString();
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+    var mcqCountValue = qv("McqCount");
+    var tfCountValue = qv("TfCount");
+    var essayCountValue = qv("EssayCount");
+    var matchingCountValue = qv("MatchingCount");
+    var dragDropCountValue = qv("DragDropCount");
 }
 
 <h2>Create Test</h2>
@@ -37,6 +47,11 @@
     <input type="hidden" id="q_AssessmentType" name="AssessmentType" value="@Model.AssessmentType" />
     <input type="hidden" id="q_ShuffleQuestions" name="ShuffleQuestions" value="@Model.ShuffleQuestions.ToString().ToLower()" />
     <input type="hidden" id="q_ShuffleOptions" name="ShuffleOptions" value="@Model.ShuffleOptions.ToString().ToLower()" />
+    <input type="hidden" id="q_McqCount" name="McqCount" value="@mcqCountValue" />
+    <input type="hidden" id="q_TfCount" name="TfCount" value="@tfCountValue" />
+    <input type="hidden" id="q_EssayCount" name="EssayCount" value="@essayCountValue" />
+    <input type="hidden" id="q_MatchingCount" name="MatchingCount" value="@matchingCountValue" />
+    <input type="hidden" id="q_DragDropCount" name="DragDropCount" value="@dragDropCountValue" />
 
     <button class="btn btn-outline-secondary" type="submit">Apply</button>
 </form>
@@ -77,6 +92,26 @@
                     }
                 </select>
             </div>
+            <div class="mb-2">
+                <label class="form-label">Cấu hình random theo loại câu hỏi</label>
+                <div class="row g-2">
+                    <div class="col-4">
+                        <input name="McqCount" type="number" min="0" value="@mcqCountValue" class="form-control" placeholder="MCQ" />
+                    </div>
+                    <div class="col-4">
+                        <input name="TfCount" type="number" min="0" value="@tfCountValue" class="form-control" placeholder="TF" />
+                    </div>
+                    <div class="col-4">
+                        <input name="EssayCount" type="number" min="0" value="@essayCountValue" class="form-control" placeholder="Essay" />
+                    </div>
+                    <div class="col-6">
+                        <input name="MatchingCount" type="number" min="0" value="@matchingCountValue" class="form-control" placeholder="Matching" />
+                    </div>
+                    <div class="col-6">
+                        <input name="DragDropCount" type="number" min="0" value="@dragDropCountValue" class="form-control" placeholder="DragDrop" />
+                    </div>
+                </div>
+            </div>
             <div class="mb-2 form-check">
                 <input type="checkbox" name="ShuffleQuestions" value="true" checked="@Model.ShuffleQuestions" class="form-check-input" />
                 <label class="form-check-label">Shuffle Questions (Xáo trộn thứ tự câu hỏi)</label>
@@ -87,7 +122,8 @@
             </div>
 
             <div class="mt-3 d-flex align-items-center gap-2">
-                <button class="btn btn-primary" id="btnSaveCreate">Save</button>
+                <button class="btn btn-primary" type="submit" id="btnSaveCreate">Save</button>
+                <button class="btn btn-outline-info" type="button" id="btnPreviewQuestions">🔍 Preview Questions</button>
                 <span class="small text-muted">Đã chọn: <span id="selectedCount">0</span> câu hỏi.</span>
             </div>
 
@@ -172,18 +208,60 @@
     </div>
 </form>
 
+<div class="modal fade" id="previewQuestionsModal" tabindex="-1" aria-labelledby="previewQuestionsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="previewQuestionsModalLabel">Preview Questions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="previewWarning" class="alert alert-warning d-none"></div>
+                <div id="previewSummary" class="small text-muted mb-2"></div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle">
+                        <thead>
+                            <tr>
+                                <th style="width:80px;">STT</th>
+                                <th>Nội dung</th>
+                                <th style="width:130px;">Loại</th>
+                                <th style="width:140px;">Độ khó</th>
+                                <th style="width:130px;">Điểm dự kiến</th>
+                            </tr>
+                        </thead>
+                        <tbody id="previewQuestionsBody">
+                            <tr>
+                                <td colspan="5" class="text-muted text-center">Bấm "Preview Questions" để xem danh sách câu hỏi.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="btnRandomPreview">🔄 Random lại</button>
+                <button type="button" class="btn btn-success" id="btnConfirmPreview">✓ Xác nhận</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         // ===== SYNC left form -> hidden (GET form) & patch pager links =====
         (function(){
           const map = {
-            Title:           {src:'input[name="Title"]',            hid:'#q_Title'},
-            CourseId:        {src:'select[name="CourseId"]',        hid:'#q_CourseId'},
-            DurationMinutes: {src:'input[name="DurationMinutes"]',  hid:'#q_DurationMinutes'},
-            PassScore:       {src:'input[name="PassScore"]',        hid:'#q_PassScore'},
-            AssessmentType:  {src:'select[name="AssessmentType"]',  hid:'#q_AssessmentType'},
-            ShuffleQuestions:{src:'input[name="ShuffleQuestions"]', hid:'#q_ShuffleQuestions', isCheckbox:true},
-            ShuffleOptions:  {src:'input[name="ShuffleOptions"]',   hid:'#q_ShuffleOptions', isCheckbox:true}
+            Title:           {src:'#createForm input[name="Title"]',            hid:'#q_Title'},
+            CourseId:        {src:'#createForm select[name="CourseId"]',        hid:'#q_CourseId'},
+            DurationMinutes: {src:'#createForm input[name="DurationMinutes"]',  hid:'#q_DurationMinutes'},
+            PassScore:       {src:'#createForm input[name="PassScore"]',        hid:'#q_PassScore'},
+            AssessmentType:  {src:'#createForm select[name="AssessmentType"]',  hid:'#q_AssessmentType'},
+            ShuffleQuestions:{src:'#createForm input[name="ShuffleQuestions"]', hid:'#q_ShuffleQuestions', isCheckbox:true},
+            ShuffleOptions:  {src:'#createForm input[name="ShuffleOptions"]',   hid:'#q_ShuffleOptions', isCheckbox:true},
+            McqCount:        {src:'#createForm input[name="McqCount"]',         hid:'#q_McqCount'},
+            TfCount:         {src:'#createForm input[name="TfCount"]',          hid:'#q_TfCount'},
+            EssayCount:      {src:'#createForm input[name="EssayCount"]',       hid:'#q_EssayCount'},
+            MatchingCount:   {src:'#createForm input[name="MatchingCount"]',    hid:'#q_MatchingCount'},
+            DragDropCount:   {src:'#createForm input[name="DragDropCount"]',    hid:'#q_DragDropCount'}
           };
 
           function syncHidden(){
@@ -223,7 +301,7 @@
           document.querySelector('select[name="PageSize"]')?.addEventListener('change', patchPagerLinks);
           document.querySelector('input[name="Keyword"]')?.addEventListener('input', patchPagerLinks);
 
-          const courseSelect = document.querySelector('select[name="CourseId"]');
+          const courseSelect = document.querySelector('#createForm select[name="CourseId"]');
           if (courseSelect){
             courseSelect.addEventListener('change', ()=>{
               syncHidden();
@@ -266,5 +344,149 @@
 
         applyFromStorageToDOM(); updateSelectedCount();
         document.getElementById('btnSaveCreate')?.addEventListener('click', injectHiddenInputs);
+        document.getElementById('createForm')?.addEventListener('submit', injectHiddenInputs);
+
+        // ===== Preview random questions =====
+        let previewModal = null;
+        let latestPreviewIds = [];
+
+        function toInt(value) {
+          const parsed = Number.parseInt(value, 10);
+          return Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
+        }
+
+        function escapeHtml(value) {
+          return (value ?? '')
+            .toString()
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+        }
+
+        function buildPreviewRequest() {
+          const form = document.getElementById('createForm');
+          return {
+            courseId: form?.querySelector('select[name="CourseId"]')?.value?.trim() ?? '',
+            assessmentType: form?.querySelector('select[name="AssessmentType"]')?.value ?? 'Quiz',
+            mcqCount: toInt(form?.querySelector('input[name="McqCount"]')?.value),
+            tfCount: toInt(form?.querySelector('input[name="TfCount"]')?.value),
+            essayCount: toInt(form?.querySelector('input[name="EssayCount"]')?.value),
+            matchingCount: toInt(form?.querySelector('input[name="MatchingCount"]')?.value),
+            dragDropCount: toInt(form?.querySelector('input[name="DragDropCount"]')?.value)
+          };
+        }
+
+        function requestedTotal(request) {
+          return request.mcqCount + request.tfCount + request.essayCount + request.matchingCount + request.dragDropCount;
+        }
+
+        function renderPreviewResult(payload) {
+          const warningEl = document.getElementById('previewWarning');
+          const summaryEl = document.getElementById('previewSummary');
+          const bodyEl = document.getElementById('previewQuestionsBody');
+          const questions = Array.isArray(payload?.questions) ? payload.questions : [];
+          const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
+
+          latestPreviewIds = questions.map(q => q.id).filter(Boolean);
+
+          if (summaryEl) {
+            const requested = payload?.requestedTotal ?? 0;
+            const actual = payload?.actualTotal ?? 0;
+            summaryEl.textContent = `Đã random ${actual}/${requested} câu hỏi theo cấu hình hiện tại.`;
+          }
+
+          if (warningEl) {
+            if (warnings.length > 0) {
+              warningEl.classList.remove('d-none');
+              warningEl.innerHTML = `
+                <div><strong>${escapeHtml(payload?.warning ?? 'Cảnh báo')}</strong></div>
+                <ul class="mb-0 mt-1">${warnings.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+              `;
+            } else {
+              warningEl.classList.add('d-none');
+              warningEl.innerHTML = '';
+            }
+          }
+
+          if (bodyEl) {
+            if (questions.length === 0) {
+              bodyEl.innerHTML = '<tr><td colspan="5" class="text-muted text-center">Không có câu hỏi phù hợp để preview.</td></tr>';
+            } else {
+              bodyEl.innerHTML = questions.map(q => `
+                <tr>
+                  <td>${escapeHtml(q.stt)}</td>
+                  <td>${escapeHtml(q.content)}</td>
+                  <td>${escapeHtml(q.type)}</td>
+                  <td>${escapeHtml(q.difficulty)}</td>
+                  <td>${escapeHtml(q.estimatedPoints)}</td>
+                </tr>
+              `).join('');
+            }
+          }
+        }
+
+        async function loadPreviewQuestions() {
+          const request = buildPreviewRequest();
+          if (!request.courseId) {
+            alert('Vui lòng chọn Course trước khi preview câu hỏi.');
+            return;
+          }
+
+          if (requestedTotal(request) <= 0) {
+            alert('Vui lòng nhập số lượng câu hỏi random lớn hơn 0.');
+            return;
+          }
+
+          const previewButton = document.getElementById('btnPreviewQuestions');
+          const rerollButton = document.getElementById('btnRandomPreview');
+          const token = document.querySelector('#createForm input[name="__RequestVerificationToken"]')?.value ?? '';
+
+          try {
+            if (previewButton) previewButton.disabled = true;
+            if (rerollButton) rerollButton.disabled = true;
+
+            const response = await fetch('/Tests/PreviewQuestions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'RequestVerificationToken': token
+              },
+              body: JSON.stringify(request)
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              alert(payload?.message ?? 'Không thể preview câu hỏi. Vui lòng thử lại.');
+              return;
+            }
+
+            renderPreviewResult(payload);
+            if (!previewModal) {
+              previewModal = new bootstrap.Modal(document.getElementById('previewQuestionsModal'));
+            }
+            previewModal.show();
+          } catch {
+            alert('Không thể kết nối tới API preview. Vui lòng thử lại.');
+          } finally {
+            if (previewButton) previewButton.disabled = false;
+            if (rerollButton) rerollButton.disabled = false;
+          }
+        }
+
+        document.getElementById('btnPreviewQuestions')?.addEventListener('click', loadPreviewQuestions);
+        document.getElementById('btnRandomPreview')?.addEventListener('click', loadPreviewQuestions);
+        document.getElementById('btnConfirmPreview')?.addEventListener('click', function() {
+          if (latestPreviewIds.length === 0) {
+            alert('Chưa có câu hỏi để xác nhận. Vui lòng preview trước.');
+            return;
+          }
+
+          setSel(latestPreviewIds);
+          applyFromStorageToDOM();
+          injectHiddenInputs();
+          previewModal?.hide();
+        });
     </script>
 }
