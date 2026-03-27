@@ -326,6 +326,19 @@ public sealed class TestAdministrationService : ITestAdministrationService
         return true;
     }
 
+    public async Task<bool> UnarchiveAsync(string id)
+    {
+        var test = await _testRepo.FirstOrDefaultAsync(x => x.Id == id);
+        if (test == null)
+        {
+            return false;
+        }
+
+        test.IsArchived = false;
+        await _testRepo.UpsertAsync(x => x.Id == test.Id, test);
+        return true;
+    }
+
     public async Task<TestAssignData?> GetAssignDataAsync(string testId, string? classFilter, string? currentUserId = null, bool isPrivileged = false)
     {
         var (allowed, _, test, course, isOwner, isAdmin, _) =

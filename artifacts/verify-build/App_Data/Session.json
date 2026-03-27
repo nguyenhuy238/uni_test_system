@@ -1,0 +1,938 @@
+[
+  {
+    "Id": "eb75a83654944220933ec9f2e95bae55",
+    "TestId": "a2c676c801244d94b95498acc1471f7e",
+    "UserId": "2c44dd4fc3d94eb7b78c639220df15d1",
+    "StartAt": "2025-08-29T02:11:19.2531095Z",
+    "EndAt": "2025-08-29T02:11:38.6116808Z",
+    "Status": 2,
+    "LastActivityAt": "2025-08-29T02:12:57.5595361Z",
+    "ConsumedSeconds": 0,
+    "TimerStartedAt": "2025-08-29T02:11:19.25311Z",
+    "AutoScore": 2,
+    "ManualScore": 1,
+    "TotalScore": 3,
+    "MaxScore": 10,
+    "Percent": 30,
+    "IsPassed": true,
+    "Answers": [
+      {
+        "QuestionId": "d533725f3440455f9a3b8b87a95efc21",
+        "Selected": "True",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "64e2f7bd0aad44e48a98294dd9d1ba7a",
+        "Selected": null,
+        "Score": 0.4,
+        "TextAnswer": "fsdfsds"
+      },
+      {
+        "QuestionId": "7b615a81e41c4388aff421c97b1f9a99",
+        "Selected": "",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "16df837c1d1b4655806693e4363eba13",
+        "Selected": "True",
+        "Score": 1,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "773b514cceff4842abe6e83b24aee396",
+        "Selected": "",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "3d766d37b40149cab542b090311c0f60",
+        "Selected": "",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "2cd166f718b24b5bbd52180f112571d1",
+        "Selected": null,
+        "Score": 0.6,
+        "TextAnswer": "sdfsdfsdfsd"
+      },
+      {
+        "QuestionId": "fed6910da4d54042878d5e8e0df3fcc7",
+        "Selected": "B",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "5092fe6385c048ac9b969b0e568491c0",
+        "Selected": "B",
+        "Score": 1,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "ae4d696b319046f5b488fd1fb7c1d6f5",
+        "Selected": "",
+        "Score": 0,
+        "TextAnswer": null
+      }
+    ],
+    "Snapshot": [
+      {
+        "Id": "d533725f3440455f9a3b8b87a95efc21",
+        "Content": "Sample TrueFalse Question 49 about Java (Junior)",
+        "Type": 1,
+        "Options": [
+          "True",
+          "False"
+        ],
+        "CorrectKeys": [
+          "False"
+        ],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "Java",
+        "Difficulty": "Junior",
+        "Tags": [
+          "async",
+          "await"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.268437Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "64e2f7bd0aad44e48a98294dd9d1ba7a",
+        "Content": "Sample Essay Question 36 about Python (Junior)",
+        "Type": 2,
+        "Options": [],
+        "CorrectKeys": [],
+        "EssayMinWords": 100,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "Python",
+        "Difficulty": "Junior",
+        "Tags": [
+          "algorithms",
+          "sorting"
+        ],
+        "Media": [
+          {
+            "Id": "202f17fd256a43fdb5de4b04a6f26142",
+            "FileName": "file36.png",
+            "Url": "https://example.com/file36.png",
+            "ContentType": "",
+            "Size": 0,
+            "Caption": "Caption 36"
+          }
+        ],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.0704959Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "7b615a81e41c4388aff421c97b1f9a99",
+        "Content": "Sample Matching Question 48 about JavaScript (Senior)",
+        "Type": 3,
+        "Options": [],
+        "CorrectKeys": [],
+        "EssayMinWords": null,
+        "MatchingPairs": [
+          {
+            "L": "One",
+            "R": "1"
+          },
+          {
+            "L": "Two",
+            "R": "2"
+          },
+          {
+            "L": "Three",
+            "R": "3"
+          }
+        ],
+        "DragDrop": null,
+        "Skill": "JavaScript",
+        "Difficulty": "Senior",
+        "Tags": [
+          "async",
+          "await"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.2526891Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "16df837c1d1b4655806693e4363eba13",
+        "Content": "Sample TrueFalse Question 44 about C# (Junior)",
+        "Type": 1,
+        "Options": [
+          "True",
+          "False"
+        ],
+        "CorrectKeys": [
+          "True"
+        ],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "C#",
+        "Difficulty": "Junior",
+        "Tags": [
+          "dom",
+          "events"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.1966923Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "773b514cceff4842abe6e83b24aee396",
+        "Content": "Sample DragDrop Question 38 about Python (Junior)",
+        "Type": 4,
+        "Options": [],
+        "CorrectKeys": [],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": {
+          "Tokens": [
+            "foo",
+            "bar",
+            "baz",
+            "qux"
+          ],
+          "Slots": [
+            {
+              "Name": "Slot1",
+              "Answer": "foo"
+            },
+            {
+              "Name": "Slot2",
+              "Answer": "bar"
+            }
+          ]
+        },
+        "Skill": "Python",
+        "Difficulty": "Junior",
+        "Tags": [
+          "dom",
+          "events"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.103217Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "3d766d37b40149cab542b090311c0f60",
+        "Content": "Sample DragDrop Question 43 about JavaScript (Junior)",
+        "Type": 4,
+        "Options": [],
+        "CorrectKeys": [],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": {
+          "Tokens": [
+            "foo",
+            "bar",
+            "baz",
+            "qux"
+          ],
+          "Slots": [
+            {
+              "Name": "Slot1",
+              "Answer": "foo"
+            },
+            {
+              "Name": "Slot2",
+              "Answer": "bar"
+            }
+          ]
+        },
+        "Skill": "JavaScript",
+        "Difficulty": "Junior",
+        "Tags": [
+          "algorithms",
+          "sorting"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.1807045Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "2cd166f718b24b5bbd52180f112571d1",
+        "Content": "Sample Essay Question 46 about Java (Senior)",
+        "Type": 2,
+        "Options": [],
+        "CorrectKeys": [],
+        "EssayMinWords": 100,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "Java",
+        "Difficulty": "Senior",
+        "Tags": [
+          "async",
+          "await"
+        ],
+        "Media": [
+          {
+            "Id": "16f32874a1e548caa564fb0d1fcbfb39",
+            "FileName": "file46.png",
+            "Url": "https://example.com/file46.png",
+            "ContentType": "",
+            "Size": 0,
+            "Caption": "Caption 46"
+          }
+        ],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.2244262Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "fed6910da4d54042878d5e8e0df3fcc7",
+        "Content": "Sample MCQ Question 45 about Python (Senior)",
+        "Type": 0,
+        "Options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "CorrectKeys": [
+          "A"
+        ],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "Python",
+        "Difficulty": "Senior",
+        "Tags": [
+          "databases",
+          "sql"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.2105587Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "5092fe6385c048ac9b969b0e568491c0",
+        "Content": "Sample MCQ Question 50 about Python (Junior)",
+        "Type": 0,
+        "Options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "CorrectKeys": [
+          "B"
+        ],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "Python",
+        "Difficulty": "Junior",
+        "Tags": [
+          "oop",
+          "inheritance"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.2834737Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "ae4d696b319046f5b488fd1fb7c1d6f5",
+        "Content": "Sample Matching Question 47 about SQL (Senior)",
+        "Type": 3,
+        "Options": [],
+        "CorrectKeys": [],
+        "EssayMinWords": null,
+        "MatchingPairs": [
+          {
+            "L": "One",
+            "R": "1"
+          },
+          {
+            "L": "Two",
+            "R": "2"
+          },
+          {
+            "L": "Three",
+            "R": "3"
+          }
+        ],
+        "DragDrop": null,
+        "Skill": "SQL",
+        "Difficulty": "Senior",
+        "Tags": [
+          "collections"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.238219Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      }
+    ],
+    "Items": [
+      {
+        "QuestionId": "d533725f3440455f9a3b8b87a95efc21",
+        "Points": 1
+      },
+      {
+        "QuestionId": "64e2f7bd0aad44e48a98294dd9d1ba7a",
+        "Points": 1
+      },
+      {
+        "QuestionId": "7b615a81e41c4388aff421c97b1f9a99",
+        "Points": 1
+      },
+      {
+        "QuestionId": "16df837c1d1b4655806693e4363eba13",
+        "Points": 1
+      },
+      {
+        "QuestionId": "773b514cceff4842abe6e83b24aee396",
+        "Points": 1
+      },
+      {
+        "QuestionId": "3d766d37b40149cab542b090311c0f60",
+        "Points": 1
+      },
+      {
+        "QuestionId": "2cd166f718b24b5bbd52180f112571d1",
+        "Points": 1
+      },
+      {
+        "QuestionId": "fed6910da4d54042878d5e8e0df3fcc7",
+        "Points": 1
+      },
+      {
+        "QuestionId": "5092fe6385c048ac9b969b0e568491c0",
+        "Points": 1
+      },
+      {
+        "QuestionId": "ae4d696b319046f5b488fd1fb7c1d6f5",
+        "Points": 1
+      }
+    ]
+  },
+  {
+    "Id": "b503d34c91ff4d06b94e99860271616f",
+    "TestId": "f74e665a45004e668a0af140ea533c1a",
+    "UserId": "2c44dd4fc3d94eb7b78c639220df15d1",
+    "StartAt": "2025-09-04T09:40:27.7584018Z",
+    "EndAt": "2025-09-04T09:40:49.5720123Z",
+    "Status": 1,
+    "LastActivityAt": "2025-09-04T09:40:27.799707Z",
+    "ConsumedSeconds": 0,
+    "TimerStartedAt": "2025-09-04T09:40:27.758402Z",
+    "AutoScore": 0.76,
+    "ManualScore": 0,
+    "TotalScore": 0.76,
+    "MaxScore": 10,
+    "Percent": 7.6,
+    "IsPassed": false,
+    "Answers": [
+      {
+        "QuestionId": "143de9611d6146f38b60b7ecd35ddf6d",
+        "Selected": "",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "15cf44a80f1742de8b1267309c178f53",
+        "Selected": "A",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "ad0bb7293b95488a9d6aa7a2fce21edc",
+        "Selected": "",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "b90b66f6a9304c77b89a4dc9e8ee916e",
+        "Selected": "True",
+        "Score": 1,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "8e70f624551e49b8bfa99205ea4edbd4",
+        "Selected": null,
+        "Score": 0,
+        "TextAnswer": "\u00E0dasdfdsafsadvcx"
+      },
+      {
+        "QuestionId": "f23af949c22246eaaa6fd0b24e7a26e6",
+        "Selected": "",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "cc65532b433c4e008e091a08ec1bcb40",
+        "Selected": "A",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "16df837c1d1b4655806693e4363eba13",
+        "Selected": "False",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "bc558291282f41e987e2bb5c0f7352f6",
+        "Selected": "",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "f652b0da3c5e4feebb5f4cbfe1ecd797",
+        "Selected": "A",
+        "Score": 0,
+        "TextAnswer": null
+      },
+      {
+        "QuestionId": "7d6297117ad04ddf94ab67b640a7ecbf",
+        "Selected": null,
+        "Score": 0,
+        "TextAnswer": "\u1EE7tyutrutry"
+      },
+      {
+        "QuestionId": "697d47fefe964d6ba774a6c28812122a",
+        "Selected": "",
+        "Score": 0,
+        "TextAnswer": null
+      }
+    ],
+    "Snapshot": [
+      {
+        "Id": "143de9611d6146f38b60b7ecd35ddf6d",
+        "Content": "Sample Matching Question 21 about C# (Mid)",
+        "Type": 3,
+        "Options": [],
+        "CorrectKeys": [],
+        "EssayMinWords": null,
+        "MatchingPairs": [
+          {
+            "L": "One",
+            "R": "1"
+          },
+          {
+            "L": "Two",
+            "R": "2"
+          },
+          {
+            "L": "Three",
+            "R": "3"
+          }
+        ],
+        "DragDrop": null,
+        "Skill": "C#",
+        "Difficulty": "Mid",
+        "Tags": [
+          "basics"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:46.8545965Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "15cf44a80f1742de8b1267309c178f53",
+        "Content": "Sample MCQ Question 34 about C# (Mid)",
+        "Type": 0,
+        "Options": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ],
+        "CorrectKeys": [
+          "D"
+        ],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "C#",
+        "Difficulty": "Mid",
+        "Tags": [
+          "oop",
+          "inheritance"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.043084Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "ad0bb7293b95488a9d6aa7a2fce21edc",
+        "Content": "Sample DragDrop Question 20 about C# (Junior)",
+        "Type": 4,
+        "Options": [],
+        "CorrectKeys": [],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": {
+          "Tokens": [
+            "foo",
+            "bar",
+            "baz",
+            "qux"
+          ],
+          "Slots": [
+            {
+              "Name": "Slot1",
+              "Answer": "foo"
+            },
+            {
+              "Name": "Slot2",
+              "Answer": "bar"
+            }
+          ]
+        },
+        "Skill": "C#",
+        "Difficulty": "Junior",
+        "Tags": [
+          "databases",
+          "sql"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:46.8425299Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "b90b66f6a9304c77b89a4dc9e8ee916e",
+        "Content": "Sample TrueFalse Question 37 about C# (Mid)",
+        "Type": 1,
+        "Options": [
+          "True",
+          "False"
+        ],
+        "CorrectKeys": [
+          "True"
+        ],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "C#",
+        "Difficulty": "Mid",
+        "Tags": [
+          "oop",
+          "inheritance"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.0863721Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "8e70f624551e49b8bfa99205ea4edbd4",
+        "Content": "Explain boxing and unboxing in C# with examples.",
+        "Type": 2,
+        "Options": [],
+        "CorrectKeys": [],
+        "EssayMinWords": 120,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "C#",
+        "Difficulty": "Senior",
+        "Tags": [
+          "boxing",
+          "unboxing",
+          "types"
+        ],
+        "Media": [
+          {
+            "Id": "a121735fa67d42a8b10fdf9f07054f05",
+            "FileName": "diagram.png",
+            "Url": "https://example.com/diagram.png",
+            "ContentType": "",
+            "Size": 0,
+            "Caption": "Boxing vs Unboxing"
+          }
+        ],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:46.6086694Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "f23af949c22246eaaa6fd0b24e7a26e6",
+        "Content": "Sample DragDrop Question 27 about C# (Junior)",
+        "Type": 4,
+        "Options": [],
+        "CorrectKeys": [],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": {
+          "Tokens": [
+            "foo",
+            "bar",
+            "baz",
+            "qux"
+          ],
+          "Slots": [
+            {
+              "Name": "Slot1",
+              "Answer": "foo"
+            },
+            {
+              "Name": "Slot2",
+              "Answer": "bar"
+            }
+          ]
+        },
+        "Skill": "C#",
+        "Difficulty": "Junior",
+        "Tags": [
+          "networking"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:46.9410585Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "cc65532b433c4e008e091a08ec1bcb40",
+        "Content": "What is the output of Console.WriteLine(1 \u002B 2 * 3)?",
+        "Type": 0,
+        "Options": [
+          "7",
+          "9",
+          "6"
+        ],
+        "CorrectKeys": [
+          "7"
+        ],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "C#",
+        "Difficulty": "Junior",
+        "Tags": [
+          "operators",
+          "basics"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:46.5674223Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "16df837c1d1b4655806693e4363eba13",
+        "Content": "Sample TrueFalse Question 44 about C# (Junior)",
+        "Type": 1,
+        "Options": [
+          "True",
+          "False"
+        ],
+        "CorrectKeys": [
+          "True"
+        ],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "C#",
+        "Difficulty": "Junior",
+        "Tags": [
+          "dom",
+          "events"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.1966923Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "bc558291282f41e987e2bb5c0f7352f6",
+        "Content": "Sample TrueFalse Question 26 about C# (Senior)",
+        "Type": 1,
+        "Options": [
+          "True",
+          "False"
+        ],
+        "CorrectKeys": [
+          "True"
+        ],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "C#",
+        "Difficulty": "Senior",
+        "Tags": [
+          "databases",
+          "sql"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:46.9257483Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "f652b0da3c5e4feebb5f4cbfe1ecd797",
+        "Content": "C# l\u00E0 ng\u00F4n ng\u1EEF g\u00EC?",
+        "Type": 0,
+        "Options": [
+          "Ng\u00F4n ng\u1EEF l\u1EADp tr\u00ECnh",
+          "H\u1EC7 \u0111i\u1EC1u h\u00E0nh",
+          "CSDL",
+          "Tr\u00ECnh duy\u1EC7t"
+        ],
+        "CorrectKeys": [],
+        "EssayMinWords": null,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "C#",
+        "Difficulty": "Junior",
+        "Tags": [],
+        "Media": [],
+        "CreatedBy": null,
+        "CreatedAt": "2025-08-29T02:04:41.2729653Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "7d6297117ad04ddf94ab67b640a7ecbf",
+        "Content": "Sample Essay Question 33 about C# (Senior)",
+        "Type": 2,
+        "Options": [],
+        "CorrectKeys": [],
+        "EssayMinWords": 80,
+        "MatchingPairs": [],
+        "DragDrop": null,
+        "Skill": "C#",
+        "Difficulty": "Senior",
+        "Tags": [
+          "algorithms",
+          "sorting"
+        ],
+        "Media": [
+          {
+            "Id": "128d5594573848669a3a3a61e52e096a",
+            "FileName": "file33.png",
+            "Url": "https://example.com/file33.png",
+            "ContentType": "",
+            "Size": 0,
+            "Caption": "Caption 33"
+          }
+        ],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:47.0296315Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      },
+      {
+        "Id": "697d47fefe964d6ba774a6c28812122a",
+        "Content": "Match the collection to its typical characteristics.",
+        "Type": 3,
+        "Options": [],
+        "CorrectKeys": [],
+        "EssayMinWords": null,
+        "MatchingPairs": [
+          {
+            "L": "List",
+            "R": "Ordered"
+          },
+          {
+            "L": "HashSet",
+            "R": "No duplicates"
+          },
+          {
+            "L": "Dictionary",
+            "R": "Key-value"
+          }
+        ],
+        "DragDrop": null,
+        "Skill": "C#",
+        "Difficulty": "Mid",
+        "Tags": [
+          "collections",
+          "algorithms"
+        ],
+        "Media": [],
+        "CreatedBy": "Admin",
+        "CreatedAt": "2025-08-29T02:07:46.5863656Z",
+        "UpdatedBy": null,
+        "UpdatedAt": null
+      }
+    ],
+    "Items": [
+      {
+        "QuestionId": "143de9611d6146f38b60b7ecd35ddf6d",
+        "Points": 0.76
+      },
+      {
+        "QuestionId": "15cf44a80f1742de8b1267309c178f53",
+        "Points": 0.76
+      },
+      {
+        "QuestionId": "ad0bb7293b95488a9d6aa7a2fce21edc",
+        "Points": 0.76
+      },
+      {
+        "QuestionId": "b90b66f6a9304c77b89a4dc9e8ee916e",
+        "Points": 0.76
+      },
+      {
+        "QuestionId": "8e70f624551e49b8bfa99205ea4edbd4",
+        "Points": 1
+      },
+      {
+        "QuestionId": "f23af949c22246eaaa6fd0b24e7a26e6",
+        "Points": 0.76
+      },
+      {
+        "QuestionId": "cc65532b433c4e008e091a08ec1bcb40",
+        "Points": 0.77
+      },
+      {
+        "QuestionId": "16df837c1d1b4655806693e4363eba13",
+        "Points": 0.76
+      },
+      {
+        "QuestionId": "bc558291282f41e987e2bb5c0f7352f6",
+        "Points": 1.15
+      },
+      {
+        "QuestionId": "f652b0da3c5e4feebb5f4cbfe1ecd797",
+        "Points": 0.76
+      },
+      {
+        "QuestionId": "7d6297117ad04ddf94ab67b640a7ecbf",
+        "Points": 1
+      },
+      {
+        "QuestionId": "697d47fefe964d6ba774a6c28812122a",
+        "Points": 0.76
+      }
+    ]
+  }
+]

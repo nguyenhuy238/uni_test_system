@@ -219,10 +219,6 @@ public class QuestionService : IQuestionService
 
         AssignOptionQuestionIds(q);
         q.UpdatedBy = actor; q.UpdatedAt = DateTime.UtcNow;
-        
-        // Reset status to Draft if it was Rejected or Approved (needs re-approval after major edit)
-        if (q.Status == QuestionStatus.Approved || q.Status == QuestionStatus.Rejected)
-            q.Status = QuestionStatus.Draft;
 
         await _qRepo.UpsertAsync(x => x.Id == q.Id, q);
         await _optionRepo.DeleteAsync(o => o.QuestionId == q.Id);

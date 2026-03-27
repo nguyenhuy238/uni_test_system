@@ -40,9 +40,41 @@ namespace UniTestSystem.Controllers
         }
 
         // ---------- Index ----------
-        public async Task<IActionResult> Index(string? status = null)
+        public async Task<IActionResult> Index(
+            string? status = null,
+            string? keyword = null,
+            AssessmentType? assessmentType = null,
+            string? sort = null)
         {
-            var list = await _testAdministrationService.GetTestsByStatusAsync(status);
+            var list = (await _testAdministrationService.GetTestsByStatusAsync(status)).ToList();
+
+            if (!string.IsNullOrWhiteSpace(keyword))
+            {
+                var normalizedKeyword = keyword.Trim();
+                list = list
+                    .Where(t =>
+                        (!string.IsNullOrWhiteSpace(t.Title) && t.Title.Contains(normalizedKeyword, StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrWhiteSpace(t.Course?.Name) && t.Course.Name.Contains(normalizedKeyword, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+            }
+
+            if (assessmentType.HasValue)
+            {
+                list = list
+                    .Where(t => t.AssessmentType == assessmentType.Value)
+                    .ToList();
+            }
+
+            list = (sort ?? string.Empty).ToLowerInvariant() switch
+            {
+                "title_asc" => list.OrderBy(t => t.Title).ToList(),
+                "title_desc" => list.OrderByDescending(t => t.Title).ToList(),
+                "duration_asc" => list.OrderBy(t => t.DurationMinutes).ThenBy(t => t.Title).ToList(),
+                "duration_desc" => list.OrderByDescending(t => t.DurationMinutes).ThenBy(t => t.Title).ToList(),
+                "published_asc" => list.OrderBy(t => t.PublishedAt ?? DateTime.MinValue).ThenBy(t => t.Title).ToList(),
+                _ => list.OrderByDescending(t => t.PublishedAt ?? DateTime.MinValue).ThenBy(t => t.Title).ToList()
+            };
+
             return View(list);
         }
 
@@ -571,6 +603,18 @@ namespace UniTestSystem.Controllers
             if (!archived) return NotFound();
             TempData["Msg"] = "Đã chuyển đề thi vào mục Lưu trữ (Archive).";
             return RedirectToAction(nameof(Index));
+        }
+
+        // ---------- Unarchive ----------
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Policy = PermissionCodes.Tests_Create)]
+        public async Task<IActionResult> Unarchive(string id)
+        {
+            var unarchived = await _testAdministrationService.UnarchiveAsync(id);
+            if (!unarchived) return NotFound();
+            TempData["Msg"] = "Đã chuyển đề thi ra khỏi mục Lưu trữ.";
+            return RedirectToAction(nameof(Index), new { status = "Archived" });
         }
 
         // ---------- Assign (GET) ----------

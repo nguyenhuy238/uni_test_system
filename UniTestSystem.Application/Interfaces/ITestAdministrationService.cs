@@ -18,6 +18,7 @@ public interface ITestAdministrationService
     Task<(bool Found, string Message)> ToggleStatusAsync(string id);
     Task<bool> CloneAsync(string id, string createdBy);
     Task<bool> ArchiveAsync(string id);
+    Task<bool> UnarchiveAsync(string id);
     Task<TestAssignData?> GetAssignDataAsync(string testId, string? classFilter, string? currentUserId = null, bool isPrivileged = false);
     Task<(bool Found, string Message)> AssignToUserAsync(string testId, string userId, DateTime? startAt = null, DateTime? endAt = null);
     Task<(bool Found, string Message)> AssignUsersAsync(string testId, IReadOnlyCollection<string>? userIds, DateTime? startAt = null, DateTime? endAt = null, string? currentUserId = null, bool isPrivileged = false);

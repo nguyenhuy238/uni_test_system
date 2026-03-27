@@ -35,7 +35,7 @@
 
 <div id="essayBlock" class="mb-2">
     <label>Min words</label>
-    <input name="EssayMinWords" value="@Model.EssayMinWords" class="form-control" />
+    <input asp-for="EssayMinWords" type="number" min="0" class="form-control" />
 </div>
 
 <div id="matchingBlock" class="mb-2">
@@ -88,12 +88,34 @@
 </div>
 
 <script>
+    function normalizeQuestionType(selectElement) {
+      if (!selectElement) return '';
+      const rawValue = (selectElement.value || '').toString().trim();
+      const enumMap = {
+        '0': 'MCQ',
+        '1': 'TrueFalse',
+        '2': 'Essay',
+        '3': 'Matching',
+        '4': 'DragDrop'
+      };
+      if (enumMap[rawValue]) return enumMap[rawValue];
+
+      const selected = selectElement.options[selectElement.selectedIndex];
+      const text = (selected?.text || '').toString().trim();
+      return text || rawValue;
+    }
+
     function toggleBlocks(){
-      const t = document.getElementById('qType').value;
+      const select = document.getElementById('qType');
+      const t = normalizeQuestionType(select);
       document.getElementById('mcqBlock').style.display = (t==='MCQ'||t==='TrueFalse')?'block':'none';
       document.getElementById('essayBlock').style.display = (t==='Essay')?'block':'none';
       document.getElementById('matchingBlock').style.display = (t==='Matching')?'block':'none';
       document.getElementById('dragDropBlock').style.display = (t==='DragDrop')?'block':'none';
     }
-    document.getElementById('qType').addEventListener('change', toggleBlocks); toggleBlocks();
+    const qType = document.getElementById('qType');
+    if (qType) {
+      qType.addEventListener('change', toggleBlocks);
+    }
+    toggleBlocks();
 </script>
