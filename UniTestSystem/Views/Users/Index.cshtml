@@ -3,6 +3,10 @@
 @{
     ViewData["Title"] = "User Management";
     var classes = (IEnumerable<UniTestSystem.Domain.StudentClass>)ViewBag.Classes ?? new List<UniTestSystem.Domain.StudentClass>();
+    var faculties = (IEnumerable<UniTestSystem.Domain.Faculty>)ViewBag.Faculties ?? new List<UniTestSystem.Domain.Faculty>();
+    var facultyMap = faculties
+        .Where(f => !string.IsNullOrWhiteSpace(f.Id))
+        .ToDictionary(f => f.Id, f => f.Name ?? "-");
     string q = ViewBag.Query as string ?? "";
     string classId = ViewBag.ClassId as string ?? "";
     Role? role = ViewBag.Role as Role?;
@@ -80,7 +84,7 @@
                         <td>@u.Role</td>
                         <td>@(stu?.AcademicYear ?? "-")</td>
                         <td>@(stu != null ? (classes.FirstOrDefault(c => c.Id == stu.StudentClassId)?.Name ?? "-") : "-")</td>
-                        <td>@(lec?.FacultyId ?? "-")</td>
+                        <td>@(lec != null && !string.IsNullOrWhiteSpace(lec.FacultyId) && facultyMap.TryGetValue(lec.FacultyId, out var facultyName) ? facultyName : "-")</td>
                         <td class="text-end">
                             <a class="btn btn-sm btn-outline-primary" asp-action="Edit" asp-route-id="@u.Id">Edit</a>
 

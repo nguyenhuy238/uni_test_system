@@ -280,10 +280,10 @@
                                 </ComboBox>
 
                                 <TextBlock Grid.Row="4" Text="Skill:"/>
-                                <TextBox Grid.Row="5" Text="{Binding SelectedQuestion.DisplaySkill}" Margin="0,0,0,10" IsReadOnly="True"/>
+                                <TextBox Grid.Row="5" Text="{Binding SelectedQuestion.DisplaySkill, Mode=OneWay}" Margin="0,0,0,10" IsReadOnly="True"/>
 
                                 <TextBlock Grid.Row="6" Text="Difficulty:"/>
-                                <TextBox Grid.Row="7" Text="{Binding SelectedQuestion.DisplayDifficulty}" Margin="0,0,0,10" IsReadOnly="True"/>
+                                <TextBox Grid.Row="7" Text="{Binding SelectedQuestion.DisplayDifficulty, Mode=OneWay}" Margin="0,0,0,10" IsReadOnly="True"/>
 
                                 <TextBlock Grid.Row="8" Text="Options &amp; Correct Keys:" FontWeight="Bold" Margin="0,10,0,5"/>
                                 <ListBox Grid.Row="9" ItemsSource="{Binding SelectedQuestionOptions}" SelectedItem="{Binding SelectedOption}" Height="100" Margin="0,0,0,5">

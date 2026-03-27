@@ -452,12 +452,31 @@ namespace UniTestSystem.AdminApp.ViewModels
 
                 List<string> failures = new();
                 if (testsTask.Result != null) { Tests.Clear(); foreach (var t in testsTask.Result) Tests.Add(t); } else failures.Add("Tests");
-                if (usersTask.Result != null) { Users.Clear(); foreach (var u in usersTask.Result) Users.Add(u); } else failures.Add("Students");
                 if (questionsTask.Result != null) { Questions.Clear(); foreach (var q in questionsTask.Result) Questions.Add(q); } else failures.Add("Questions");
                 if (sessionsTask.Result != null) { Sessions.Clear(); foreach (var s in sessionsTask.Result) Sessions.Add(s); } else failures.Add("Sessions");
                 if (facultiesTask.Result != null) { Faculties.Clear(); foreach (var f in facultiesTask.Result) Faculties.Add(f); } else failures.Add("Faculties");
                 if (classesTask.Result != null) { Classes.Clear(); foreach (var c in classesTask.Result) Classes.Add(c); } else failures.Add("Classes");
                 if (coursesTask.Result != null) { Courses.Clear(); foreach (var crs in coursesTask.Result) Courses.Add(crs); } else failures.Add("Courses");
+
+                if (usersTask.Result != null)
+                {
+                    Users.Clear();
+
+                    var facultyById = Faculties
+                        .Where(f => !string.IsNullOrWhiteSpace(f.Id))
+                        .ToDictionary(f => f.Id, f => f.Name ?? string.Empty);
+
+                    foreach (var u in usersTask.Result)
+                    {
+                        if (!string.IsNullOrWhiteSpace(u.FacultyId) && facultyById.TryGetValue(u.FacultyId, out var facultyName))
+                        {
+                            u.Department = facultyName;
+                        }
+
+                        Users.Add(u);
+                    }
+                }
+                else failures.Add("Users");
                 
                 if (Users.Any())
                 {

@@ -160,6 +160,7 @@ public sealed class UserAdministrationService : IUserAdministrationService
         return new UserLookupData
         {
             Classes = classes,
+            Faculties = faculties,
             FacultyNames = faculties
                 .Select(f => f.Name)
                 .Where(name => !string.IsNullOrWhiteSpace(name))
