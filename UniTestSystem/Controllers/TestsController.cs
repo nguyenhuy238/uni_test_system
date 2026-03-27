@@ -564,8 +564,21 @@ namespace UniTestSystem.Controllers
         [Authorize(Policy = PermissionCodes.Tests_Create)]
         public async Task<IActionResult> Delete(string id)
         {
-            await _testAdministrationService.DeleteAsync(id);
-            TempData["Msg"] = "Đã xoá bài test.";
+            try
+            {
+                var deleted = await _testAdministrationService.DeleteAsync(id);
+                if (!deleted)
+                {
+                    return NotFound();
+                }
+
+                TempData["Info"] = "Yêu cầu đã được tiếp nhận nhưng không có thay đổi. Tính năng xóa Test đã bị khóa để bảo toàn dữ liệu.";
+            }
+            catch (InvalidOperationException ex)
+            {
+                TempData["Err"] = ex.Message;
+            }
+
             return RedirectToAction(nameof(Index));
         }
 

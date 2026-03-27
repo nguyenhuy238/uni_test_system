@@ -5,6 +5,8 @@ namespace UniTestSystem.Application;
 
 public sealed class TestAdministrationService : ITestAdministrationService
 {
+    private const string TestDeleteBlockedMessage = "Không được xóa bài test ở bất kỳ trạng thái nào để đảm bảo toàn vẹn dữ liệu. Vui lòng dùng Archive thay vì Delete.";
+
     private readonly IRepository<Test> _testRepo;
     private readonly IRepository<Question> _questionRepo;
     private readonly IRepository<QuestionBank> _questionBankRepo;
@@ -127,8 +129,7 @@ public sealed class TestAdministrationService : ITestAdministrationService
         var existing = await _testRepo.FirstOrDefaultAsync(x => x.Id == id);
         if (existing == null) return false;
 
-        await _testRepo.DeleteAsync(x => x.Id == id);
-        return true;
+        throw new InvalidOperationException(TestDeleteBlockedMessage);
     }
 
     public async Task<List<string>> GetDepartmentOptionsAsync()
@@ -229,13 +230,7 @@ public sealed class TestAdministrationService : ITestAdministrationService
             return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(test.AssessmentId))
-        {
-            await _assessmentRepo.DeleteAsync(a => a.Id == test.AssessmentId);
-        }
-
-        await _testRepo.DeleteAsync(t => t.Id == id);
-        return true;
+        throw new InvalidOperationException(TestDeleteBlockedMessage);
     }
 
     public async Task<(bool Found, string Message)> ToggleStatusAsync(string id)

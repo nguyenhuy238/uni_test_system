@@ -147,11 +147,6 @@
                         </form>
                     }
 
-                    <form class="d-inline" method="post" action="/Tests/Delete" onsubmit="return confirm('Delete this test?');">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="id" value="@t.Id" />
-                        <button class="btn btn-danger btn-sm">Xóa</button>
-                    </form>
                 </td>
             </tr>
         }

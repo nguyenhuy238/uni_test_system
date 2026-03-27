@@ -645,19 +645,10 @@ namespace UniTestSystem.AdminApp.ViewModels
             catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
         }
 
-        private async Task DeleteTestAsync()
+        private Task DeleteTestAsync()
         {
-            if (SelectedTest == null || string.IsNullOrEmpty(SelectedTest.Id)) return;
-            var result = System.Windows.MessageBox.Show($"Are you sure you want to delete test '{SelectedTest.Title}'?", "Confirm Delete", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning);
-            if (result != System.Windows.MessageBoxResult.Yes) return;
-
-            try
-            {
-                StatusMessage = "Deleting test...";
-                if (await _apiService.DeleteTestAsync(SelectedTest.Id)) { StatusMessage = "Test deleted"; await LoadDataAsync(); }
-                else StatusMessage = "Failed to delete test";
-            }
-            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+            StatusMessage = "Deleting tests is disabled to preserve data integrity. Use archive/unarchive in web management.";
+            return Task.CompletedTask;
         }
 
         private async Task SaveUserAsync()

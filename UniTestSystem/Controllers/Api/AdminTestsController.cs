@@ -52,9 +52,16 @@ public class AdminTestsController : ControllerBase
     [Authorize(Policy = PermissionCodes.Tests_Create)]
     public async Task<IActionResult> Delete(string id)
     {
-        var deleted = await _testAdministrationService.DeleteRawAsync(id);
-        if (!deleted) return NotFound();
-        return NoContent();
+        try
+        {
+            var deleted = await _testAdministrationService.DeleteRawAsync(id);
+            if (!deleted) return NotFound();
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
     }
 }
 

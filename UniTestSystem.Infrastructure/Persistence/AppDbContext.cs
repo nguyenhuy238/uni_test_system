@@ -9,6 +9,7 @@ namespace UniTestSystem.Infrastructure.Persistence;
 public class AppDbContext : DbContext
 {
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+    private const string TestDeleteBlockedMessage = "Không được xóa bài test ở bất kỳ trạng thái nào để đảm bảo toàn vẹn dữ liệu. Vui lòng dùng Archive thay vì Delete.";
     private readonly IHttpContextAccessor _httpContextAccessor;
 
     public AppDbContext(DbContextOptions<AppDbContext> options, IHttpContextAccessor httpContextAccessor) : base(options)
@@ -556,6 +557,8 @@ public class AppDbContext : DbContext
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        EnsureTestHardDeleteIsBlocked();
+
         var entries = ChangeTracker.Entries()
             .Where(e => e.Entity is not AuditEntry && (e.State == EntityState.Added || e.State == EntityState.Modified || e.State == EntityState.Deleted))
             .ToList();
@@ -583,6 +586,21 @@ public class AppDbContext : DbContext
         }
 
         return await base.SaveChangesAsync(cancellationToken);
+    }
+
+    private void EnsureTestHardDeleteIsBlocked()
+    {
+        var deletingTests = ChangeTracker.Entries<Test>()
+            .Where(e => e.State == EntityState.Deleted)
+            .Select(GetEntityId)
+            .ToList();
+
+        if (deletingTests.Count == 0)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(TestDeleteBlockedMessage);
     }
 
     private static string GetEntityId(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry)
