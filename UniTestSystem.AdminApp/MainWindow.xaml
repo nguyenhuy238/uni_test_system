@@ -271,22 +271,43 @@
                                 <TextBox Grid.Row="1" Text="{Binding SelectedQuestion.Content}" AcceptsReturn="True" Height="60" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
                                 <TextBlock Grid.Row="2" Text="Type:"/>
-                                <ComboBox Grid.Row="3" Text="{Binding SelectedQuestion.Type}" Margin="0,0,0,10">
-                                    <ComboBoxItem Content="MCQ"/>
-                                    <ComboBoxItem Content="TrueFalse"/>
-                                    <ComboBoxItem Content="Essay"/>
-                                    <ComboBoxItem Content="Matching"/>
-                                    <ComboBoxItem Content="DragDrop"/>
-                                </ComboBox>
+                                <ComboBox Grid.Row="3"
+                                          ItemsSource="{Binding QuestionTypeOptions}"
+                                          SelectedItem="{Binding SelectedQuestion.Type, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Margin="0,0,0,10"/>
 
                                 <TextBlock Grid.Row="4" Text="Skill:"/>
-                                <TextBox Grid.Row="5" Text="{Binding SelectedQuestion.DisplaySkill, Mode=OneWay}" Margin="0,0,0,10" IsReadOnly="True"/>
+                                <ComboBox Grid.Row="5"
+                                          ItemsSource="{Binding QuestionSkillOptions}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding SelectedQuestion.SkillId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False"
+                                          IsTextSearchEnabled="True"
+                                          Margin="0,0,0,10"/>
 
                                 <TextBlock Grid.Row="6" Text="Difficulty:"/>
-                                <TextBox Grid.Row="7" Text="{Binding SelectedQuestion.DisplayDifficulty, Mode=OneWay}" Margin="0,0,0,10" IsReadOnly="True"/>
+                                <ComboBox Grid.Row="7"
+                                          ItemsSource="{Binding QuestionDifficultyOptions}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding SelectedQuestion.DifficultyLevelId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False"
+                                          IsTextSearchEnabled="True"
+                                          Margin="0,0,0,10"/>
 
                                 <TextBlock Grid.Row="8" Text="Options &amp; Correct Keys:" FontWeight="Bold" Margin="0,10,0,5"/>
                                 <ListBox Grid.Row="9" ItemsSource="{Binding SelectedQuestionOptions}" SelectedItem="{Binding SelectedOption}" Height="100" Margin="0,0,0,5">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                    <Setter Property="IsSelected" Value="True"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBox Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="200" BorderThickness="0"/>
@@ -301,13 +322,13 @@
                                 </StackPanel>
 
                                 <TextBlock Grid.Row="11" Text="Correct Keys:" FontSize="11" Foreground="Gray"/>
-                                <ItemsControl Grid.Row="12" ItemsSource="{Binding SelectedQuestionCorrectKeys}" Margin="0,0,0,10">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding}" FontStyle="Italic" Margin="0,2,0,2"/>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <TextBox Grid.Row="12"
+                                         Text="{Binding SelectedQuestionCorrectKeysText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         AcceptsReturn="True"
+                                         TextWrapping="Wrap"
+                                         Height="60"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Margin="0,0,0,10"/>
 
                                 <StackPanel Grid.Row="13" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}">
                                     <Button Content="Save" Command="{Binding SaveQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>

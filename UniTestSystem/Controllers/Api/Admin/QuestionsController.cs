@@ -77,6 +77,8 @@ public class QuestionsController : ControllerBase
             q.Type,
             q.Status,
             q.Options,
+            q.MatchingPairs,
+            q.DragDrop,
             q.SkillId,
             q.DifficultyLevelId,
             q.SubjectId,
@@ -88,6 +90,32 @@ public class QuestionsController : ControllerBase
         });
 
         return Ok(items);
+    }
+
+    [HttpGet("metadata")]
+    public async Task<IActionResult> GetMetadata()
+    {
+        var skills = (await _skillRepo.GetAllAsync(x => !x.IsDeleted))
+            .OrderBy(x => x.Name)
+            .Select(x => new
+            {
+                x.Id,
+                x.Name
+            });
+
+        var difficulties = (await _difficultyLevelRepo.GetAllAsync(x => !x.IsDeleted))
+            .OrderBy(x => x.Name)
+            .Select(x => new
+            {
+                x.Id,
+                x.Name
+            });
+
+        return Ok(new
+        {
+            skills,
+            difficulties
+        });
     }
 
     private static string ResolveDisplayName(IReadOnlyDictionary<string, string> map, string? id)
@@ -161,6 +189,9 @@ public class QuestionsController : ControllerBase
             QuestionBankId = request.QuestionBankId,
             SubjectId = request.SubjectId,
             DifficultyLevelId = request.DifficultyLevelId ?? "Easy",
+            SkillId = request.SkillId,
+            MatchingPairs = request.MatchingPairs ?? new List<MatchPair>(),
+            DragDrop = request.DragDrop,
             Options = (request.Options ?? new List<OptionRequest>())
                 .Select(optionRequest => new Option
                 {
@@ -204,6 +235,18 @@ public class QuestionsController : ControllerBase
         existingQuestion.SubjectId = request.SubjectId ?? existingQuestion.SubjectId;
         existingQuestion.QuestionBankId = request.QuestionBankId ?? existingQuestion.QuestionBankId;
         existingQuestion.DifficultyLevelId = request.DifficultyLevelId ?? existingQuestion.DifficultyLevelId;
+        if (request.SkillId != null)
+        {
+            existingQuestion.SkillId = request.SkillId;
+        }
+        if (request.MatchingPairs != null)
+        {
+            existingQuestion.MatchingPairs = request.MatchingPairs;
+        }
+        if (request.DragDrop != null)
+        {
+            existingQuestion.DragDrop = request.DragDrop;
+        }
         
         if (request.Options != null)
         {
@@ -248,6 +291,9 @@ public class CreateQuestionRequest
     public string QuestionBankId { get; set; } = "";
     public string SubjectId { get; set; } = "";
     public string? DifficultyLevelId { get; set; }
+    public string? SkillId { get; set; }
+    public List<MatchPair>? MatchingPairs { get; set; }
+    public DragDropConfig? DragDrop { get; set; }
     public List<OptionRequest>? Options { get; set; }
 }
 
@@ -258,6 +304,9 @@ public class UpdateQuestionRequest
     public string? QuestionBankId { get; set; }
     public string? SubjectId { get; set; }
     public string? DifficultyLevelId { get; set; }
+    public string? SkillId { get; set; }
+    public List<MatchPair>? MatchingPairs { get; set; }
+    public DragDropConfig? DragDrop { get; set; }
     public List<OptionRequest>? Options { get; set; }
 }
 

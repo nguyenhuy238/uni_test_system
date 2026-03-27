@@ -103,6 +103,7 @@ namespace UniTestSystem.AdminApp.Services
         public async Task<List<Faculty>?> GetFacultiesAsync() => await GetJsonAsync<List<Faculty>>($"{_baseUrl}/api/admin/faculties");
         public async Task<List<StudentClass>?> GetClassesAsync() => await GetJsonAsync<List<StudentClass>>($"{_baseUrl}/api/admin/classes");
         public async Task<List<Course>?> GetCoursesAsync() => await GetJsonAsync<List<Course>>($"{_baseUrl}/api/admin/courses");
+        public async Task<QuestionMetadataResponse?> GetQuestionMetadataAsync() => await GetJsonAsync<QuestionMetadataResponse>($"{_baseUrl}/api/admin/questions/metadata");
         public async Task<List<Enrollment>?> GetEnrollmentsAsync(string courseId) => await GetJsonAsync<List<Enrollment>>($"{_baseUrl}/api/admin/enrollments/{courseId}");
         public async Task<List<AuditLogEntry>?> GetAuditLogsAsync(string? from = null, string? to = null, string? keyword = null, string? actor = null, int take = 300)
             => await GetJsonAsync<List<AuditLogEntry>>($"{_baseUrl}/api/admin/audit?from={Uri.EscapeDataString(from ?? "")}&to={Uri.EscapeDataString(to ?? "")}&keyword={Uri.EscapeDataString(keyword ?? "")}&actor={Uri.EscapeDataString(actor ?? "")}&take={take}");

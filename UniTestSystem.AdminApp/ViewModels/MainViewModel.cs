@@ -46,6 +46,8 @@ namespace UniTestSystem.AdminApp.ViewModels
         // UI Helpers for nested collections
         private ObservableCollection<OptionWrapper> _selectedQuestionOptions = new();
         private ObservableCollection<string> _selectedQuestionCorrectKeys = new();
+        private string _selectedQuestionCorrectKeysText = string.Empty;
+        private bool _syncingCorrectKeysText;
         private ObservableCollection<TestItem> _selectedTestItems = new();
         public string CurrentUserName => _apiService.CurrentUser?.Name ?? "Admin";
         public string CurrentUserRole => _apiService.CurrentUser?.Role ?? "Unknown";
@@ -82,6 +84,9 @@ namespace UniTestSystem.AdminApp.ViewModels
             BackupFiles = new ObservableCollection<BackupFileInfo>();
             PeriodOptions = new ObservableCollection<string> { "Weekly", "Monthly", "Quarterly" };
             ExportFormatOptions = new ObservableCollection<string> { "xlsx", "pdf" };
+            QuestionTypeOptions = new ObservableCollection<string> { "MCQ", "TrueFalse", "Essay", "Matching", "DragDrop" };
+            QuestionSkillOptions = new ObservableCollection<QuestionMetadataItem>();
+            QuestionDifficultyOptions = new ObservableCollection<QuestionMetadataItem>();
             YearEndStudents = new ObservableCollection<YearEndStudentSummaryModel>();
             YearEndWarningStudents = new ObservableCollection<YearEndStudentSummaryModel>();
 
@@ -171,16 +176,47 @@ namespace UniTestSystem.AdminApp.ViewModels
         public ObservableCollection<YearEndStudentSummaryModel> YearEndWarningStudents { get; }
         public ObservableCollection<string> PeriodOptions { get; }
         public ObservableCollection<string> ExportFormatOptions { get; }
+        public ObservableCollection<string> QuestionTypeOptions { get; }
+        public ObservableCollection<QuestionMetadataItem> QuestionSkillOptions { get; }
+        public ObservableCollection<QuestionMetadataItem> QuestionDifficultyOptions { get; }
 
         public ObservableCollection<OptionWrapper> SelectedQuestionOptions => _selectedQuestionOptions;
         public ObservableCollection<string> SelectedQuestionCorrectKeys => _selectedQuestionCorrectKeys;
+        public string SelectedQuestionCorrectKeysText
+        {
+            get => _selectedQuestionCorrectKeysText;
+            set
+            {
+                var newValue = value ?? string.Empty;
+                if (string.Equals(_selectedQuestionCorrectKeysText, newValue, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _selectedQuestionCorrectKeysText = newValue;
+                OnPropertyChanged();
+
+                if (_syncingCorrectKeysText)
+                {
+                    return;
+                }
+
+                SyncCorrectKeysCollectionFromText();
+                UpdateQuestionModelFromUI();
+            }
+        }
         public ObservableCollection<TestItem> SelectedTestItems => _selectedTestItems;
 
         private OptionWrapper? _selectedOption;
         public OptionWrapper? SelectedOption 
         { 
             get => _selectedOption; 
-            set { _selectedOption = value; OnPropertyChanged(); } 
+            set
+            {
+                _selectedOption = value;
+                OnPropertyChanged();
+                CommandManager.InvalidateRequerySuggested();
+            }
         }
 
         private TestItem? _selectedTestItem;
@@ -214,7 +250,9 @@ namespace UniTestSystem.AdminApp.ViewModels
             { 
                 _selectedQuestion = value; 
                 OnPropertyChanged(); 
+                EnsureQuestionMetadataValues();
                 SyncQuestionDetails();
+                CommandManager.InvalidateRequerySuggested();
             }
         }
 
@@ -442,17 +480,19 @@ namespace UniTestSystem.AdminApp.ViewModels
                 var testsTask = _apiService.GetTestsAsync();
                 var usersTask = _apiService.GetUsersAsync();
                 var questionsTask = _apiService.GetQuestionsAsync();
+                var questionMetadataTask = _apiService.GetQuestionMetadataAsync();
                 var sessionsTask = _apiService.GetSessionsAsync();
                 var statsTask = _apiService.GetDashboardStatsAsync();
                 var facultiesTask = _apiService.GetFacultiesAsync();
                 var classesTask = _apiService.GetClassesAsync();
                 var coursesTask = _apiService.GetCoursesAsync();
 
-                await Task.WhenAll(testsTask, usersTask, questionsTask, sessionsTask, statsTask, facultiesTask, classesTask, coursesTask);
+                await Task.WhenAll(testsTask, usersTask, questionsTask, questionMetadataTask, sessionsTask, statsTask, facultiesTask, classesTask, coursesTask);
 
                 List<string> failures = new();
                 if (testsTask.Result != null) { Tests.Clear(); foreach (var t in testsTask.Result) Tests.Add(t); } else failures.Add("Tests");
                 if (questionsTask.Result != null) { Questions.Clear(); foreach (var q in questionsTask.Result) Questions.Add(q); } else failures.Add("Questions");
+                RefreshQuestionMetadataOptions(questionMetadataTask.Result);
                 if (sessionsTask.Result != null) { Sessions.Clear(); foreach (var s in sessionsTask.Result) Sessions.Add(s); } else failures.Add("Sessions");
                 if (facultiesTask.Result != null) { Faculties.Clear(); foreach (var f in facultiesTask.Result) Faculties.Add(f); } else failures.Add("Faculties");
                 if (classesTask.Result != null) { Classes.Clear(); foreach (var c in classesTask.Result) Classes.Add(c); } else failures.Add("Classes");
@@ -601,6 +641,7 @@ namespace UniTestSystem.AdminApp.ViewModels
             if (SelectedQuestion == null) return;
             try
             {
+                UpdateQuestionModelFromUI();
                 StatusMessage = "Saving question...";
                 bool success = string.IsNullOrEmpty(SelectedQuestion.Id)
                     ? await _apiService.CreateQuestionAsync(SelectedQuestion)
@@ -680,57 +721,164 @@ namespace UniTestSystem.AdminApp.ViewModels
 
         private void SyncQuestionDetails()
         {
+            UnsubscribeOptionHandlers();
             _selectedQuestionOptions.Clear();
             _selectedQuestionCorrectKeys.Clear();
-            if (SelectedQuestion != null)
+            if (SelectedQuestion == null)
             {
-                if (SelectedQuestion.Options != null)
+                UpdateCorrectKeysTextFromCollection();
+                return;
+            }
+
+            var questionType = NormalizeQuestionType(SelectedQuestion.Type);
+
+            if (string.Equals(questionType, "Matching", StringComparison.OrdinalIgnoreCase))
+            {
+                if (SelectedQuestion.MatchingPairs != null)
                 {
-                    foreach (var opt in SelectedQuestion.Options)
+                    foreach (var pair in SelectedQuestion.MatchingPairs)
                     {
-                        if (string.IsNullOrWhiteSpace(opt.Content))
+                        if (string.IsNullOrWhiteSpace(pair.Left) && string.IsNullOrWhiteSpace(pair.Right))
                         {
                             continue;
                         }
 
-                        _selectedQuestionOptions.Add(new OptionWrapper { Text = opt.Content });
+                        AddQuestionOptionFromText($"{pair.Left}|{pair.Right}");
+                        if (!string.IsNullOrWhiteSpace(pair.Right) && !_selectedQuestionCorrectKeys.Contains(pair.Right))
+                        {
+                            _selectedQuestionCorrectKeys.Add(pair.Right);
+                        }
+                    }
+                }
+
+                if (_selectedQuestionOptions.Count == 0 && SelectedQuestion.Options != null)
+                {
+                    foreach (var opt in SelectedQuestion.Options.Where(opt => !string.IsNullOrWhiteSpace(opt.Content)))
+                    {
+                        AddQuestionOptionFromText(opt.Content);
                         if (opt.IsCorrect)
                         {
                             _selectedQuestionCorrectKeys.Add(opt.Content);
                         }
                     }
                 }
-
-                if (SelectedQuestion.CorrectKeys != null)
+            }
+            else if (string.Equals(questionType, "DragDrop", StringComparison.OrdinalIgnoreCase))
+            {
+                if (SelectedQuestion.DragDrop?.Tokens != null)
                 {
-                    foreach (var key in SelectedQuestion.CorrectKeys.Where(key => !_selectedQuestionCorrectKeys.Contains(key)))
+                    foreach (var token in SelectedQuestion.DragDrop.Tokens.Where(token => !string.IsNullOrWhiteSpace(token)))
                     {
-                        _selectedQuestionCorrectKeys.Add(key);
+                        AddQuestionOptionFromText(token);
+                    }
+                }
+
+                if (SelectedQuestion.DragDrop?.Slots != null)
+                {
+                    foreach (var answer in SelectedQuestion.DragDrop.Slots
+                        .Select(slot => slot.Answer)
+                        .Where(answer => !string.IsNullOrWhiteSpace(answer)))
+                    {
+                        if (!_selectedQuestionCorrectKeys.Contains(answer))
+                        {
+                            _selectedQuestionCorrectKeys.Add(answer);
+                        }
+                    }
+                }
+
+                if (_selectedQuestionOptions.Count == 0 && SelectedQuestion.Options != null)
+                {
+                    foreach (var opt in SelectedQuestion.Options.Where(opt => !string.IsNullOrWhiteSpace(opt.Content)))
+                    {
+                        AddQuestionOptionFromText(opt.Content);
+                        if (opt.IsCorrect && !_selectedQuestionCorrectKeys.Contains(opt.Content))
+                        {
+                            _selectedQuestionCorrectKeys.Add(opt.Content);
+                        }
                     }
                 }
             }
+            else if (SelectedQuestion.Options != null)
+            {
+                foreach (var opt in SelectedQuestion.Options)
+                {
+                    if (string.IsNullOrWhiteSpace(opt.Content))
+                    {
+                        continue;
+                    }
+
+                    AddQuestionOptionFromText(opt.Content);
+                    if (opt.IsCorrect)
+                    {
+                        _selectedQuestionCorrectKeys.Add(opt.Content);
+                    }
+                }
+            }
+
+            if (SelectedQuestion.CorrectKeys != null)
+            {
+                foreach (var key in SelectedQuestion.CorrectKeys.Where(key => !_selectedQuestionCorrectKeys.Contains(key)))
+                {
+                    _selectedQuestionCorrectKeys.Add(key);
+                }
+            }
+
+            UpdateCorrectKeysTextFromCollection();
         }
 
         private void AddOption()
         {
             if (SelectedQuestion == null) return;
-            _selectedQuestionOptions.Add(new OptionWrapper { Text = "New Option" });
+
+            var questionType = NormalizeQuestionType(SelectedQuestion.Type);
+            var defaultOptionText = string.Equals(questionType, "Matching", StringComparison.OrdinalIgnoreCase)
+                ? "Left|Right"
+                : "New Option";
+
+            var option = new OptionWrapper { Text = defaultOptionText };
+            SubscribeOptionHandler(option);
+            _selectedQuestionOptions.Add(option);
+            SelectedOption = option;
             UpdateQuestionModelFromUI();
         }
 
         private void RemoveOption()
         {
             if (SelectedQuestion == null || SelectedOption == null) return;
+
+            var key = ResolveCorrectKeyFromOptionText(SelectedQuestion.Type, SelectedOption.Text);
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                _selectedQuestionCorrectKeys.Remove(key);
+            }
+
+            UnsubscribeOptionHandler(SelectedOption);
             _selectedQuestionOptions.Remove(SelectedOption);
-            _selectedQuestionCorrectKeys.Remove(SelectedOption.Text);
+            SelectedOption = null;
+            UpdateCorrectKeysTextFromCollection();
             UpdateQuestionModelFromUI();
         }
 
         private void ToggleCorrectKey()
         {
             if (SelectedQuestion == null || SelectedOption == null) return;
-            if (_selectedQuestionCorrectKeys.Contains(SelectedOption.Text)) _selectedQuestionCorrectKeys.Remove(SelectedOption.Text);
-            else _selectedQuestionCorrectKeys.Add(SelectedOption.Text);
+
+            var key = ResolveCorrectKeyFromOptionText(SelectedQuestion.Type, SelectedOption.Text);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return;
+            }
+
+            if (_selectedQuestionCorrectKeys.Contains(key))
+            {
+                _selectedQuestionCorrectKeys.Remove(key);
+            }
+            else
+            {
+                _selectedQuestionCorrectKeys.Add(key);
+            }
+
+            UpdateCorrectKeysTextFromCollection();
             UpdateQuestionModelFromUI();
         }
 
@@ -738,10 +886,87 @@ namespace UniTestSystem.AdminApp.ViewModels
         {
             if (SelectedQuestion == null) return;
 
-            var correctSet = _selectedQuestionCorrectKeys
+            var questionType = NormalizeQuestionType(SelectedQuestion.Type);
+
+            var normalizedCorrectKeys = _selectedQuestionCorrectKeys
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Select(x => x.Trim())
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var correctSet = normalizedCorrectKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            if (string.Equals(questionType, "Matching", StringComparison.OrdinalIgnoreCase))
+            {
+                var pairs = new List<MatchPair>();
+                foreach (var raw in _selectedQuestionOptions
+                    .Select(x => x.Text?.Trim())
+                    .Where(x => !string.IsNullOrWhiteSpace(x)))
+                {
+                    if (!TryParseMatchingPair(raw!, out var left, out var right))
+                    {
+                        continue;
+                    }
+
+                    pairs.Add(new MatchPair { Left = left, Right = right });
+                }
+
+                SelectedQuestion.MatchingPairs = pairs;
+                SelectedQuestion.DragDrop = null;
+                SelectedQuestion.Options = pairs
+                    .Select(pair => new Option
+                    {
+                        Content = $"{pair.Left}|{pair.Right}",
+                        IsCorrect = correctSet.Contains(pair.Right)
+                    })
+                    .ToList();
+                SelectedQuestion.CorrectKeys = normalizedCorrectKeys;
+                return;
+            }
+
+            if (string.Equals(questionType, "DragDrop", StringComparison.OrdinalIgnoreCase))
+            {
+                var tokens = _selectedQuestionOptions
+                    .Select(x => x.Text?.Trim())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                var existingSlotNames = SelectedQuestion.DragDrop?.Slots?
+                    .Select(slot => slot.Name?.Trim())
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Select(name => name!)
+                    .ToList() ?? new List<string>();
+
+                var slots = new List<DragSlot>();
+                for (int i = 0; i < normalizedCorrectKeys.Count; i++)
+                {
+                    var slotName = i < existingSlotNames.Count
+                        ? existingSlotNames[i]
+                        : (i + 1).ToString();
+                    slots.Add(new DragSlot
+                    {
+                        Name = slotName,
+                        Answer = normalizedCorrectKeys[i]
+                    });
+                }
+
+                SelectedQuestion.DragDrop = new DragDropConfig
+                {
+                    Tokens = tokens,
+                    Slots = slots
+                };
+                SelectedQuestion.MatchingPairs = new List<MatchPair>();
+                SelectedQuestion.Options = tokens
+                    .Select(token => new Option
+                    {
+                        Content = token,
+                        IsCorrect = correctSet.Contains(token)
+                    })
+                    .ToList();
+                SelectedQuestion.CorrectKeys = normalizedCorrectKeys;
+                return;
+            }
 
             SelectedQuestion.Options = _selectedQuestionOptions
                 .Where(x => !string.IsNullOrWhiteSpace(x.Text))
@@ -751,7 +976,266 @@ namespace UniTestSystem.AdminApp.ViewModels
                     IsCorrect = correctSet.Contains(x.Text.Trim())
                 })
                 .ToList();
-            SelectedQuestion.CorrectKeys = correctSet.ToList();
+            SelectedQuestion.CorrectKeys = normalizedCorrectKeys;
+            SelectedQuestion.MatchingPairs = new List<MatchPair>();
+            SelectedQuestion.DragDrop = null;
+        }
+
+        private void SubscribeOptionHandler(OptionWrapper option)
+        {
+            option.TextChanged += OnQuestionOptionTextChanged;
+        }
+
+        private void UnsubscribeOptionHandler(OptionWrapper option)
+        {
+            option.TextChanged -= OnQuestionOptionTextChanged;
+        }
+
+        private void UnsubscribeOptionHandlers()
+        {
+            foreach (var option in _selectedQuestionOptions)
+            {
+                UnsubscribeOptionHandler(option);
+            }
+        }
+
+        private void AddQuestionOptionFromText(string text)
+        {
+            var option = new OptionWrapper { Text = text };
+            SubscribeOptionHandler(option);
+            _selectedQuestionOptions.Add(option);
+        }
+
+        private void OnQuestionOptionTextChanged(object? sender, OptionTextChangedEventArgs e)
+        {
+            if (SelectedQuestion == null)
+            {
+                return;
+            }
+
+            var oldKey = ResolveCorrectKeyFromOptionText(SelectedQuestion.Type, e.OldText);
+            var newKey = ResolveCorrectKeyFromOptionText(SelectedQuestion.Type, e.NewText);
+            var index = IndexOfCorrectKey(oldKey);
+
+            if (index >= 0)
+            {
+                if (string.IsNullOrWhiteSpace(newKey))
+                {
+                    _selectedQuestionCorrectKeys.RemoveAt(index);
+                }
+                else
+                {
+                    _selectedQuestionCorrectKeys[index] = newKey;
+                }
+            }
+
+            UpdateCorrectKeysTextFromCollection();
+            UpdateQuestionModelFromUI();
+        }
+
+        private int IndexOfCorrectKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return -1;
+            }
+
+            for (int i = 0; i < _selectedQuestionCorrectKeys.Count; i++)
+            {
+                if (string.Equals(_selectedQuestionCorrectKeys[i], key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private void SyncCorrectKeysCollectionFromText()
+        {
+            var parsed = _selectedQuestionCorrectKeysText
+                .Split(new[] { '|', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            _selectedQuestionCorrectKeys.Clear();
+            foreach (var key in parsed)
+            {
+                _selectedQuestionCorrectKeys.Add(key);
+            }
+        }
+
+        private void UpdateCorrectKeysTextFromCollection()
+        {
+            _syncingCorrectKeysText = true;
+            try
+            {
+                var joined = string.Join(" | ", _selectedQuestionCorrectKeys.Where(x => !string.IsNullOrWhiteSpace(x)));
+                if (!string.Equals(_selectedQuestionCorrectKeysText, joined, StringComparison.Ordinal))
+                {
+                    _selectedQuestionCorrectKeysText = joined;
+                    OnPropertyChanged(nameof(SelectedQuestionCorrectKeysText));
+                }
+            }
+            finally
+            {
+                _syncingCorrectKeysText = false;
+            }
+        }
+
+        private static string ResolveCorrectKeyFromOptionText(string? questionType, string? optionText)
+        {
+            if (string.IsNullOrWhiteSpace(optionText))
+            {
+                return string.Empty;
+            }
+
+            var normalizedType = NormalizeQuestionType(questionType);
+            var trimmed = optionText.Trim();
+            if (string.Equals(normalizedType, "Matching", StringComparison.OrdinalIgnoreCase)
+                && TryParseMatchingPair(trimmed, out _, out var right))
+            {
+                return right;
+            }
+
+            return trimmed;
+        }
+
+        private static bool TryParseMatchingPair(string raw, out string left, out string right)
+        {
+            left = string.Empty;
+            right = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return false;
+            }
+
+            var parts = raw.Split('|', 2, StringSplitOptions.TrimEntries);
+            if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
+            {
+                return false;
+            }
+
+            left = parts[0];
+            right = parts[1];
+            return true;
+        }
+
+        private static string NormalizeQuestionType(string? type)
+            => string.IsNullOrWhiteSpace(type) ? "MCQ" : type.Trim();
+
+        private void RefreshQuestionMetadataOptions(QuestionMetadataResponse? metadata = null)
+        {
+            var skillValues = metadata?.Skills?
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .Select(item => new QuestionMetadataItem
+                {
+                    Id = item.Id.Trim(),
+                    Name = string.IsNullOrWhiteSpace(item.Name) ? item.Id.Trim() : item.Name.Trim()
+                })
+                .ToList();
+            if (skillValues == null || skillValues.Count == 0)
+            {
+                skillValues = Questions
+                    .Where(q => !string.IsNullOrWhiteSpace(q.SkillId))
+                    .Select(q => new QuestionMetadataItem
+                    {
+                        Id = q.SkillId.Trim(),
+                        Name = string.IsNullOrWhiteSpace(q.Skill) ? q.SkillId.Trim() : q.Skill.Trim()
+                    })
+                    .ToList();
+            }
+
+            var difficultyValues = metadata?.Difficulties?
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .Select(item => new QuestionMetadataItem
+                {
+                    Id = item.Id.Trim(),
+                    Name = string.IsNullOrWhiteSpace(item.Name) ? item.Id.Trim() : item.Name.Trim()
+                })
+                .ToList();
+            if (difficultyValues == null || difficultyValues.Count == 0)
+            {
+                difficultyValues = Questions
+                    .Where(q => !string.IsNullOrWhiteSpace(q.DifficultyLevelId))
+                    .Select(q => new QuestionMetadataItem
+                    {
+                        Id = q.DifficultyLevelId.Trim(),
+                        Name = string.IsNullOrWhiteSpace(q.Difficulty) ? q.DifficultyLevelId.Trim() : q.Difficulty.Trim()
+                    })
+                    .ToList();
+            }
+
+            RefillMetadataCollection(QuestionSkillOptions, skillValues);
+            RefillMetadataCollection(QuestionDifficultyOptions, difficultyValues);
+
+            EnsureQuestionMetadataValues();
+        }
+
+        private void EnsureQuestionMetadataValues()
+        {
+            if (SelectedQuestion == null)
+            {
+                return;
+            }
+
+            EnsureOptionExists(QuestionSkillOptions, SelectedQuestion.SkillId, SelectedQuestion.Skill);
+            EnsureOptionExists(QuestionDifficultyOptions, SelectedQuestion.DifficultyLevelId, SelectedQuestion.Difficulty);
+        }
+
+        private static void EnsureOptionExists(ObservableCollection<QuestionMetadataItem> items, string? id, string? name = null)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return;
+            }
+
+            var normalizedId = id.Trim();
+            var existing = items.FirstOrDefault(item => string.Equals(item.Id, normalizedId, StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
+            {
+                items.Add(new QuestionMetadataItem
+                {
+                    Id = normalizedId,
+                    Name = string.IsNullOrWhiteSpace(name) ? normalizedId : name.Trim()
+                });
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(existing.Name) && !string.IsNullOrWhiteSpace(name))
+            {
+                existing.Name = name.Trim();
+            }
+        }
+
+        private static void RefillMetadataCollection(ObservableCollection<QuestionMetadataItem> target, IEnumerable<QuestionMetadataItem> values)
+        {
+            var list = values
+                .Where(v => !string.IsNullOrWhiteSpace(v.Id))
+                .GroupBy(v => v.Id.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(group =>
+                {
+                    var preferred = group.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.Name))
+                        ?? group.First();
+                    var normalizedId = group.Key.Trim();
+                    var normalizedName = string.IsNullOrWhiteSpace(preferred.Name)
+                        ? normalizedId
+                        : preferred.Name.Trim();
+                    return new QuestionMetadataItem
+                    {
+                        Id = normalizedId,
+                        Name = normalizedName
+                    };
+                })
+                .OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            target.Clear();
+            foreach (var item in list)
+            {
+                target.Add(item);
+            }
         }
 
         private void SyncTestItems()
@@ -1333,10 +1817,34 @@ namespace UniTestSystem.AdminApp.ViewModels
         public string Text
         {
             get => _text;
-            set { _text = value; OnPropertyChanged(); }
+            set
+            {
+                if (string.Equals(_text, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                var oldText = _text;
+                _text = value;
+                TextChanged?.Invoke(this, new OptionTextChangedEventArgs(oldText, value ?? string.Empty));
+                OnPropertyChanged();
+            }
         }
 
+        public event EventHandler<OptionTextChangedEventArgs>? TextChanged;
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
+    public sealed class OptionTextChangedEventArgs : EventArgs
+    {
+        public OptionTextChangedEventArgs(string oldText, string newText)
+        {
+            OldText = oldText;
+            NewText = newText;
+        }
+
+        public string OldText { get; }
+        public string NewText { get; }
     }
 }

@@ -19,6 +19,12 @@ namespace UniTestSystem.AdminApp.Models
         [JsonPropertyName("options")]
         public List<Option>? Options { get; set; } = new();
 
+        [JsonPropertyName("matchingPairs")]
+        public List<MatchPair>? MatchingPairs { get; set; } = new();
+
+        [JsonPropertyName("dragDrop")]
+        public DragDropConfig? DragDrop { get; set; }
+
         [JsonIgnore]
         public List<string>? CorrectKeys { get; set; } = new();
 
@@ -54,5 +60,32 @@ namespace UniTestSystem.AdminApp.Models
 
         [JsonIgnore]
         public string DisplaySubject => string.IsNullOrWhiteSpace(Subject) ? SubjectId : Subject;
+    }
+
+    public class MatchPair
+    {
+        [JsonPropertyName("l")]
+        public string Left { get; set; } = "";
+
+        [JsonPropertyName("r")]
+        public string Right { get; set; } = "";
+    }
+
+    public class DragDropConfig
+    {
+        [JsonPropertyName("tokens")]
+        public List<string> Tokens { get; set; } = new();
+
+        [JsonPropertyName("slots")]
+        public List<DragSlot> Slots { get; set; } = new();
+    }
+
+    public class DragSlot
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = "";
+
+        [JsonPropertyName("answer")]
+        public string Answer { get; set; } = "";
     }
 }
