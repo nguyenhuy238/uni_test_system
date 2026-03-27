@@ -9,6 +9,7 @@ namespace UniTestSystem.Application;
 public class QuestionService : IQuestionService
 {
     private readonly IRepository<Question> _qRepo;
+    private readonly IRepository<QuestionBank> _questionBankRepo;
     private readonly IRepository<Option> _optionRepo;
     private readonly IRepository<Test> _tRepo;
     private readonly IRepository<AuditEntry> _auditRepo;
@@ -16,12 +17,14 @@ public class QuestionService : IQuestionService
 
     public QuestionService(
         IRepository<Question> qRepo,
+        IRepository<QuestionBank> questionBankRepo,
         IRepository<Option> optionRepo,
         IRepository<Test> tRepo,
         IRepository<AuditEntry> auditRepo,
         IAuditService audit)
     {
         _qRepo = qRepo;
+        _questionBankRepo = questionBankRepo;
         _optionRepo = optionRepo;
         _tRepo = tRepo;
         _auditRepo = auditRepo;
@@ -35,7 +38,15 @@ public class QuestionService : IQuestionService
         if (!string.IsNullOrWhiteSpace(f.Keyword))
             data = data.Where(x => x.Content.Contains(f.Keyword, StringComparison.OrdinalIgnoreCase)).ToList();
         if (f.Type.HasValue) data = data.Where(x => x.Type == f.Type.Value).ToList();
+        if (f.Status.HasValue) data = data.Where(x => x.Status == f.Status.Value).ToList();
         if (!string.IsNullOrWhiteSpace(f.SubjectId)) data = data.Where(x => x.SubjectId == f.SubjectId).ToList();
+        if (!string.IsNullOrWhiteSpace(f.CourseId))
+        {
+            var bankIds = (await _questionBankRepo.GetAllAsync(x => x.CourseId == f.CourseId && !x.IsDeleted))
+                .Select(x => x.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            data = data.Where(x => !string.IsNullOrWhiteSpace(x.QuestionBankId) && bankIds.Contains(x.QuestionBankId)).ToList();
+        }
         if (!string.IsNullOrWhiteSpace(f.DifficultyLevelId)) data = data.Where(x => x.DifficultyLevelId == f.DifficultyLevelId).ToList();
         if (!string.IsNullOrWhiteSpace(f.TagsCsv))
         {

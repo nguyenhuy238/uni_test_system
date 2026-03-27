@@ -9,21 +9,33 @@
             <th>Nội dung</th>
             <th style="width:120px;">Loại</th>
             <th style="width:140px;">Kỹ năng</th>
-            <th style="width:120px;">Độ khó</th>
+            <th style="width:120px;">DifficultyLevel</th>
+            <th style="width:180px;">Tags</th>
         </tr>
     </thead>
     <tbody>
-        @foreach (var q in Model)
+        @if (Model?.Any() == true)
         {
-            var isChecked = selected.Contains(q.Id) ? "checked" : "";
-            <tr class="q-row" data-text="@q.Content?.ToLower()">
-                <td>
-                    <input type="checkbox" name="SelectedQuestionIds" value="@q.Id" @isChecked />
-                </td>
-                <td>@q.Content</td>
-                <td>@q.Type</td>
-                <td>@q.SubjectId</td>
-                <td>@q.DifficultyLevelId</td>
+            @foreach (var q in Model)
+            {
+                var isChecked = selected.Contains(q.Id) ? "checked" : "";
+                var tags = q.Tags?.Any() == true ? string.Join(", ", q.Tags) : "-";
+                <tr class="q-row" data-text="@q.Content?.ToLower()">
+                    <td>
+                        <input type="checkbox" name="SelectedQuestionIds" value="@q.Id" @isChecked />
+                    </td>
+                    <td>@q.Content</td>
+                    <td>@q.Type</td>
+                    <td>@q.SubjectId</td>
+                    <td>@q.DifficultyLevelId</td>
+                    <td>@tags</td>
+                </tr>
+            }
+        }
+        else
+        {
+            <tr>
+                <td colspan="6" class="text-muted">Không có câu hỏi phù hợp.</td>
             </tr>
         }
     </tbody>

@@ -51,12 +51,22 @@ namespace UniTestSystem.Controllers
             else if (f.PageSize <= 0)
                 f.PageSize = 20;
 
-            var paged = await _questionService.SearchAsync(f);
+            var selectedCourseId = !string.IsNullOrWhiteSpace(f.CourseId)
+                ? f.CourseId
+                : HttpContext.Request.Query["CourseId"].ToString();
+            if (!string.IsNullOrWhiteSpace(selectedCourseId))
+            {
+                f.CourseId = selectedCourseId;
+                f.Status = QuestionStatus.Approved;
+            }
+
+            var paged = await GetQuestionsForTestContextAsync(f);
             var model = new CreateTestViewModel
             {
                 Filter = f,
                 Page = paged,
                 Title = "",
+                CourseId = selectedCourseId,
                 DurationMinutes = 10,
                 PassScore = 3,
                 AssessmentType = AssessmentType.Quiz
@@ -98,16 +108,15 @@ namespace UniTestSystem.Controllers
                     Page = int.TryParse(HttpContext.Request.Query["Page"], out var p) ? p : 1,
                     PageSize = int.TryParse(HttpContext.Request.Query["PageSize"], out var ps) ? ps : 20,
                     Keyword = HttpContext.Request.Query["Keyword"],
-                    SubjectId = HttpContext.Request.Query["Subject"],
-                    DifficultyLevelId = HttpContext.Request.Query["DifficultyLevel"],
-                    TagsCsv = HttpContext.Request.Query["TagsCsv"],
+                    CourseId = t.CourseId,
+                    Status = QuestionStatus.Approved,
                     Sort = HttpContext.Request.Query["Sort"]
                 };
                 var psRaw = HttpContext.Request.Query["PageSize"].ToString();
                 if (string.Equals(psRaw, "all", StringComparison.OrdinalIgnoreCase))
                     f.PageSize = int.MaxValue;
 
-                var paged = await _questionService.SearchAsync(f);
+                var paged = await GetQuestionsForTestContextAsync(f);
 
                 var vm = new CreateTestViewModel
                 {
@@ -147,7 +156,14 @@ namespace UniTestSystem.Controllers
             else if (f.PageSize <= 0)
                 f.PageSize = 20;
 
-            var paged = await _questionService.SearchAsync(f);
+            var selectedCourseId = !string.IsNullOrWhiteSpace(HttpContext.Request.Query["CourseId"])
+                ? HttpContext.Request.Query["CourseId"].ToString()
+                : t.CourseId;
+            f.CourseId = selectedCourseId;
+            if (!string.IsNullOrWhiteSpace(f.CourseId))
+                f.Status = QuestionStatus.Approved;
+
+            var paged = await GetQuestionsForTestContextAsync(f);
 
             var vm = new EditTestViewModel
             {
@@ -200,9 +216,8 @@ namespace UniTestSystem.Controllers
                     Page = int.TryParse(HttpContext.Request.Query["Page"], out var p) ? p : 1,
                     PageSize = int.TryParse(HttpContext.Request.Query["PageSize"], out var ps) ? ps : 20,
                     Keyword = HttpContext.Request.Query["Keyword"],
-                    SubjectId = HttpContext.Request.Query["Subject"],
-                    DifficultyLevelId = HttpContext.Request.Query["DifficultyLevel"],
-                    TagsCsv = HttpContext.Request.Query["TagsCsv"],
+                    CourseId = vm.CourseId,
+                    Status = QuestionStatus.Approved,
                     Sort = HttpContext.Request.Query["Sort"]
                 };
                 var psRaw = HttpContext.Request.Query["PageSize"].ToString();
@@ -210,7 +225,7 @@ namespace UniTestSystem.Controllers
                     f.PageSize = int.MaxValue;
 
                 vm.Filter = f;
-                vm.Page = await _questionService.SearchAsync(f);
+                vm.Page = await GetQuestionsForTestContextAsync(f);
                 vm.SelectedQuestionIds = SelectedQuestionIds ?? new List<string>();
                 await PopulateCoursesAsync(vm.CourseId);
                 return View(vm);
@@ -238,6 +253,24 @@ namespace UniTestSystem.Controllers
             var courses = await _academicService.GetAllCoursesAsync();
             var selected = string.IsNullOrWhiteSpace(selectedCourseId) ? null : selectedCourseId;
             ViewBag.Courses = new SelectList(courses, "Id", "Name", selected);
+            ViewBag.SelectedCourseName = courses.FirstOrDefault(x => x.Id == selected)?.Name;
+        }
+
+        private async Task<PagedResult<Question>> GetQuestionsForTestContextAsync(QuestionFilter filter)
+        {
+            if (string.IsNullOrWhiteSpace(filter.CourseId))
+            {
+                return new PagedResult<Question>
+                {
+                    Page = filter.Page <= 0 ? 1 : filter.Page,
+                    PageSize = filter.PageSize <= 0 ? 20 : filter.PageSize,
+                    Total = 0,
+                    Items = new List<Question>()
+                };
+            }
+
+            filter.Status ??= QuestionStatus.Approved;
+            return await _questionService.SearchAsync(filter);
         }
 
         private void SetFlashMessageByContent(string message)

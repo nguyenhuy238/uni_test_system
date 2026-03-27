@@ -64,6 +64,41 @@ public class QuestionsController : ControllerBase
         });
     }
 
+    [HttpGet("by-course/{courseId}")]
+    public async Task<IActionResult> GetApprovedByCourse(string courseId)
+    {
+        if (string.IsNullOrWhiteSpace(courseId))
+            return BadRequest(new { message = "courseId is required" });
+
+        var paged = await _svc.SearchAsync(new QuestionFilter
+        {
+            CourseId = courseId,
+            Status = QuestionStatus.Approved,
+            Page = 1,
+            PageSize = int.MaxValue,
+            Sort = "CreatedAt_desc"
+        });
+
+        var items = paged.Items.Select(q => new
+        {
+            q.Id,
+            q.Content,
+            q.Type,
+            q.SubjectId,
+            q.DifficultyLevelId,
+            q.Tags,
+            q.Status,
+            q.QuestionBankId
+        });
+
+        return Ok(new
+        {
+            CourseId = courseId,
+            Total = paged.Total,
+            Items = items
+        });
+    }
+
     [HttpPost]
     [Authorize(Policy = PermissionCodes.Question_Create)]
     public async Task<IActionResult> Create([FromBody] CreateQuestionRequest request)

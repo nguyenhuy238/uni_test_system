@@ -7,6 +7,8 @@ namespace UniTestSystem.Application
         public string? Keyword { get; set; }
         public QType? Type { get; set; }
         public string? SubjectId { get; set; }
+        public string? CourseId { get; set; }
+        public QuestionStatus? Status { get; set; }
         public string? DifficultyLevelId { get; set; }
         public string? TagsCsv { get; set; }
         public DateTime? From { get; set; }
