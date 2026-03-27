@@ -1,6 +1,7 @@
 using UniTestSystem.AdminApp.Models;
 using UniTestSystem.AdminApp.Services;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
@@ -50,6 +51,26 @@ namespace UniTestSystem.AdminApp.ViewModels
         private string _selectedQuestionCorrectKeysText = string.Empty;
         private bool _syncingCorrectKeysText;
         private ObservableCollection<TestItem> _selectedTestItems = new();
+        private ObservableCollection<CreateTestQuestionItem> _createTestQuestionPool = new();
+        private string _createTestTitle = "";
+        private string _createTestCourseId = "";
+        private int _createTestDurationMinutes = 10;
+        private int _createTestPassScore = 3;
+        private string _createTestAssessmentType = "Quiz";
+        private bool _createTestShuffleQuestions = true;
+        private bool _createTestShuffleOptions = true;
+        private bool _createTestIsPublished = true;
+        private string _createQuestionSelectionMode = CreateSelectionManualMode;
+        private int _createMcqCount;
+        private int _createTfCount;
+        private int _createEssayCount;
+        private int _createMatchingCount;
+        private int _createDragDropCount;
+        private string _createQuestionKeyword = "";
+        private bool _isLoadingCreateQuestionPool;
+
+        private const string CreateSelectionManualMode = "Manual";
+        private const string CreateSelectionRandomByTypeMode = "RandomByType";
         private const string DefaultNewUserPassword = "123456";
         public string CurrentUserName => _apiService.CurrentUser?.Name ?? "Admin";
         public string CurrentUserRole => _apiService.CurrentUser?.Role ?? "Unknown";
@@ -91,6 +112,8 @@ namespace UniTestSystem.AdminApp.ViewModels
             QuestionDifficultyOptions = new ObservableCollection<QuestionMetadataItem>();
             QuestionSubjectOptions = new ObservableCollection<QuestionMetadataItem>();
             QuestionBankOptions = new ObservableCollection<QuestionMetadataItem>();
+            AssessmentTypeOptions = new ObservableCollection<string> { "Quiz", "Midterm", "Final", "Assignment" };
+            CreateTestQuestions = new ObservableCollection<CreateTestQuestionItem>();
             YearEndStudents = new ObservableCollection<YearEndStudentSummaryModel>();
             YearEndWarningStudents = new ObservableCollection<YearEndStudentSummaryModel>();
 
@@ -126,6 +149,10 @@ namespace UniTestSystem.AdminApp.ViewModels
             // Test Item Commands
             AddTestItemCommand = new RelayCommand(AddTestItem, () => IsAdmin);
             RemoveTestItemCommand = new RelayCommand(RemoveTestItem, () => IsAdmin && SelectedTestItem != null);
+            ApplyCreateTestFilterCommand = new RelayCommand(ApplyCreateTestQuestionFilter, () => IsAdmin);
+            ClearCreateTestSelectionCommand = new RelayCommand(ClearCreateTestSelection, () => IsAdmin);
+            ResetCreateTestBuilderCommand = new RelayCommand(ResetCreateTestBuilder, () => IsAdmin);
+            CreateTestFromBuilderCommand = new RelayCommand(async () => await CreateTestFromBuilderAsync(), () => IsAdmin);
 
             AddFacultyCommand = new RelayCommand(() => { SelectedFaculty = new Faculty { Name = "New Faculty" }; }, () => CanManageAcademic);
             SaveFacultyCommand = new RelayCommand(async () => await SaveFacultyAsync(), () => CanManageAcademic);
@@ -158,6 +185,8 @@ namespace UniTestSystem.AdminApp.ViewModels
             PreviewYearEndCommand = new RelayCommand(async () => await PreviewYearEndAsync(), () => CanManageAcademic);
             FinalizeYearEndCommand = new RelayCommand(async () => await FinalizeYearEndAsync(), () => CanManageAcademic && YearEndPreview.Prerequisites.IsReady && YearEndStudents.Count > 0);
             ToggleThemeCommand = new RelayCommand(() => { IsDarkTheme = !IsDarkTheme; StatusMessage = IsDarkTheme ? "Dark mode enabled." : "Light mode enabled."; });
+            _createTestQuestionPool.CollectionChanged += CreateTestQuestionPoolOnCollectionChanged;
+            ResetCreateTestBuilder();
 
             // Load data automatically on startup
             _ = LoadDataAsync();
@@ -181,10 +210,12 @@ namespace UniTestSystem.AdminApp.ViewModels
         public ObservableCollection<string> PeriodOptions { get; }
         public ObservableCollection<string> ExportFormatOptions { get; }
         public ObservableCollection<string> QuestionTypeOptions { get; }
+        public ObservableCollection<string> AssessmentTypeOptions { get; }
         public ObservableCollection<QuestionMetadataItem> QuestionSkillOptions { get; }
         public ObservableCollection<QuestionMetadataItem> QuestionDifficultyOptions { get; }
         public ObservableCollection<QuestionMetadataItem> QuestionSubjectOptions { get; }
         public ObservableCollection<QuestionMetadataItem> QuestionBankOptions { get; }
+        public ObservableCollection<CreateTestQuestionItem> CreateTestQuestions { get; }
 
         public ObservableCollection<OptionWrapper> SelectedQuestionOptions => _selectedQuestionOptions;
         public ObservableCollection<string> SelectedQuestionCorrectKeys => _selectedQuestionCorrectKeys;
@@ -212,6 +243,188 @@ namespace UniTestSystem.AdminApp.ViewModels
             }
         }
         public ObservableCollection<TestItem> SelectedTestItems => _selectedTestItems;
+        public int CreateSelectedQuestionCount => _createTestQuestionPool.Count(item => item.IsSelected);
+        public bool IsCreateRandomMode
+        {
+            get => string.Equals(_createQuestionSelectionMode, CreateSelectionRandomByTypeMode, StringComparison.OrdinalIgnoreCase);
+            set
+            {
+                if (value)
+                {
+                    SetCreateQuestionSelectionMode(CreateSelectionRandomByTypeMode);
+                }
+            }
+        }
+
+        public bool IsCreateManualMode
+        {
+            get => !IsCreateRandomMode;
+            set
+            {
+                if (value)
+                {
+                    SetCreateQuestionSelectionMode(CreateSelectionManualMode);
+                }
+            }
+        }
+
+        public bool IsCreateQuestionPoolBusy
+        {
+            get => _isLoadingCreateQuestionPool;
+            private set
+            {
+                _isLoadingCreateQuestionPool = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string CreateTestTitle
+        {
+            get => _createTestTitle;
+            set
+            {
+                _createTestTitle = value ?? string.Empty;
+                OnPropertyChanged();
+            }
+        }
+
+        public string CreateTestCourseId
+        {
+            get => _createTestCourseId;
+            set
+            {
+                var normalized = value?.Trim() ?? string.Empty;
+                if (string.Equals(_createTestCourseId, normalized, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _createTestCourseId = normalized;
+                OnPropertyChanged();
+                _ = LoadCreateQuestionsByCourseAsync();
+            }
+        }
+
+        public int CreateTestDurationMinutes
+        {
+            get => _createTestDurationMinutes;
+            set
+            {
+                _createTestDurationMinutes = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public int CreateTestPassScore
+        {
+            get => _createTestPassScore;
+            set
+            {
+                _createTestPassScore = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string CreateTestAssessmentType
+        {
+            get => _createTestAssessmentType;
+            set
+            {
+                _createTestAssessmentType = string.IsNullOrWhiteSpace(value) ? "Quiz" : value.Trim();
+                OnPropertyChanged();
+            }
+        }
+
+        public bool CreateTestShuffleQuestions
+        {
+            get => _createTestShuffleQuestions;
+            set
+            {
+                _createTestShuffleQuestions = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool CreateTestShuffleOptions
+        {
+            get => _createTestShuffleOptions;
+            set
+            {
+                _createTestShuffleOptions = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool CreateTestIsPublished
+        {
+            get => _createTestIsPublished;
+            set
+            {
+                _createTestIsPublished = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public int CreateMcqCount
+        {
+            get => _createMcqCount;
+            set
+            {
+                _createMcqCount = Math.Max(0, value);
+                OnPropertyChanged();
+            }
+        }
+
+        public int CreateTfCount
+        {
+            get => _createTfCount;
+            set
+            {
+                _createTfCount = Math.Max(0, value);
+                OnPropertyChanged();
+            }
+        }
+
+        public int CreateEssayCount
+        {
+            get => _createEssayCount;
+            set
+            {
+                _createEssayCount = Math.Max(0, value);
+                OnPropertyChanged();
+            }
+        }
+
+        public int CreateMatchingCount
+        {
+            get => _createMatchingCount;
+            set
+            {
+                _createMatchingCount = Math.Max(0, value);
+                OnPropertyChanged();
+            }
+        }
+
+        public int CreateDragDropCount
+        {
+            get => _createDragDropCount;
+            set
+            {
+                _createDragDropCount = Math.Max(0, value);
+                OnPropertyChanged();
+            }
+        }
+
+        public string CreateQuestionKeyword
+        {
+            get => _createQuestionKeyword;
+            set
+            {
+                _createQuestionKeyword = value ?? string.Empty;
+                OnPropertyChanged();
+                ApplyCreateTestQuestionFilter();
+            }
+        }
 
         private OptionWrapper? _selectedOption;
         public OptionWrapper? SelectedOption 
@@ -475,6 +688,10 @@ namespace UniTestSystem.AdminApp.ViewModels
         public RelayCommand ToggleCorrectKeyCommand { get; }
         public RelayCommand AddTestItemCommand { get; }
         public RelayCommand RemoveTestItemCommand { get; }
+        public RelayCommand ApplyCreateTestFilterCommand { get; }
+        public RelayCommand ClearCreateTestSelectionCommand { get; }
+        public RelayCommand ResetCreateTestBuilderCommand { get; }
+        public RelayCommand CreateTestFromBuilderCommand { get; }
         
         public RelayCommand AddFacultyCommand { get; }
         public RelayCommand SaveFacultyCommand { get; }
@@ -509,6 +726,14 @@ namespace UniTestSystem.AdminApp.ViewModels
                 if (facultiesTask.Result != null) { Faculties.Clear(); foreach (var f in facultiesTask.Result) Faculties.Add(f); } else failures.Add("Faculties");
                 if (classesTask.Result != null) { Classes.Clear(); foreach (var c in classesTask.Result) Classes.Add(c); } else failures.Add("Classes");
                 if (coursesTask.Result != null) { Courses.Clear(); foreach (var crs in coursesTask.Result) Courses.Add(crs); } else failures.Add("Courses");
+                if (!string.IsNullOrWhiteSpace(CreateTestCourseId) &&
+                    !Courses.Any(c => string.Equals(c.Id, CreateTestCourseId, StringComparison.Ordinal)))
+                {
+                    _createTestCourseId = string.Empty;
+                    OnPropertyChanged(nameof(CreateTestCourseId));
+                    _createTestQuestionPool.Clear();
+                    CreateTestQuestions.Clear();
+                }
 
                 if (usersTask.Result != null)
                 {
@@ -1131,6 +1356,371 @@ namespace UniTestSystem.AdminApp.ViewModels
             };
 
             StatusMessage = "Creating new test...";
+        }
+
+        private void ResetCreateTestBuilder()
+        {
+            _createTestCourseId = string.Empty;
+            OnPropertyChanged(nameof(CreateTestCourseId));
+            ResetCreateTestBuilderCore(clearQuestionPool: true);
+            StatusMessage = "Create Test form reset.";
+        }
+
+        private void ResetCreateTestBuilderAfterCreate()
+        {
+            ResetCreateTestBuilderCore(clearQuestionPool: false);
+        }
+
+        private void ResetCreateTestBuilderCore(bool clearQuestionPool)
+        {
+            CreateTestTitle = string.Empty;
+            CreateTestDurationMinutes = 10;
+            CreateTestPassScore = 3;
+            CreateTestAssessmentType = "Quiz";
+            CreateTestShuffleQuestions = true;
+            CreateTestShuffleOptions = true;
+            CreateTestIsPublished = true;
+            CreateMcqCount = 0;
+            CreateTfCount = 0;
+            CreateEssayCount = 0;
+            CreateMatchingCount = 0;
+            CreateDragDropCount = 0;
+            CreateQuestionKeyword = string.Empty;
+            SetCreateQuestionSelectionMode(CreateSelectionManualMode);
+            ClearCreateTestSelection();
+
+            if (clearQuestionPool)
+            {
+                _createTestQuestionPool.Clear();
+                CreateTestQuestions.Clear();
+            }
+            else
+            {
+                ApplyCreateTestQuestionFilter();
+            }
+        }
+
+        private void SetCreateQuestionSelectionMode(string mode)
+        {
+            var normalizedMode = string.Equals(mode, CreateSelectionRandomByTypeMode, StringComparison.OrdinalIgnoreCase)
+                ? CreateSelectionRandomByTypeMode
+                : CreateSelectionManualMode;
+
+            if (string.Equals(_createQuestionSelectionMode, normalizedMode, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _createQuestionSelectionMode = normalizedMode;
+            if (IsCreateRandomMode)
+            {
+                ClearCreateTestSelection();
+            }
+
+            OnPropertyChanged(nameof(IsCreateRandomMode));
+            OnPropertyChanged(nameof(IsCreateManualMode));
+        }
+
+        private async Task LoadCreateQuestionsByCourseAsync()
+        {
+            var courseId = (CreateTestCourseId ?? string.Empty).Trim();
+            try
+            {
+                IsCreateQuestionPoolBusy = true;
+                _createTestQuestionPool.Clear();
+                CreateTestQuestions.Clear();
+                ClearCreateTestSelection();
+
+                if (string.IsNullOrWhiteSpace(courseId))
+                {
+                    return;
+                }
+
+                StatusMessage = "Loading approved questions for selected course...";
+                var questions = await _apiService.GetApprovedQuestionsByCourseAsync(courseId) ?? new List<TestCreationQuestion>();
+                foreach (var question in questions
+                             .Where(question => !string.IsNullOrWhiteSpace(question.Id))
+                             .OrderBy(question => NormalizeQuestionTypeKey(question.Type), StringComparer.OrdinalIgnoreCase)
+                             .ThenBy(question => question.Id, StringComparer.OrdinalIgnoreCase))
+                {
+                    _createTestQuestionPool.Add(new CreateTestQuestionItem
+                    {
+                        Id = question.Id.Trim(),
+                        Type = NormalizeQuestionTypeKey(question.Type),
+                        Difficulty = string.IsNullOrWhiteSpace(question.DifficultyLevelId) ? "-" : question.DifficultyLevelId.Trim(),
+                        Content = (question.Content ?? string.Empty).Trim()
+                    });
+                }
+
+                ApplyCreateTestQuestionFilter();
+                StatusMessage = $"Loaded {_createTestQuestionPool.Count} approved questions for selected course.";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Failed to load questions by course: {ex.Message}";
+            }
+            finally
+            {
+                IsCreateQuestionPoolBusy = false;
+                OnPropertyChanged(nameof(CreateSelectedQuestionCount));
+            }
+        }
+
+        private void ApplyCreateTestQuestionFilter()
+        {
+            var keyword = (CreateQuestionKeyword ?? string.Empty).Trim();
+            var filtered = _createTestQuestionPool
+                .Where(item =>
+                    string.IsNullOrWhiteSpace(keyword) ||
+                    item.Id.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                    item.Content.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                    item.Type.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                    item.Difficulty.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(item => item.Type, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            CreateTestQuestions.Clear();
+            foreach (var item in filtered)
+            {
+                CreateTestQuestions.Add(item);
+            }
+        }
+
+        private void ClearCreateTestSelection()
+        {
+            foreach (var item in _createTestQuestionPool)
+            {
+                item.IsSelected = false;
+            }
+
+            OnPropertyChanged(nameof(CreateSelectedQuestionCount));
+        }
+
+        private List<CreateTestQuestionItem> PickRandomQuestionsByType(List<string> warnings)
+        {
+            var picks = new List<CreateTestQuestionItem>();
+            var requests = new[]
+            {
+                (Type: "MCQ", Count: CreateMcqCount),
+                (Type: "TrueFalse", Count: CreateTfCount),
+                (Type: "Essay", Count: CreateEssayCount),
+                (Type: "Matching", Count: CreateMatchingCount),
+                (Type: "DragDrop", Count: CreateDragDropCount)
+            };
+
+            foreach (var request in requests.Where(request => request.Count > 0))
+            {
+                var pool = _createTestQuestionPool
+                    .Where(item => string.Equals(item.Type, request.Type, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(_ => Random.Shared.Next())
+                    .Take(request.Count)
+                    .ToList();
+
+                if (pool.Count < request.Count)
+                {
+                    warnings.Add($"{request.Type}: requested {request.Count}, available {pool.Count}.");
+                }
+
+                picks.AddRange(pool);
+            }
+
+            return picks
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .DistinctBy(item => item.Id)
+                .ToList();
+        }
+
+        private async Task CreateTestFromBuilderAsync()
+        {
+            var title = (CreateTestTitle ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                StatusMessage = "Title is required.";
+                return;
+            }
+
+            var courseId = (CreateTestCourseId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(courseId))
+            {
+                StatusMessage = "Please select a course before creating test.";
+                return;
+            }
+
+            if (CreateTestDurationMinutes <= 0)
+            {
+                StatusMessage = "DurationMinutes must be greater than 0.";
+                return;
+            }
+
+            if (CreateTestPassScore < 0 || CreateTestPassScore > 10)
+            {
+                StatusMessage = "PassScore must be in range 0..10.";
+                return;
+            }
+
+            var warnings = new List<string>();
+            List<CreateTestQuestionItem> selectedQuestions;
+            if (IsCreateRandomMode)
+            {
+                var requestedTotal = CreateMcqCount + CreateTfCount + CreateEssayCount + CreateMatchingCount + CreateDragDropCount;
+                if (requestedTotal <= 0)
+                {
+                    StatusMessage = "Random mode requires at least 1 question in random configuration.";
+                    return;
+                }
+
+                selectedQuestions = PickRandomQuestionsByType(warnings);
+                if (selectedQuestions.Count == 0)
+                {
+                    StatusMessage = "No suitable questions found for the current random configuration.";
+                    return;
+                }
+            }
+            else
+            {
+                selectedQuestions = _createTestQuestionPool
+                    .Where(item => item.IsSelected && !string.IsNullOrWhiteSpace(item.Id))
+                    .ToList();
+            }
+
+            if (selectedQuestions.Count == 0)
+            {
+                StatusMessage = "Please select at least 1 question.";
+                return;
+            }
+
+            var selectedIds = selectedQuestions
+                .Select(item => item.Id.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var test = new Test
+            {
+                Title = title,
+                CourseId = courseId,
+                DurationMinutes = CreateTestDurationMinutes,
+                PassScore = CreateTestPassScore,
+                AssessmentType = NormalizeAssessmentType(CreateTestAssessmentType),
+                Type = IsExamAssessmentType(CreateTestAssessmentType) ? "Exam" : "Test",
+                ShuffleQuestions = CreateTestShuffleQuestions,
+                ShuffleOptions = CreateTestShuffleOptions,
+                IsPublished = CreateTestIsPublished,
+                TotalMaxScore = 10m,
+                CreatedBy = CurrentUserName,
+                Items = selectedIds
+                    .Select((id, index) => new TestItem
+                    {
+                        QuestionId = id,
+                        Points = 1m,
+                        Order = index
+                    })
+                    .ToList(),
+                QuestionIds = selectedIds
+            };
+
+            if (IsCreateRandomMode)
+            {
+                var selectedSet = selectedIds.ToHashSet(StringComparer.Ordinal);
+                foreach (var item in _createTestQuestionPool)
+                {
+                    item.IsSelected = selectedSet.Contains(item.Id);
+                }
+            }
+
+            try
+            {
+                StatusMessage = "Creating test...";
+                var success = await _apiService.CreateTestAsync(test);
+                if (!success)
+                {
+                    StatusMessage = "Failed to create test.";
+                    return;
+                }
+
+                await LoadDataAsync();
+                ResetCreateTestBuilderAfterCreate();
+
+                if (warnings.Count > 0)
+                {
+                    StatusMessage = $"Test created with warnings: {string.Join(" ", warnings)}";
+                }
+                else
+                {
+                    StatusMessage = $"Test created successfully with {selectedIds.Count} question(s).";
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error when creating test: {ex.Message}";
+            }
+        }
+
+        private static bool IsExamAssessmentType(string? value)
+        {
+            return string.Equals(value, "Midterm", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(value, "Final", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeAssessmentType(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "Quiz";
+            }
+
+            return value.Trim().ToLowerInvariant() switch
+            {
+                "quiz" => "Quiz",
+                "midterm" => "Midterm",
+                "final" => "Final",
+                "assignment" => "Assignment",
+                _ => "Quiz"
+            };
+        }
+
+        private static string NormalizeQuestionTypeKey(string? type)
+        {
+            var normalized = NormalizeQuestionType(type).Replace(" ", "", StringComparison.Ordinal).Trim();
+            return normalized.ToLowerInvariant() switch
+            {
+                "mcq" => "MCQ",
+                "truefalse" => "TrueFalse",
+                "essay" => "Essay",
+                "matching" => "Matching",
+                "dragdrop" => "DragDrop",
+                "draganddrop" => "DragDrop",
+                _ => normalized
+            };
+        }
+
+        private void CreateTestQuestionPoolOnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.OldItems != null)
+            {
+                foreach (CreateTestQuestionItem item in e.OldItems)
+                {
+                    item.PropertyChanged -= OnCreateTestQuestionItemPropertyChanged;
+                }
+            }
+
+            if (e.NewItems != null)
+            {
+                foreach (CreateTestQuestionItem item in e.NewItems)
+                {
+                    item.PropertyChanged += OnCreateTestQuestionItemPropertyChanged;
+                }
+            }
+
+            OnPropertyChanged(nameof(CreateSelectedQuestionCount));
+        }
+
+        private void OnCreateTestQuestionItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (string.Equals(e.PropertyName, nameof(CreateTestQuestionItem.IsSelected), StringComparison.Ordinal))
+            {
+                OnPropertyChanged(nameof(CreateSelectedQuestionCount));
+            }
         }
 
         private void StartNewUser()
@@ -2209,5 +2799,37 @@ namespace UniTestSystem.AdminApp.ViewModels
 
         public string OldText { get; }
         public string NewText { get; }
+    }
+
+    public sealed class CreateTestQuestionItem : INotifyPropertyChanged
+    {
+        private bool _isSelected;
+
+        public string Id { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Difficulty { get; set; } = "";
+        public string Content { get; set; } = "";
+
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                if (_isSelected == value)
+                {
+                    return;
+                }
+
+                _isSelected = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 }

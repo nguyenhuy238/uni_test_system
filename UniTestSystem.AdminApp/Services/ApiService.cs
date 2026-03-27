@@ -98,6 +98,16 @@ namespace UniTestSystem.AdminApp.Services
         public async Task<List<Test>?> GetTestsAsync() => await GetJsonAsync<List<Test>>($"{_baseUrl}/api/admin/tests");
         public async Task<List<User>?> GetUsersAsync() => await GetJsonAsync<List<User>>($"{_baseUrl}/api/admin/users");
         public async Task<List<Question>?> GetQuestionsAsync() => await GetJsonAsync<List<Question>>($"{_baseUrl}/api/admin/questions");
+        public async Task<List<TestCreationQuestion>?> GetApprovedQuestionsByCourseAsync(string courseId)
+        {
+            if (string.IsNullOrWhiteSpace(courseId))
+            {
+                return new List<TestCreationQuestion>();
+            }
+
+            var response = await GetJsonAsync<TestCreationQuestionPoolResponse>($"{_baseUrl}/api/admin/questions/by-course/{Uri.EscapeDataString(courseId)}");
+            return response?.Items ?? new List<TestCreationQuestion>();
+        }
         public async Task<List<Session>?> GetSessionsAsync() => await GetJsonAsync<List<Session>>($"{_baseUrl}/api/admin/sessions");
         public async Task<DashboardStats?> GetDashboardStatsAsync() => await GetJsonAsync<DashboardStats>($"{_baseUrl}/api/admin/dashboard/summary");
         public async Task<List<Faculty>?> GetFacultiesAsync() => await GetJsonAsync<List<Faculty>>($"{_baseUrl}/api/admin/faculties");
