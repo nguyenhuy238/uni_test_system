@@ -4,86 +4,85 @@
 @{
     ViewData["Title"] = "Tests";
     var tests = Model?.ToList() ?? new List<Test>();
+    var currentStatus = Context.Request.Query["status"].ToString();
+    var currentKeyword = Context.Request.Query["keyword"].ToString();
+    var currentAssessmentTypeRaw = Context.Request.Query["assessmentType"].ToString();
+    var currentSort = Context.Request.Query["sort"].ToString();
+    AssessmentType? currentAssessmentType = null;
+    if (Enum.TryParse<AssessmentType>(currentAssessmentTypeRaw, true, out var parsedAssessmentType))
+    {
+        currentAssessmentType = parsedAssessmentType;
+    }
+
+    string BuildStatusUrl(string? statusValue)
+    {
+        return Url.Action("Index", "Tests", new
+        {
+            status = statusValue,
+            keyword = string.IsNullOrWhiteSpace(currentKeyword) ? null : currentKeyword,
+            assessmentType = currentAssessmentType?.ToString(),
+            sort = string.IsNullOrWhiteSpace(currentSort) ? null : currentSort
+        }) ?? "/Tests";
+    }
 }
 
 <h2 class="mb-3">Tests</h2>
 
-<div class="d-flex align-items-center gap-2 mb-3">
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
     <a class="btn btn-success btn-sm" href="/Tests/Create">Create</a>
-    
+
     <div class="btn-group btn-group-sm ms-2">
-        <a href="/Tests" class="btn btn-outline-secondary @(Context.Request.Query["status"].ToString() == "" ? "active" : "")">All</a>
-        <a href="/Tests?status=Draft" class="btn btn-outline-secondary @(Context.Request.Query["status"].ToString() == "Draft" ? "active" : "")">Draft</a>
-        <a href="/Tests?status=Published" class="btn btn-outline-secondary @(Context.Request.Query["status"].ToString() == "Published" ? "active" : "")">Published</a>
-        <a href="/Tests?status=Archived" class="btn btn-outline-secondary @(Context.Request.Query["status"].ToString() == "Archived" ? "active" : "")">Archived</a>
+        <a href="@BuildStatusUrl(null)" class="btn btn-outline-secondary @(string.IsNullOrWhiteSpace(currentStatus) ? "active" : "")">All</a>
+        <a href="@BuildStatusUrl("Draft")" class="btn btn-outline-secondary @(currentStatus == "Draft" ? "active" : "")">Draft</a>
+        <a href="@BuildStatusUrl("Published")" class="btn btn-outline-secondary @(currentStatus == "Published" ? "active" : "")">Published</a>
+        <a href="@BuildStatusUrl("Archived")" class="btn btn-outline-secondary @(currentStatus == "Archived" ? "active" : "")">Archived</a>
     </div>
 
-    <!-- ===== Bulk toolbar (2 chế độ) =================================== -->
-    <!-- 1) Assign tất cả đã chọn CHO MỘT USER (nhập userId) -->
-    <form id="bulkAssignForm" method="post" action="/Tests/BulkAssign" class="d-flex flex-wrap align-items-end gap-2 ms-auto">
-        @Html.AntiForgeryToken()
+    <form method="get" action="/Tests" class="d-flex flex-wrap align-items-end gap-2 ms-auto">
+        @if (!string.IsNullOrWhiteSpace(currentStatus))
+        {
+            <input type="hidden" name="status" value="@currentStatus" />
+        }
         <div>
-            <label class="form-label mb-1 small">UserId</label>
-            <input name="userId" id="manualUserId" class="form-control form-control-sm" placeholder="vd: u-emp" required />
-        </div>
-        <div>
-            <label class="form-label mb-1 small">Start (UTC)</label>
-            <input type="datetime-local" name="startAt" id="bulkStart" class="form-control form-control-sm" />
+            <label class="form-label mb-1 small">Từ khóa</label>
+            <input name="keyword" class="form-control form-control-sm" value="@currentKeyword" placeholder="Tên bài test hoặc môn học" />
         </div>
         <div>
-            <label class="form-label mb-1 small">End (UTC)</label>
-            <input type="datetime-local" name="endAt" id="bulkEnd" class="form-control form-control-sm" />
+            <label class="form-label mb-1 small">Loại bài</label>
+            <select name="assessmentType" class="form-select form-select-sm">
+                <option value="">Tất cả loại</option>
+                @foreach (var type in Enum.GetValues<AssessmentType>())
+                {
+                    var selected = currentAssessmentType.HasValue && currentAssessmentType.Value == type;
+                    <option value="@type" selected="@selected">@type</option>
+                }
+            </select>
         </div>
-
-        <!-- Hidden bucket: selectedIds[] sẽ được JS đổ vào trước khi submit -->
-        <div id="selectedBucket"></div>
-
-        <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnSelectAll">Select all</button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnClearAll">Clear</button>
-
-            <button type="button" class="btn btn-primary btn-sm" id="btnAssignSelected">
-                Assign selected (one user)
-            </button>
-
-            <button type="button" class="btn btn-warning btn-sm" id="btnAssignAllListed" title="Chọn tất cả hàng đang hiển thị rồi Assign (one user)">
-                Assign ALL (listed)
-            </button>
+        <div>
+            <label class="form-label mb-1 small">Sắp xếp</label>
+            <select name="sort" class="form-select form-select-sm">
+                <option value="published_desc" selected="@(currentSort == "published_desc" || string.IsNullOrWhiteSpace(currentSort))">Mới publish trước</option>
+                <option value="published_asc" selected="@(currentSort == "published_asc")">Cũ publish trước</option>
+                <option value="title_asc" selected="@(currentSort == "title_asc")">Tên A-Z</option>
+                <option value="title_desc" selected="@(currentSort == "title_desc")">Tên Z-A</option>
+                <option value="duration_asc" selected="@(currentSort == "duration_asc")">Thời lượng tăng dần</option>
+                <option value="duration_desc" selected="@(currentSort == "duration_desc")">Thời lượng giảm dần</option>
+            </select>
         </div>
+        <button type="submit" class="btn btn-primary btn-sm">Tìm</button>
+        <a class="btn btn-outline-secondary btn-sm" href="@(Url.Action("Index", "Tests", new { status = string.IsNullOrWhiteSpace(currentStatus) ? null : currentStatus }))">Đặt lại lọc</a>
     </form>
-
-    <!-- 2) Assign tự động cho ĐÚNG NGƯỜI của từng Test -->
-    <form id="bulkAssignAutoForm" method="post" action="/Tests/BulkAssignAuto" class="d-flex flex-wrap align-items-end gap-2">
-        @Html.AntiForgeryToken()
-        <div>
-            <label class="form-label mb-1 small">Start (UTC)</label>
-            <input type="datetime-local" name="startAt" id="autoStart" class="form-control form-control-sm" />
-        </div>
-        <div>
-            <label class="form-label mb-1 small">End (UTC)</label>
-            <input type="datetime-local" name="endAt" id="autoEnd" class="form-control form-control-sm" />
-        </div>
-        <div id="selectedBucketAuto"></div>
-        <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-outline-dark btn-sm" id="btnAutoAssignSelected" title="Mỗi test sẽ gán về đúng chủ sở hữu (suy ra từ Title)">
-                Assign selected (auto by owner)
-            </button>
-            <button type="button" class="btn btn-outline-dark btn-sm" id="btnAutoAssignAllListed" title="Assign tất cả hàng đang hiển thị (auto by owner)">
-                Assign ALL (listed, auto)
-            </button>
-        </div>
-    </form>
-    <!-- ================================================================== -->
 </div>
+
+<div class="text-muted small mb-2">Hiển thị @tests.Count bài test.</div>
 
 <table class="table table-hover align-middle" id="testsTable">
     <thead>
         <tr>
-            <th style="width:36px;"></th>
             <th>Title</th>
             <th>Duration</th>
             <th>Pass</th>
-            <th>Subject</th>
+            <th>Assessment Type</th>
             <th>Status</th>
             <th>Published At</th>
             <th style="width:320px;">Action</th>
@@ -93,13 +92,10 @@
         @foreach (var t in tests)
         {
             <tr data-test-id="@t.Id">
-                <td>
-                    <input type="checkbox" class="form-check-input row-selector" value="@t.Id" />
-                </td>
                 <td>@t.Title</td>
                 <td>@t.DurationMinutes min</td>
                 <td>@t.PassScore</td>
-                <td>@t.SubjectIdFilter</td>
+                <td>@t.AssessmentType</td>
                 <td>
                     @if (t.IsPublished)
                     {
@@ -113,7 +109,7 @@
                 <td>@(t.PublishedAt?.ToLocalTime().ToString("g") ?? "-")</td>
                 <td class="text-nowrap">
                     <a class="btn btn-outline-primary btn-sm" href="/Tests/Assign/@t.Id">Assign Users</a>
-                    <a class="btn btn-outline-secondary btn-sm" href="/Tests/Edit/@t.Id">Edit</a>
+                    <a class="btn btn-outline-secondary btn-sm" href="/Tests/Edit/@t.Id">Sửa</a>
 
                     <form class="d-inline" method="post" action="/Tests/Clone">
                         @Html.AntiForgeryToken()
@@ -142,92 +138,17 @@
                             <button class="btn btn-outline-dark btn-sm">Archive</button>
                         </form>
                     }
+                    else
+                    {
+                        <form class="d-inline" method="post" action="/Tests/Unarchive">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@t.Id" />
+                            <button class="btn btn-outline-secondary btn-sm">Unarchive</button>
+                        </form>
+                    }
 
-                    <form class="d-inline" method="post" action="/Tests/Delete" onsubmit="return confirm('Delete this test?');">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="id" value="@t.Id" />
-                        <button class="btn btn-danger btn-sm">Delete</button>
-                    </form>
-
-                    <!-- Quick Assign 1 test (giữ nguyên) -->
-                    <form class="d-inline" method="post" action="/Tests/AssignToUser">
-                        @Html.AntiForgeryToken()
-                        <input type="hidden" name="testId" value="@t.Id" />
-                        <input class="form-control form-control-sm d-inline-block" style="width:160px;" name="userId" placeholder="userId (vd: u-emp)" />
-                        <button class="btn btn-primary btn-sm ms-1">Quick Assign</button>
-                    </form>
                 </td>
             </tr>
         }
     </tbody>
 </table>
-
-@section Scripts {
-    <script>
-        (function(){
-          const $ = (q, root=document) => root.querySelector(q);
-          const $$ = (q, root=document) => Array.from(root.querySelectorAll(q));
-
-          const selectors = $$("#testsTable .row-selector");
-          const bucketManual = $("#selectedBucket");
-          const bucketAuto = $("#selectedBucketAuto");
-
-          // Select/Clear
-          $("#btnSelectAll")?.addEventListener("click", () => {
-            selectors.forEach(cb => cb.checked = true);
-          });
-          $("#btnClearAll")?.addEventListener("click", () => {
-            selectors.forEach(cb => cb.checked = false);
-          });
-
-          function fillBucket(container){
-            container.innerHTML = "";
-            const ids = selectors.filter(cb => cb.checked).map(cb => cb.value);
-            ids.forEach(id => {
-              const i = document.createElement('input');
-              i.type = 'hidden';
-              i.name = 'testIds';
-              i.value = id;
-              container.appendChild(i);
-            });
-            return ids.length;
-          }
-
-          // MANUAL (one user)
-          $("#btnAssignSelected")?.addEventListener("click", () => {
-            const count = fillBucket(bucketManual);
-            if(count === 0){ alert("Hãy chọn ít nhất 1 Test."); return; }
-            $("#bulkAssignForm").submit();
-          });
-          $("#btnAssignAllListed")?.addEventListener("click", () => {
-            selectors.forEach(cb => cb.checked = true);
-            const count = fillBucket(bucketManual);
-            if(count === 0){ alert("Không có Test nào."); return; }
-            $("#bulkAssignForm").submit();
-          });
-
-          // AUTO (by owner)
-          function copyDateToAuto(){
-            const s = document.getElementById("bulkStart");
-            const e = document.getElementById("bulkEnd");
-            const sa = document.getElementById("autoStart");
-            const ea = document.getElementById("autoEnd");
-            if(s && sa) sa.value = s.value;
-            if(e && ea) ea.value = e.value;
-          }
-          $("#btnAutoAssignSelected")?.addEventListener("click", () => {
-            const count = fillBucket(bucketAuto);
-            if(count === 0){ alert("Hãy chọn ít nhất 1 Test."); return; }
-            copyDateToAuto();
-            $("#bulkAssignAutoForm").submit();
-          });
-          $("#btnAutoAssignAllListed")?.addEventListener("click", () => {
-            selectors.forEach(cb => cb.checked = true);
-            const count = fillBucket(bucketAuto);
-            if(count === 0){ alert("Không có Test nào."); return; }
-            copyDateToAuto();
-            $("#bulkAssignAutoForm").submit();
-          });
-        })();
-    </script>
-}

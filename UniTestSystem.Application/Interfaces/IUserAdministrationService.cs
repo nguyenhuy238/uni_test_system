@@ -28,6 +28,7 @@ public interface IUserAdministrationService
 public sealed class UserLookupData
 {
     public List<StudentClass> Classes { get; set; } = new();
+    public List<Faculty> Faculties { get; set; } = new();
     public List<string> FacultyNames { get; set; } = new();
     public List<string> AcademicYears { get; set; } = new();
 }

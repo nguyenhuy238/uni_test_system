@@ -34,8 +34,7 @@ namespace UniTestSystem.Application
 
         public async Task<List<Session>> GetPendingGradingSessionsAsync(string lecturerId)
         {
-            // Fetch sessions that have essays and are not yet finalized.
-            // In a real scenario, we'd filter by lecturer's assigned courses.
+            // lecturerId currently unused due to legacy assignment model; kept for future course-bound filtering.
             var spec = new Specification<Session>(s =>
                     s.Status == SessionStatus.Submitted ||
                     s.Status == SessionStatus.AutoSubmitted ||
@@ -46,7 +45,7 @@ namespace UniTestSystem.Application
 
             var sessions = await _sRepo.ListAsync(spec);
             return sessions
-                .Where(s => s.StudentAnswers.Any(sa => sa.Question != null && sa.Question.Type == QType.Essay))
+                .Where(s => s.StudentAnswers.Any(sa => sa.Question != null))
                 .OrderByDescending(s => s.EndAt)
                 .ToList();
         }
@@ -57,51 +56,101 @@ namespace UniTestSystem.Application
                 .Include(s => s.User!)
                 .Include(s => s.Test!)
                 .Include("Test.TestQuestions")
-                .Include("StudentAnswers.Question");
+                .Include("Test.QuestionSnapshots")
+                .Include("StudentAnswers.Question.Options");
 
             return await _sRepo.FirstOrDefaultAsync(spec)
                 ?? throw new Exception("Session not found");
         }
 
-        public async Task GradeEssayAsync(string sessionId, string questionId, decimal score, string? comment)
+        public async Task GradeAnswerAsync(string sessionId, string questionId, decimal score, string? comment)
         {
             if (await IsGradeLockedAsync(sessionId))
                 throw new Exception("Grade is locked. Unlock before editing.");
 
-            var sa = await _saRepo.FirstOrDefaultAsync(x => x.SessionId == sessionId && x.QuestionId == questionId)
+            var maxPoints = await ResolveMaxPointsAsync(sessionId, questionId);
+            var answerSpec = new Specification<StudentAnswer>(x => x.SessionId == sessionId && x.QuestionId == questionId)
+                .Include(x => x.Question!);
+            var sa = await _saRepo.FirstOrDefaultAsync(answerSpec)
                 ?? throw new Exception("Answer not found");
 
             if (score < 0) score = 0;
-            sa.Score = score;
-            sa.Comment = comment;
-            sa.GradedAt = DateTime.UtcNow;
+            if (maxPoints > 0m && score > maxPoints) score = maxPoints;
+            var roundedScore = Math.Round(score, 2, MidpointRounding.AwayFromZero);
+            var cleanedComment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
+            var existingComment = string.IsNullOrWhiteSpace(sa.Comment) ? null : sa.Comment.Trim();
+            var shouldMarkAsManuallyGraded =
+                sa.GradedAt.HasValue ||
+                roundedScore != sa.Score ||
+                !string.Equals(existingComment, cleanedComment, StringComparison.Ordinal);
+
+            sa.Score = roundedScore;
+            sa.Comment = cleanedComment;
+            if (shouldMarkAsManuallyGraded)
+            {
+                sa.GradedAt = DateTime.UtcNow;
+            }
 
             await _saRepo.UpdateAsync(sa);
-            
-            // Re-calculate TotalScore
             await RecalculateTotalScoreAsync(sessionId);
+        }
+
+        public async Task GradeEssayAsync(string sessionId, string questionId, decimal score, string? comment)
+        {
+            await GradeAnswerAsync(sessionId, questionId, score, comment);
         }
 
         private async Task RecalculateTotalScoreAsync(string sessionId)
         {
             var spec = new Specification<Session>(x => x.Id == sessionId)
-                .Include("StudentAnswers.Question");
+                .Include("StudentAnswers.Question")
+                .Include("Test.TestQuestions")
+                .Include("Test.QuestionSnapshots");
             var s = await _sRepo.FirstOrDefaultAsync(spec);
 
             if (s != null)
             {
-                // Manual score is the sum of scores of questions that were manually graded (Essays)
-                // Note: In this system, sa.Score is already the points (not a 0..1 scale)
-                s.ManualScore = s.StudentAnswers
-                    .Where(x => x.Question != null && x.Question.Type == QType.Essay && x.GradedAt != null)
-                    .Sum(x => x.Score);
-                
-                s.TotalScore = s.AutoScore + s.ManualScore;
+                var answerQuestionIds = s.StudentAnswers
+                    .Select(a => a.QuestionId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+                var pointsByQuestion = BuildPointsMap(s.Test, answerQuestionIds);
+                decimal autoScore = 0m;
+                decimal manualScore = 0m;
+
+                foreach (var answer in s.StudentAnswers)
+                {
+                    var maxPoints = pointsByQuestion.TryGetValue(answer.QuestionId, out var p) ? p : 0m;
+                    if (maxPoints < 0m) maxPoints = 0m;
+
+                    var clampedScore = Math.Clamp(answer.Score, 0m, maxPoints);
+                    var isManualBucket = answer.Question?.Type == QType.Essay || answer.GradedAt.HasValue;
+
+                    if (isManualBucket)
+                    {
+                        manualScore += clampedScore;
+                    }
+                    else
+                    {
+                        autoScore += clampedScore;
+                    }
+                }
+
+                s.AutoScore = Math.Round(autoScore, 2, MidpointRounding.AwayFromZero);
+                s.ManualScore = Math.Round(manualScore, 2, MidpointRounding.AwayFromZero);
+                s.TotalScore = Math.Round(s.AutoScore + s.ManualScore, 2, MidpointRounding.AwayFromZero);
+                s.MaxScore = Math.Round(pointsByQuestion.Values.Sum(), 2, MidpointRounding.AwayFromZero);
                 if (s.MaxScore > 0)
                 {
                     s.Percent = Math.Round((s.TotalScore / s.MaxScore) * 100, 2);
                 }
-                
+
+                if (s.Test != null)
+                {
+                    s.IsPassed = s.TotalScore >= s.Test.PassScore;
+                }
+
                 await _sRepo.UpdateAsync(s);
             }
         }
@@ -110,6 +159,8 @@ namespace UniTestSystem.Application
         {
             if (await IsGradeLockedAsync(sessionId))
                 throw new Exception("Grade is locked. Unlock before finalizing.");
+
+            await RecalculateTotalScoreAsync(sessionId);
 
             var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sessionId) 
                 ?? throw new Exception("Session not found");
@@ -349,6 +400,83 @@ namespace UniTestSystem.Application
         {
             var cleanNote = string.IsNullOrWhiteSpace(note) ? "-" : note.Trim();
             return $"Actor={actor}; Note={cleanNote}";
+        }
+
+        private static Dictionary<string, decimal> BuildPointsMap(Test? test, IEnumerable<string>? questionIds = null)
+        {
+            var orderedQuestionIds = (questionIds ?? Array.Empty<string>())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            if (test == null)
+            {
+                return TestScoreDistribution.AllocateEvenlyByQuestionIds(
+                    orderedQuestionIds,
+                    TestScoreDistribution.FixedTotalScore);
+            }
+
+            var map = new Dictionary<string, decimal>(StringComparer.Ordinal);
+            if (test.TestQuestions != null && test.TestQuestions.Count > 0)
+            {
+                foreach (var item in test.TestQuestions)
+                {
+                    if (string.IsNullOrWhiteSpace(item.QuestionId)) continue;
+                    map[item.QuestionId] = item.Points > 0m ? item.Points : 1m;
+                }
+            }
+
+            if (test.QuestionSnapshots != null && test.QuestionSnapshots.Count > 0)
+            {
+                foreach (var item in test.QuestionSnapshots)
+                {
+                    if (string.IsNullOrWhiteSpace(item.OriginalQuestionId)) continue;
+                    map.TryAdd(item.OriginalQuestionId, item.Points > 0m ? item.Points : 1m);
+                }
+            }
+
+            if (orderedQuestionIds.Count == 0)
+            {
+                orderedQuestionIds = map.Keys.ToList();
+            }
+
+            return TestScoreDistribution.NormalizeOrAllocate(
+                orderedQuestionIds,
+                map,
+                TestScoreDistribution.FixedTotalScore);
+        }
+
+        private async Task<decimal> ResolveMaxPointsAsync(string sessionId, string questionId)
+        {
+            var sessionSpec = new Specification<Session>(x => x.Id == sessionId)
+                .Include(x => x.StudentAnswers)
+                .Include("Test.TestQuestions")
+                .Include("Test.QuestionSnapshots");
+            var session = await _sRepo.FirstOrDefaultAsync(sessionSpec);
+            if (session == null)
+            {
+                return 1m;
+            }
+
+            var questionIds = session.StudentAnswers
+                .Select(a => a.QuestionId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            var pointsByQuestion = BuildPointsMap(session.Test, questionIds);
+            if (pointsByQuestion.TryGetValue(questionId, out var points) && points > 0m)
+            {
+                return points;
+            }
+
+            if (questionIds.Count > 0)
+            {
+                return Math.Round(
+                    TestScoreDistribution.FixedTotalScore / questionIds.Count,
+                    2,
+                    MidpointRounding.AwayFromZero);
+            }
+
+            return 1m;
         }
     }
 }

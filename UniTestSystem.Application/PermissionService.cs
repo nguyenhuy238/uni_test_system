@@ -25,7 +25,7 @@ namespace UniTestSystem.Application
                 new() { Role = Role.Admin, Permissions = PermissionCodes.All.ToList() },
                 new() { Role = Role.Lecturer, Permissions = new() {
                         PermissionCodes.Reports_View, PermissionCodes.Reports_Export,
-                        PermissionCodes.Question_View, PermissionCodes.Question_Create, PermissionCodes.Question_Edit, PermissionCodes.Question_Delete, PermissionCodes.Question_Categorize,
+                        PermissionCodes.Question_View, PermissionCodes.Question_Create, PermissionCodes.Question_Edit, PermissionCodes.Question_Delete, PermissionCodes.Question_Approve, PermissionCodes.Question_Categorize,
                         PermissionCodes.Tests_View, PermissionCodes.Tests_Create, PermissionCodes.Tests_Publish,
                         PermissionCodes.Exam_Schedule, PermissionCodes.Grading_Manual,
                         PermissionCodes.Analytics_Difficulty

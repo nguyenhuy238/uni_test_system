@@ -1068,6 +1068,9 @@ namespace UniTestSystem.Migrations
                     b.Property<string>("AssessmentId")
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<int>("AssessmentType")
+                        .HasColumnType("int");
+
                     b.Property<string>("CourseId")
                         .HasColumnType("nvarchar(450)");
 
@@ -1080,9 +1083,6 @@ namespace UniTestSystem.Migrations
 
                     b.Property<int>("DurationMinutes")
                         .HasColumnType("int");
-
-                    b.Property<string>("FrozenRandom")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsArchived")
                         .HasColumnType("bit");
@@ -1099,24 +1099,11 @@ namespace UniTestSystem.Migrations
                     b.Property<DateTime?>("PublishedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("RandomEssay")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RandomMCQ")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RandomTF")
-                        .HasColumnType("int");
-
                     b.Property<bool>("ShuffleOptions")
                         .HasColumnType("bit");
 
                     b.Property<bool>("ShuffleQuestions")
                         .HasColumnType("bit");
-
-                    b.Property<string>("SubjectIdFilter")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Title")
                         .IsRequired()

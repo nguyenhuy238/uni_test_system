@@ -145,4 +145,41 @@ public partial class MainWindow : Window
 
         Application.Current.ShutdownMode = previousShutdownMode;
     }
+
+    private async void CreateUser_Click(object sender, RoutedEventArgs e)
+    {
+        var createUserWindow = new CreateUserWindow(_viewModel.EditableRoles, _viewModel.Faculties, _viewModel.Classes)
+        {
+            Owner = this
+        };
+
+        var result = createUserWindow.ShowDialog();
+        if (result != true || createUserWindow.CreatedUser is null)
+        {
+            return;
+        }
+
+        await _viewModel.CreateUserFromDialogAsync(createUserWindow.CreatedUser);
+    }
+
+    private async void CreateQuestion_Click(object sender, RoutedEventArgs e)
+    {
+        var createQuestionWindow = new CreateQuestionWindow(
+            _viewModel.QuestionTypeOptions,
+            _viewModel.QuestionSkillOptions,
+            _viewModel.QuestionDifficultyOptions,
+            _viewModel.QuestionSubjectOptions,
+            _viewModel.QuestionBankOptions)
+        {
+            Owner = this
+        };
+
+        var result = createQuestionWindow.ShowDialog();
+        if (result != true || createQuestionWindow.CreatedQuestion is null)
+        {
+            return;
+        }
+
+        await _viewModel.CreateQuestionFromDialogAsync(createQuestionWindow.CreatedQuestion);
+    }
 }

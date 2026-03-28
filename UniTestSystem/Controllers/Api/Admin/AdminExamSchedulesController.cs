@@ -25,7 +25,7 @@ public class AdminExamSchedulesController : ControllerBase
     public async Task<IActionResult> GetAll()
     {
         var schedules = await _scheduleService.GetAllSchedulesAsync();
-        return Ok(schedules);
+        return Ok(schedules.Select(MapScheduleDto).ToList());
     }
 
     [HttpPost]
@@ -35,7 +35,9 @@ public class AdminExamSchedulesController : ControllerBase
         {
             var schedule = request.ToDomain();
             await _scheduleService.CreateScheduleAsync(schedule);
-            return Ok(schedule);
+
+            var created = await _scheduleService.GetScheduleByIdAsync(schedule.Id);
+            return Ok(MapScheduleDto(created ?? schedule));
         }
         catch (Exception ex)
         {
@@ -226,6 +228,81 @@ public class AdminExamSchedulesController : ControllerBase
         format = default;
         return false;
     }
+
+    private static AdminExamScheduleDto MapScheduleDto(ExamSchedule schedule)
+    {
+        return new AdminExamScheduleDto
+        {
+            Id = schedule.Id,
+            TestId = schedule.TestId,
+            CourseId = schedule.CourseId,
+            Room = schedule.Room,
+            StartTime = schedule.StartTime,
+            EndTime = schedule.EndTime,
+            ExamType = schedule.ExamType,
+            IsManuallyLocked = schedule.IsManuallyLocked,
+            CreatedAt = schedule.CreatedAt,
+            UpdatedAt = schedule.UpdatedAt,
+            Course = schedule.Course == null
+                ? null
+                : new AdminExamScheduleCourseDto
+                {
+                    Id = schedule.Course.Id,
+                    Code = schedule.Course.Code,
+                    Name = schedule.Course.Name,
+                    SubjectArea = schedule.Course.SubjectArea,
+                    Semester = schedule.Course.Semester
+                },
+            Test = schedule.Test == null
+                ? null
+                : new AdminExamScheduleTestDto
+                {
+                    Id = schedule.Test.Id,
+                    Title = schedule.Test.Title,
+                    Type = schedule.Test.Type.ToString(),
+                    AssessmentType = schedule.Test.AssessmentType.ToString(),
+                    DurationMinutes = schedule.Test.DurationMinutes,
+                    PassScore = schedule.Test.PassScore,
+                    IsPublished = schedule.Test.IsPublished
+                }
+        };
+    }
+}
+
+public class AdminExamScheduleDto
+{
+    public string Id { get; set; } = "";
+    public string TestId { get; set; } = "";
+    public string CourseId { get; set; } = "";
+    public string Room { get; set; } = "";
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+    public string ExamType { get; set; } = "Final";
+    public bool IsManuallyLocked { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public AdminExamScheduleCourseDto? Course { get; set; }
+    public AdminExamScheduleTestDto? Test { get; set; }
+}
+
+public class AdminExamScheduleCourseDto
+{
+    public string Id { get; set; } = "";
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string SubjectArea { get; set; } = "";
+    public string Semester { get; set; } = "";
+}
+
+public class AdminExamScheduleTestDto
+{
+    public string Id { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Type { get; set; } = "";
+    public string AssessmentType { get; set; } = "";
+    public int DurationMinutes { get; set; }
+    public int PassScore { get; set; }
+    public bool IsPublished { get; set; }
 }
 
 public class CreateExamScheduleRequest

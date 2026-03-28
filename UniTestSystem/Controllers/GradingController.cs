@@ -1,4 +1,5 @@
 using UniTestSystem.Application.Interfaces;
+using UniTestSystem.Application;
 using UniTestSystem.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +16,12 @@ namespace UniTestSystem.Controllers
         public GradingController(IGradingService gradingService)
         {
             _gradingService = gradingService;
+        }
+
+        [HttpGet("/grading")]
+        public IActionResult Index()
+        {
+            return RedirectToAction(nameof(Pending));
         }
 
         [HttpGet("/grading/pending")]
@@ -42,23 +49,45 @@ namespace UniTestSystem.Controllers
             var s = await _gradingService.GetSessionForGradingAsync(id);
             if (s == null) return NotFound();
 
-            var testQPoints = s.Test?.TestQuestions.ToDictionary(tq => tq.QuestionId, tq => tq.Points) ?? new Dictionary<string, decimal>();
+            var testQPoints = BuildQuestionPointsMap(
+                s.Test,
+                s.StudentAnswers.Select(sa => sa.QuestionId));
+            var questionOrder = BuildQuestionOrderMap(s.Test);
 
             var vm = new GradeSessionViewModel
             {
                 Session = s,
                 Test = s.Test ?? new Test(),
-                Essays = s.StudentAnswers
-                    .Where(sa => sa.Question != null && sa.Question.Type == QType.Essay)
-                    .Select(sa => new GradeSessionViewModel.EssayItem
+                Answers = s.StudentAnswers
+                    .Where(sa => sa.Question != null)
+                    .OrderBy(sa => questionOrder.TryGetValue(sa.QuestionId, out var order) ? order : int.MaxValue)
+                    .ThenBy(sa => sa.QuestionId, StringComparer.Ordinal)
+                    .Select(sa =>
                     {
-                        QuestionId = sa.QuestionId,
-                        Content = sa.Question?.Content ?? "(Question removed)",
-                        UserAnswer = sa.EssayAnswer,
-                        MaxPoints = testQPoints.TryGetValue(sa.QuestionId, out var p) ? p : 1m,
-                        GivenScore = sa.Score,
-                        Comment = sa.Comment
-                    }).ToList()
+                        var q = sa.Question!;
+                        var maxPoints = testQPoints.TryGetValue(sa.QuestionId, out var p) ? p : 1m;
+                        if (maxPoints <= 0m) maxPoints = 1m;
+
+                        var isAutoGradable = q.Type != QType.Essay;
+                        return new GradeSessionViewModel.AnswerItem
+                        {
+                            QuestionId = sa.QuestionId,
+                            Type = q.Type,
+                            TypeLabel = GetQuestionTypeLabel(q.Type),
+                            Content = q.Content ?? "(Question removed)",
+                            UserAnswerDisplay = BuildUserAnswerDisplay(q, sa),
+                            CorrectAnswerDisplay = BuildCorrectAnswerDisplay(q),
+                            MaxPoints = maxPoints,
+                            GivenScore = Math.Clamp(sa.Score, 0m, maxPoints),
+                            AutoSuggestedScore = isAutoGradable && !sa.GradedAt.HasValue
+                                ? Math.Clamp(sa.Score, 0m, maxPoints)
+                                : null,
+                            IsAutoGradable = isAutoGradable,
+                            IsManuallyGraded = sa.GradedAt.HasValue,
+                            Comment = sa.Comment
+                        };
+                    })
+                    .ToList()
             };
 
             ViewBag.IsLocked = await _gradingService.IsGradeLockedAsync(id);
@@ -78,7 +107,7 @@ namespace UniTestSystem.Controllers
                 {
                     var score = scores[qid];
                     var comment = comments.ContainsKey(qid) ? comments[qid] : null;
-                    await _gradingService.GradeEssayAsync(id, qid, score, comment);
+                    await _gradingService.GradeAnswerAsync(id, qid, score, comment);
                 }
 
                 if (finalize)
@@ -152,6 +181,222 @@ namespace UniTestSystem.Controllers
                 TempData["Err"] = "Error resolving regrade request: " + ex.Message;
             }
             return RedirectToAction(nameof(RegradeRequests));
+        }
+
+        private static Dictionary<string, decimal> BuildQuestionPointsMap(Test? test, IEnumerable<string>? questionIds)
+        {
+            var map = new Dictionary<string, decimal>(StringComparer.Ordinal);
+            var orderedQuestionIds = (questionIds ?? Array.Empty<string>())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            if (test == null)
+            {
+                return TestScoreDistribution.AllocateEvenlyByQuestionIds(
+                    orderedQuestionIds,
+                    TestScoreDistribution.FixedTotalScore);
+            }
+
+            if (test.TestQuestions != null && test.TestQuestions.Count > 0)
+            {
+                foreach (var item in test.TestQuestions)
+                {
+                    if (string.IsNullOrWhiteSpace(item.QuestionId)) continue;
+                    map[item.QuestionId] = item.Points > 0m ? item.Points : 1m;
+                }
+            }
+
+            if (test.QuestionSnapshots != null && test.QuestionSnapshots.Count > 0)
+            {
+                foreach (var item in test.QuestionSnapshots)
+                {
+                    if (string.IsNullOrWhiteSpace(item.OriginalQuestionId)) continue;
+                    map.TryAdd(item.OriginalQuestionId, item.Points > 0m ? item.Points : 1m);
+                }
+            }
+
+            if (orderedQuestionIds.Count == 0)
+            {
+                orderedQuestionIds = map.Keys.ToList();
+            }
+
+            return TestScoreDistribution.NormalizeOrAllocate(
+                orderedQuestionIds,
+                map,
+                TestScoreDistribution.FixedTotalScore);
+        }
+
+        private static Dictionary<string, int> BuildQuestionOrderMap(Test? test)
+        {
+            var map = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (test == null)
+            {
+                return map;
+            }
+
+            if (test.TestQuestions != null && test.TestQuestions.Count > 0)
+            {
+                foreach (var item in test.TestQuestions.OrderBy(x => x.Order))
+                {
+                    if (string.IsNullOrWhiteSpace(item.QuestionId) || map.ContainsKey(item.QuestionId)) continue;
+                    map[item.QuestionId] = item.Order;
+                }
+            }
+
+            if (map.Count == 0 && test.QuestionSnapshots != null && test.QuestionSnapshots.Count > 0)
+            {
+                foreach (var item in test.QuestionSnapshots.OrderBy(x => x.Order))
+                {
+                    if (string.IsNullOrWhiteSpace(item.OriginalQuestionId) || map.ContainsKey(item.OriginalQuestionId)) continue;
+                    map[item.OriginalQuestionId] = item.Order;
+                }
+            }
+
+            return map;
+        }
+
+        private static string GetQuestionTypeLabel(QType type) => type switch
+        {
+            QType.MCQ => "MCQ",
+            QType.TrueFalse => "True/False",
+            QType.Essay => "Essay",
+            QType.Matching => "Matching",
+            QType.DragDrop => "DragDrop",
+            _ => type.ToString()
+        };
+
+        private static string BuildUserAnswerDisplay(Question question, StudentAnswer answer)
+        {
+            if (question.Type == QType.Essay)
+            {
+                return string.IsNullOrWhiteSpace(answer.EssayAnswer) ? "(chua tra loi)" : answer.EssayAnswer.Trim();
+            }
+
+            if (question.Type == QType.MCQ || question.Type == QType.TrueFalse)
+            {
+                var selectedRaw = answer.SelectedOptionId?.Trim();
+                if (string.IsNullOrWhiteSpace(selectedRaw))
+                {
+                    return "(chua chon)";
+                }
+
+                var orderedOptions = question.Options
+                    .Where(o => !o.IsDeleted)
+                    .OrderBy(o => o.Id, StringComparer.Ordinal)
+                    .ToList();
+
+                var selectedOption = orderedOptions.FirstOrDefault(o =>
+                    string.Equals(o.Id, selectedRaw, StringComparison.OrdinalIgnoreCase));
+                if (selectedOption == null && selectedRaw.Length == 1 && char.IsLetter(selectedRaw[0]))
+                {
+                    var idx = char.ToUpperInvariant(selectedRaw[0]) - 'A';
+                    if (idx >= 0 && idx < orderedOptions.Count)
+                    {
+                        selectedOption = orderedOptions[idx];
+                    }
+                }
+
+                if (selectedOption == null)
+                {
+                    selectedOption = orderedOptions.FirstOrDefault(o =>
+                        string.Equals(o.Content?.Trim(), selectedRaw, StringComparison.OrdinalIgnoreCase));
+                }
+
+                if (selectedOption == null)
+                {
+                    return selectedRaw;
+                }
+
+                if (question.Type == QType.MCQ)
+                {
+                    var selectedIndex = orderedOptions.FindIndex(o => o.Id == selectedOption.Id);
+                    var selectedLabel = selectedIndex >= 0 ? ((char)('A' + selectedIndex)).ToString() : "";
+                    return $"{selectedLabel}) {selectedOption.Content}";
+                }
+
+                return selectedOption.Content;
+            }
+
+            var mapping = ParseKeyValueAnswer(answer.EssayAnswer ?? answer.SelectedOptionId);
+            if (mapping.Count == 0)
+            {
+                return "(chua tra loi)";
+            }
+
+            return string.Join(Environment.NewLine, mapping.Select(kv => $"{kv.Key} -> {kv.Value}"));
+        }
+
+        private static string BuildCorrectAnswerDisplay(Question question)
+        {
+            if (question.Type == QType.Essay)
+            {
+                return "(cham tay)";
+            }
+
+            if (question.Type == QType.MCQ || question.Type == QType.TrueFalse)
+            {
+                var orderedOptions = question.Options
+                    .Where(o => !o.IsDeleted)
+                    .OrderBy(o => o.Id, StringComparer.Ordinal)
+                    .ToList();
+
+                var correctParts = new List<string>();
+                for (var i = 0; i < orderedOptions.Count; i++)
+                {
+                    var option = orderedOptions[i];
+                    if (!option.IsCorrect) continue;
+                    if (question.Type == QType.MCQ)
+                    {
+                        correctParts.Add($"{(char)('A' + i)}) {option.Content}");
+                    }
+                    else
+                    {
+                        correctParts.Add(option.Content);
+                    }
+                }
+
+                return correctParts.Count > 0 ? string.Join(Environment.NewLine, correctParts) : "(khong xac dinh)";
+            }
+
+            if (question.Type == QType.Matching)
+            {
+                var pairs = question.MatchingPairs ?? new List<MatchPair>();
+                if (pairs.Count == 0) return "(khong xac dinh)";
+                return string.Join(Environment.NewLine, pairs.Select(p => $"{p.L} -> {p.R}"));
+            }
+
+            if (question.Type == QType.DragDrop)
+            {
+                var slots = question.DragDrop?.Slots ?? new List<DragSlot>();
+                if (slots.Count == 0) return "(khong xac dinh)";
+                return string.Join(Environment.NewLine, slots.Select(s => $"{s.Name} -> {s.Answer}"));
+            }
+
+            return "(khong xac dinh)";
+        }
+
+        private static Dictionary<string, string> ParseKeyValueAnswer(string? raw)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return result;
+            }
+
+            var normalized = raw.Replace("||", Environment.NewLine, StringComparison.Ordinal);
+            var lines = normalized.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var line in lines)
+            {
+                var idx = line.IndexOf('=');
+                if (idx <= 0) continue;
+
+                var key = line[..idx].Trim();
+                var value = line[(idx + 1)..].Trim();
+                if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value)) continue;
+                result[key] = value;
+            }
+
+            return result;
         }
     }
 }

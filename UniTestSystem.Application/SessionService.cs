@@ -23,6 +23,7 @@ public class SessionService : ISessionService
     private readonly ExamAccessTokenService _examAccessTokenService;
     private readonly SessionDeviceGuardService _sessionDeviceGuardService;
     private readonly IGradingService _gradingService;
+    private readonly IExamHubNotifier _examHubNotifier;
 
     public SessionService(
         IRepository<Session> sessionRepo,
@@ -35,7 +36,8 @@ public class SessionService : ISessionService
         AssessmentService assessmentService,
         ExamAccessTokenService examAccessTokenService,
         SessionDeviceGuardService sessionDeviceGuardService,
-        IGradingService gradingService)
+        IGradingService gradingService,
+        IExamHubNotifier examHubNotifier)
     {
         _sessionRepo = sessionRepo;
         _testRepo = testRepo;
@@ -48,6 +50,7 @@ public class SessionService : ISessionService
         _examAccessTokenService = examAccessTokenService;
         _sessionDeviceGuardService = sessionDeviceGuardService;
         _gradingService = gradingService;
+        _examHubNotifier = examHubNotifier;
     }
 
     public async Task<SessionServiceResult<StartSessionData>> StartSessionAsync(StartSessionCommand command)
@@ -151,7 +154,19 @@ public class SessionService : ISessionService
                 return Failure<StartSessionData>(SessionServiceStatus.Conflict, "SESSION_BOUND_OTHER_DEVICE", "Session is bound to another device.");
             }
 
-            return Success(await BuildStartSessionDataAsync(inProgress, test, command.IncludeQuestionPayload));
+            var sessionForStartData = inProgress;
+            if (command.IncludeQuestionPayload)
+            {
+                sessionForStartData = await GetSessionWithQuestionGraphAsync(inProgress.Id) ?? inProgress;
+                var sessionTest = await GetTestWithQuestionsAsync(sessionForStartData.TestId) ?? test;
+                var repaired = await EnsureSessionAnswersInitializedAsync(sessionForStartData, sessionTest);
+                if (repaired)
+                {
+                    sessionForStartData = await GetSessionWithQuestionGraphAsync(inProgress.Id) ?? sessionForStartData;
+                }
+            }
+
+            return Success(await BuildStartSessionDataAsync(sessionForStartData, test, command.IncludeQuestionPayload));
         }
 
         var started = await _testService.StartAsync(command.TestId, command.UserId);
@@ -161,18 +176,21 @@ public class SessionService : ISessionService
             return Failure<StartSessionData>(SessionServiceStatus.Conflict, "SESSION_BOUND_OTHER_DEVICE", "Session is bound to another device.");
         }
 
-        return Success(await BuildStartSessionDataAsync(started, test, command.IncludeQuestionPayload));
+        var startData = await BuildStartSessionDataAsync(started, test, command.IncludeQuestionPayload);
+        await NotifySessionStartedSafeAsync(started, test);
+
+        return Success(startData);
     }
 
     public async Task<SessionServiceResult<ResumeSessionData>> ResumeSessionAsync(ResumeSessionCommand command)
     {
-        var session = await _sessionRepo.FirstOrDefaultAsync(x => x.Id == command.SessionId);
+        var session = await GetSessionWithQuestionGraphAsync(command.SessionId);
         if (session == null)
         {
             return Failure<ResumeSessionData>(SessionServiceStatus.NotFound, "SESSION_NOT_FOUND", "Session not found.");
         }
 
-        var test = await _testRepo.FirstOrDefaultAsync(x => x.Id == session.TestId);
+        var test = await GetTestWithQuestionsAsync(session.TestId);
         if (test == null)
         {
             return Failure<ResumeSessionData>(SessionServiceStatus.NotFound, "TEST_NOT_FOUND", "Test not found.");
@@ -187,6 +205,12 @@ public class SessionService : ISessionService
         if (!allowed)
         {
             return Failure<ResumeSessionData>(SessionServiceStatus.Conflict, "SESSION_BOUND_OTHER_DEVICE", "Session is bound to another device.");
+        }
+
+        var repaired = await EnsureSessionAnswersInitializedAsync(session, test);
+        if (repaired)
+        {
+            session = await GetSessionWithQuestionGraphAsync(session.Id) ?? session;
         }
 
         session.LastActivityAt = DateTime.UtcNow;
@@ -208,7 +232,7 @@ public class SessionService : ISessionService
 
     public async Task<SessionServiceResult<SaveAnswerData>> SaveAnswerAsync(SaveAnswerCommand command)
     {
-        var session = await _sessionRepo.FirstOrDefaultAsync(x => x.Id == command.SessionId);
+        var session = await GetSessionWithAnswersAsync(command.SessionId);
         if (session == null)
         {
             return Failure<SaveAnswerData>(SessionServiceStatus.NotFound, "SESSION_NOT_FOUND", "Session not found.");
@@ -304,7 +328,7 @@ public class SessionService : ISessionService
 
     public async Task<SessionServiceResult<SubmitSessionData>> SubmitSessionAsync(SubmitSessionCommand command)
     {
-        var session = await _sessionRepo.FirstOrDefaultAsync(x => x.Id == command.SessionId);
+        var session = await GetSessionWithAnswersAsync(command.SessionId);
         if (session == null)
         {
             return Failure<SubmitSessionData>(SessionServiceStatus.NotFound, "SESSION_NOT_FOUND", "Session not found.");
@@ -322,20 +346,64 @@ public class SessionService : ISessionService
         }
 
         var submitted = await _testService.SubmitAsync(command.SessionId, command.Answers);
-        return Success(new SubmitSessionData
+        var submitData = MapSubmitSessionData(submitted);
+
+        await NotifySessionSubmittedSafeAsync(session, submitData);
+
+        return Success(submitData);
+    }
+
+    public async Task<SubmitSessionData?> AutoSubmitAsync(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
         {
-            Id = submitted.Id,
-            TotalScore = submitted.TotalScore,
-            MaxScore = submitted.MaxScore,
-            Percent = submitted.Percent,
-            IsPassed = submitted.IsPassed,
-            Status = submitted.Status
-        });
+            return null;
+        }
+
+        var session = await GetSessionWithAnswersAsync(sessionId);
+        if (session == null)
+        {
+            return null;
+        }
+
+        if (SubmittedStatuses.Contains(session.Status))
+        {
+            return MapSubmitSessionData(session);
+        }
+
+        var answers = session.StudentAnswers.ToDictionary(
+            answer => answer.QuestionId,
+            answer => !string.IsNullOrWhiteSpace(answer.EssayAnswer)
+                ? answer.EssayAnswer
+                : answer.SelectedOptionId);
+
+        var submitted = await _testService.SubmitAsync(sessionId, answers);
+        submitted.Status = SessionStatus.AutoSubmitted;
+        submitted.LastActivityAt = DateTime.UtcNow;
+        await _sessionRepo.UpsertAsync(x => x.Id == submitted.Id, submitted);
+
+        var submitData = MapSubmitSessionData(submitted);
+        await SafeNotifyAsync(() => _examHubNotifier.NotifyAutoSubmittedAsync(sessionId));
+
+        return submitData;
+    }
+
+    private static SubmitSessionData MapSubmitSessionData(Session session)
+    {
+        return new SubmitSessionData
+        {
+            Id = session.Id,
+            TotalScore = session.TotalScore,
+            MaxScore = session.MaxScore,
+            Percent = session.Percent,
+            IsPassed = session.IsPassed,
+            Status = session.Status
+        };
     }
 
     public async Task<SessionServiceResult<GetSessionResultData>> GetSessionResultAsync(GetSessionResultCommand command)
     {
-        var session = await _sessionRepo.FirstOrDefaultAsync(x => x.Id == command.SessionId);
+        var session = await GetSessionWithQuestionGraphAsync(command.SessionId);
         if (session == null)
         {
             return Failure<GetSessionResultData>(SessionServiceStatus.NotFound, "SESSION_NOT_FOUND", "Session not found.");
@@ -530,6 +598,35 @@ public class SessionService : ISessionService
         };
 
         await _sessionLogRepo.InsertAsync(log);
+
+        var blurCount = string.Equals(command.ActionType, "Blur", StringComparison.OrdinalIgnoreCase)
+            ? await _sessionLogRepo.CountAsync(x => x.SessionId == command.SessionId && x.ActionType == "Blur")
+            : 0;
+
+        var severity = ClassifyAntiCheatSeverity(command.ActionType, command.Detail, blurCount);
+        if (string.Equals(severity, "Critical", StringComparison.Ordinal))
+        {
+            var violationCount = await CountCriticalViolationsAsync(command.SessionId);
+            var user = await _userRepo.FirstOrDefaultAsync(x => x.Id == session.UserId);
+            var test = await _testRepo.FirstOrDefaultAsync(x => x.Id == session.TestId);
+
+            var payload = new AntiCheatAlertPayload
+            {
+                SessionId = session.Id,
+                UserId = session.UserId,
+                UserName = user?.Name ?? user?.Email ?? session.UserId,
+                TestId = session.TestId,
+                TestTitle = test?.Title ?? "Unknown",
+                ActionType = command.ActionType,
+                Detail = command.Detail,
+                Timestamp = log.Timestamp,
+                ViolationCount = violationCount,
+                Severity = "Critical"
+            };
+
+            await SafeNotifyAsync(() => _examHubNotifier.NotifyAntiCheatAlertAsync(session.TestId, payload));
+        }
+
         return Success(true);
     }
 
@@ -564,6 +661,14 @@ public class SessionService : ISessionService
             })
             .OrderByDescending(x => x.LastActivityAt)
             .ToList();
+    }
+
+    public async Task<List<Session>> GetActiveSessionsForTimerAsync()
+    {
+        return await _sessionRepo.GetAllAsync(s =>
+            s.Status == SessionStatus.InProgress &&
+            s.TimerStartedAt != null &&
+            !s.IsDeleted);
     }
 
     public async Task<bool> TerminateSessionAsync(string id)
@@ -610,11 +715,203 @@ public class SessionService : ISessionService
             .ToList();
     }
 
+    private async Task NotifySessionStartedSafeAsync(Session session, Test test)
+    {
+        await SafeNotifyAsync(async () =>
+        {
+            var user = await _userRepo.FirstOrDefaultAsync(x => x.Id == session.UserId);
+            var item = new AdminSessionItem
+            {
+                Id = session.Id,
+                UserId = session.UserId,
+                UserName = user?.Name ?? "Unknown",
+                UserEmail = user?.Email,
+                TestId = session.TestId,
+                TestTitle = test.Title,
+                StartAt = session.StartAt,
+                EndAt = session.EndAt,
+                Status = session.Status,
+                LastActivityAt = session.LastActivityAt,
+                TotalScore = session.TotalScore,
+                MaxScore = session.MaxScore,
+                Percent = session.Percent,
+                IsPassed = session.IsPassed
+            };
+
+            await _examHubNotifier.NotifySessionStartedAsync(item);
+        });
+    }
+
+    private async Task NotifySessionSubmittedSafeAsync(Session session, SubmitSessionData submitData)
+    {
+        await SafeNotifyAsync(async () =>
+        {
+            var user = await _userRepo.FirstOrDefaultAsync(x => x.Id == session.UserId);
+            var userName = user?.Name ?? user?.Email ?? session.UserId;
+            await _examHubNotifier.NotifySessionSubmittedAsync(session.TestId, submitData, userName);
+        });
+    }
+
+    private static async Task SafeNotifyAsync(Func<Task> notifyAction)
+    {
+        try
+        {
+            await notifyAction();
+        }
+        catch
+        {
+            // Ignore realtime notification failures to keep core session flow stable.
+        }
+    }
+
+    private async Task<int> CountCriticalViolationsAsync(string sessionId)
+    {
+        var logs = await _sessionLogRepo.GetAllAsync(x => x.SessionId == sessionId);
+        var orderedLogs = logs
+            .OrderBy(x => x.Timestamp)
+            .ThenBy(x => x.Id)
+            .ToList();
+
+        var blurOccurrence = 0;
+        var criticalCount = 0;
+
+        foreach (var log in orderedLogs)
+        {
+            if (string.Equals(log.ActionType, "Blur", StringComparison.OrdinalIgnoreCase))
+            {
+                blurOccurrence++;
+            }
+
+            if (IsCriticalAntiCheat(log.ActionType, log.Detail, blurOccurrence))
+            {
+                criticalCount++;
+            }
+        }
+
+        return criticalCount;
+    }
+
+    private static string ClassifyAntiCheatSeverity(string actionType, string? detail, int blurCount)
+    {
+        if (IsCriticalAntiCheat(actionType, detail, blurCount))
+        {
+            return "Critical";
+        }
+
+        if (string.Equals(actionType, "CopyBlocked", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(actionType, "CutBlocked", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(actionType, "PasteBlocked", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(actionType, "ContextMenuBlocked", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Warning";
+        }
+
+        if (string.Equals(actionType, "Blur", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(actionType, "Focus", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Info";
+        }
+
+        return "Info";
+    }
+
+    private static bool IsCriticalAntiCheat(string actionType, string? detail, int blurCount)
+    {
+        if (string.Equals(actionType, "ShortcutBlocked", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsCriticalShortcut(detail);
+        }
+
+        return string.Equals(actionType, "Blur", StringComparison.OrdinalIgnoreCase) && blurCount >= 3;
+    }
+
+    private static bool IsCriticalShortcut(string? detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail))
+        {
+            return false;
+        }
+
+        var normalized = detail.Replace(" ", string.Empty, StringComparison.Ordinal)
+            .ToUpperInvariant();
+
+        return normalized.Contains("F12", StringComparison.Ordinal) ||
+               normalized.Contains("CTRL+U", StringComparison.Ordinal);
+    }
+
     private async Task<int> GetRemainingSecondsOrDefaultAsync(Session session)
     {
         var test = await _testRepo.FirstOrDefaultAsync(x => x.Id == session.TestId);
         var durationMinutes = test?.DurationMinutes ?? 30;
         return ComputeRemainingSeconds(session, durationMinutes);
+    }
+
+    private async Task<bool> EnsureSessionAnswersInitializedAsync(Session session, Test test)
+    {
+        if (session.Status != SessionStatus.InProgress || session.StudentAnswers.Count > 0)
+        {
+            return false;
+        }
+
+        var testQuestionIds = test.TestQuestions
+            .Select(tq => tq.QuestionId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (testQuestionIds.Count == 0 && test.QuestionSnapshots.Count > 0)
+        {
+            testQuestionIds = test.QuestionSnapshots
+                .OrderBy(x => x.Order)
+                .Select(x => x.OriginalQuestionId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
+
+        if (testQuestionIds.Count == 0)
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        foreach (var questionId in testQuestionIds)
+        {
+            session.StudentAnswers.Add(new StudentAnswer
+            {
+                SessionId = session.Id,
+                QuestionId = questionId,
+                Score = 0m,
+                AnsweredAt = now
+            });
+        }
+
+        session.UpdatedAt = now;
+        await _sessionRepo.UpsertAsync(x => x.Id == session.Id, session);
+        return true;
+    }
+
+    private Task<Session?> GetSessionWithAnswersAsync(string sessionId)
+    {
+        var spec = new Specification<Session>(x => x.Id == sessionId)
+            .Include(s => s.StudentAnswers);
+        return _sessionRepo.FirstOrDefaultAsync(spec);
+    }
+
+    private Task<Session?> GetSessionWithQuestionGraphAsync(string sessionId)
+    {
+        var spec = new Specification<Session>(x => x.Id == sessionId)
+            .Include(s => s.StudentAnswers)
+            .Include("StudentAnswers.Question.Options");
+        return _sessionRepo.FirstOrDefaultAsync(spec);
+    }
+
+    private Task<Test?> GetTestWithQuestionsAsync(string testId)
+    {
+        var spec = new Specification<Test>(x => x.Id == testId)
+            .Include(x => x.TestQuestions)
+            .Include(x => x.QuestionSnapshots);
+        return _testRepo.FirstOrDefaultAsync(spec);
     }
 
     private async Task<bool> EnsureSessionDeviceAsync(string sessionId, SessionRequestContext context)

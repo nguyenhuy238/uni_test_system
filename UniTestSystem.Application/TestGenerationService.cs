@@ -9,17 +9,19 @@ namespace UniTestSystem.Application
     public class TestGenerationService : ITestGenerationService
     {
         private readonly IRepository<Question> _qRepo;
+        private readonly IRepository<QuestionBank> _questionBankRepo;
         private readonly IRepository<Test> _tRepo;
         private readonly IRepository<Student> _sRepo;
         private readonly IRepository<Assessment> _asRepo;
 
         public TestGenerationService(
             IRepository<Question> qRepo,
+            IRepository<QuestionBank> questionBankRepo,
             IRepository<Test> tRepo,
             IRepository<Student> sRepo,
             IRepository<Assessment> asRepo)
         {
-            _qRepo = qRepo; _tRepo = tRepo; _sRepo = sRepo; _asRepo = asRepo;
+            _qRepo = qRepo; _questionBankRepo = questionBankRepo; _tRepo = tRepo; _sRepo = sRepo; _asRepo = asRepo;
         }
 
         // === Generate 1 đề chung cho nhóm ===
@@ -42,15 +44,16 @@ namespace UniTestSystem.Application
                                        .First().Key;
 
             var allQs = await _qRepo.GetAllAsync();
-            var pool = FilterBySubjects(allQs, subjects);
+            var coursePool = await FilterByCourseAsync(allQs, opt.CourseId);
+            var pool = FilterBySubjects(coursePool, subjects);
             pool = FilterByTags(pool, opt.Tags);
 
             if (string.Equals(opt.DifficultyPolicy, "ByYear", StringComparison.OrdinalIgnoreCase))
                 pool = FilterByDifficulty(pool, majorityLevel);
 
-            var (picked, missing) = PickWithFallback(pool, allQs, subjects, opt);
+            var (picked, missing) = PickWithFallback(pool, coursePool, subjects, opt);
             if (missing > 0 && opt.FailWhenInsufficient)
-                throw BuildInsufficientError(missing, opt, allQs, subjects, pool);
+                throw BuildInsufficientError(missing, opt, coursePool, subjects, pool);
 
             var alloc = ScoringAllocator.Allocate(
                 picked.Select(p => (p.Id, p.Type.ToString(), (string?)p.DifficultyLevelId)),
@@ -66,6 +69,7 @@ namespace UniTestSystem.Application
                 PassScore = (int)Math.Round((double)opt.TotalScore / 2.0, MidpointRounding.AwayFromZero),
                 ShuffleQuestions = true,
                 TotalMaxScore = opt.TotalScore,
+                CourseId = string.IsNullOrWhiteSpace(opt.CourseId) ? null : opt.CourseId.Trim(),
                 TestQuestions = picked.Select((q, idx) => new TestQuestion 
                 { 
                     QuestionId = q.Id, 
@@ -89,6 +93,7 @@ namespace UniTestSystem.Application
             if (targets.Count == 0) throw new InvalidOperationException("Không có sinh viên mục tiêu.");
 
             var allQuestions = await _qRepo.GetAllAsync();
+            var coursePool = await FilterByCourseAsync(allQuestions, opt.CourseId);
             var results = new List<PersonalizedTestResult>();
 
             foreach (var u in targets)
@@ -97,15 +102,15 @@ namespace UniTestSystem.Application
                     ? new HashSet<string>(opt.Subjects!, StringComparer.OrdinalIgnoreCase)
                     : new HashSet<string>(new[] { u.Major ?? "" }, StringComparer.OrdinalIgnoreCase);
 
-                var basePool = FilterBySubjects(allQuestions, subjectSet.Where(s => !string.IsNullOrWhiteSpace(s)).ToList());
+                var basePool = FilterBySubjects(coursePool, subjectSet.Where(s => !string.IsNullOrWhiteSpace(s)).ToList());
                 basePool = FilterByTags(basePool, opt.Tags);
 
                 if (string.Equals(opt.DifficultyPolicy, "ByYear", StringComparison.OrdinalIgnoreCase))
                     basePool = FilterByDifficulty(basePool, u.AcademicYear ?? "2024");
 
-                var (picked, missing) = PickWithFallback(basePool, allQuestions, subjectSet.ToList(), opt);
+                var (picked, missing) = PickWithFallback(basePool, coursePool, subjectSet.ToList(), opt);
                 if (missing > 0 && opt.FailWhenInsufficient)
-                    throw BuildInsufficientError(missing, opt, allQuestions, subjectSet.ToList(), basePool, u);
+                    throw BuildInsufficientError(missing, opt, coursePool, subjectSet.ToList(), basePool, u);
 
                 var alloc = ScoringAllocator.Allocate(
                     picked.Select(p => (p.Id, p.Type.ToString(), (string?)p.DifficultyLevelId)),
@@ -121,6 +126,7 @@ namespace UniTestSystem.Application
                     PassScore = (int)Math.Round((double)opt.TotalScore / 2.0, MidpointRounding.AwayFromZero),
                     ShuffleQuestions = true,
                     TotalMaxScore = opt.TotalScore,
+                    CourseId = string.IsNullOrWhiteSpace(opt.CourseId) ? null : opt.CourseId.Trim(),
                     TestQuestions = picked.Select((q, idx) => new TestQuestion 
                     { 
                         QuestionId = q.Id, 
@@ -190,15 +196,21 @@ namespace UniTestSystem.Application
 
         private static List<Question> FilterByDifficulty(List<Question> pool, string academicYear)
         {
-            bool Allowed(string qDiff, string userYear) => qDiff switch
+            var yearLevel = ParseAcademicYearLevel(academicYear);
+            if (yearLevel >= 4)
             {
-                "Easy" => true,
-                "Medium" => true,
-                "Hard" => true,
-                _ => true
+                return pool;
+            }
+
+            bool Allowed(string qDiff) => NormalizeDifficulty(qDiff) switch
+            {
+                "easy" => yearLevel == 1 || yearLevel == 2,
+                "medium" => yearLevel == 2 || yearLevel == 3,
+                "hard" => yearLevel == 3,
+                _ => false
             };
-            var yr = string.IsNullOrWhiteSpace(academicYear) ? "2024" : academicYear;
-            return pool.Where(q => Allowed(q.DifficultyLevelId ?? "Easy", yr)).ToList();
+
+            return pool.Where(q => Allowed(q.DifficultyLevelId ?? string.Empty)).ToList();
         }
 
         private static List<Question> FilterByTags(List<Question> pool, List<string>? tags)
@@ -206,6 +218,84 @@ namespace UniTestSystem.Application
             if (tags == null || tags.Count == 0) return pool;
             var set = new HashSet<string>(tags, StringComparer.OrdinalIgnoreCase);
             return pool.Where(q => q.Tags != null && q.Tags.Any(t => set.Contains(t))).ToList();
+        }
+
+        private async System.Threading.Tasks.Task<List<Question>> FilterByCourseAsync(List<Question> pool, string? courseId)
+        {
+            if (string.IsNullOrWhiteSpace(courseId))
+            {
+                return pool;
+            }
+
+            var normalizedCourseId = courseId.Trim();
+            var bankIds = (await _questionBankRepo.GetAllAsync(qb => !qb.IsDeleted && qb.CourseId == normalizedCourseId))
+                .Select(qb => qb.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .ToHashSet(StringComparer.Ordinal);
+
+            if (bankIds.Count == 0)
+            {
+                return new List<Question>();
+            }
+
+            return pool
+                .Where(q => !string.IsNullOrWhiteSpace(q.QuestionBankId) && bankIds.Contains(q.QuestionBankId!))
+                .ToList();
+        }
+
+        private static string NormalizeDifficulty(string difficulty)
+        {
+            return (difficulty ?? string.Empty).Trim().ToLowerInvariant();
+        }
+
+        private static int ParseAcademicYearLevel(string academicYear)
+        {
+            if (string.IsNullOrWhiteSpace(academicYear))
+            {
+                return 4;
+            }
+
+            var normalized = academicYear.Trim().ToLowerInvariant();
+            var compact = normalized.Replace(" ", string.Empty);
+            if (compact.Length == 1 && int.TryParse(compact, out var yearDigit) && yearDigit is >= 1 and <= 4)
+            {
+                return yearDigit;
+            }
+
+            static int ParseToken(string value, string token)
+            {
+                var index = value.IndexOf(token, StringComparison.Ordinal);
+                if (index < 0)
+                {
+                    return 0;
+                }
+
+                var yearIndex = index + token.Length;
+                if (yearIndex >= value.Length)
+                {
+                    return 0;
+                }
+
+                var yearChar = value[yearIndex];
+                if (yearChar is < '1' or > '4')
+                {
+                    return 0;
+                }
+
+                if (yearIndex + 1 < value.Length && char.IsDigit(value[yearIndex + 1]))
+                {
+                    return 0;
+                }
+
+                return yearChar - '0';
+            }
+
+            var parsedYear = ParseToken(compact, "year");
+            if (parsedYear == 0) parsedYear = ParseToken(compact, "năm");
+            if (parsedYear == 0) parsedYear = ParseToken(compact, "nam");
+            if (parsedYear is >= 1 and <= 4) return parsedYear;
+
+            return 4;
         }
 
         /// <summary>

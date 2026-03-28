@@ -1,6 +1,3 @@
-using UniTestSystem.Application.Interfaces;
-using UniTestSystem.Application;
-using UniTestSystem.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,78 +7,37 @@ namespace UniTestSystem.Controllers
     [Route("autotests")]
     public class AutoTestsController : Controller
     {
-        private readonly ITestGenerationService _svc;
-        private readonly ITestAdministrationService _testAdministrationService;
-        private readonly INotificationService? _noti;
-
-        public AutoTestsController(
-            ITestGenerationService svc,
-            ITestAdministrationService testAdministrationService,
-            INotificationService? noti = null)
-        { _svc = svc; _testAdministrationService = testAdministrationService; _noti = noti; }
-
         [HttpGet("generate")]
-        public async Task<IActionResult> Generate()
+        public IActionResult Generate()
         {
-            var classes = await _testAdministrationService.GetDepartmentOptionsAsync();
-            ViewBag.Faculties = classes;
-
-            return View(new AutoTestOptions
-            {
-                Mode = "Faculty",
-                DifficultyPolicy = "ByYear",
-                McqCount = 8,
-                TfCount = 2,
-                TotalScore = 10m
-            });
+            return RedirectToCreateRandom("Chế độ Auto Generate đã được tắt. Vui lòng dùng Create Test với Random theo loại câu hỏi.");
         }
 
         [HttpPost("generate")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Generate([FromForm] AutoTestOptions opt)
+        public IActionResult GeneratePost()
         {
-            var actor = User.Identity?.Name ?? "admin";
-            try
-            {
-                var results = await _svc.GeneratePersonalizedAsync(opt, actor);
-                ViewBag.StartAtUtc = opt.StartAtUtc ?? DateTime.UtcNow.AddSeconds(10);
-                ViewBag.EndAtUtc = opt.EndAtUtc ?? DateTime.UtcNow.AddDays(7);
-                return View("BatchResult", results);
-            }
-            catch (Exception ex)
-            {
-                TempData["Err"] = ex.Message;
-                return RedirectToAction(nameof(Generate));
-            }
+            return RedirectToCreateRandom("Chế độ Auto Generate đã được tắt.");
         }
 
         [HttpPost("assign-one")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AssignOne(string testId, string userId, DateTime? startAt, DateTime? endAt)
+        public IActionResult AssignOne()
         {
-            var (found, _) = await _testAdministrationService.AssignToUserAsync(testId, userId, startAt, endAt);
-            if (!found) return NotFound();
-
-            TempData["Msg"] = "Đã phân công bài thi cho sinh viên.";
-            return RedirectToAction(nameof(Generate));
+            return RedirectToCreateRandom("Chế độ Auto Generate đã được tắt.");
         }
 
         [HttpPost("assign-all")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AssignAll([FromForm] string[] testIds, [FromForm] string[] userIds, DateTime? startAt, DateTime? endAt)
+        public IActionResult AssignAll()
         {
-            if (testIds.Length != userIds.Length) return BadRequest();
-            var assignments = testIds
-                .Select((testId, index) => new TestUserAssignment
-                {
-                    TestId = testId,
-                    UserId = userIds[index]
-                })
-                .ToList();
-            var count = await _testAdministrationService.AssignPairsAsync(assignments, startAt, endAt);
+            return RedirectToCreateRandom("Chế độ Auto Generate đã được tắt.");
+        }
 
-            TempData["Msg"] = $"Đã phân công {count} bài thi cho sinh viên tương ứng.";
-            return RedirectToAction(nameof(Generate));
+        private IActionResult RedirectToCreateRandom(string message)
+        {
+            TempData["Info"] = message;
+            return RedirectToAction("Create", "Tests", new { QuestionSelectionMode = "RandomByType" });
         }
     }
 }

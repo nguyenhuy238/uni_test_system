@@ -6,7 +6,10 @@
     bool hasPendingRegrade = (bool)(ViewBag.HasPendingRegrade ?? false);
     string pendingReason = (string?)(ViewBag.PendingRegradeReason) ?? "";
     var moderationLogs = ViewBag.ModerationLogs as List<UniTestSystem.Domain.SessionLog> ?? new List<UniTestSystem.Domain.SessionLog>();
-    bool canModerateLock = User.IsInRole(UniTestSystem.Domain.Role.Admin.ToString()) || User.IsInRole(UniTestSystem.Domain.Role.Staff.ToString());
+    bool canModerateLock =
+        User.IsInRole(UniTestSystem.Domain.Role.Admin.ToString()) ||
+        User.IsInRole(UniTestSystem.Domain.Role.Staff.ToString()) ||
+        User.IsInRole(UniTestSystem.Domain.Role.Lecturer.ToString());
 }
 
 <div class="container py-4">
@@ -73,11 +76,11 @@
         </div>
     }
 
-    @if (Model.Essays.Count == 0)
+    @if (Model.Answers.Count == 0)
     {
         <div class="alert alert-info shadow-sm border-0 d-flex align-items-center">
             <i class="bi bi-info-circle-fill fs-4 me-3"></i>
-            This session does not contain any essay questions requiring manual grading.
+            This session does not contain any answer rows.
         </div>
     }
     else
@@ -85,41 +88,69 @@
         <form method="post">
             @Html.AntiForgeryToken()
 
-            @foreach (var e in Model.Essays)
+            @foreach (var item in Model.Answers)
             {
-                var maxText = e.MaxPoints.ToString("0.##", CultureInfo.InvariantCulture);
-                var valText = (e.GivenScore ?? 0).ToString("0.##", CultureInfo.InvariantCulture);
-
+                var maxText = item.MaxPoints.ToString("0.##", CultureInfo.InvariantCulture);
+                var valText = item.GivenScore.ToString("0.##", CultureInfo.InvariantCulture);
                 <div class="card shadow-sm border-0 mb-4 overflow-hidden">
                     <div class="card-header bg-primary text-white py-3">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h6 class="mb-0">Question Content</h6>
-                            <span class="badge bg-white text-primary">Max: @maxText pts</span>
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div class="fw-bold">@item.TypeLabel</div>
+                            <div>
+                                @if (item.IsAutoGradable)
+                                {
+                                    <span class="badge bg-light text-dark">Auto-gradable</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning text-dark">Manual</span>
+                                }
+                                @if (item.IsManuallyGraded)
+                                {
+                                    <span class="badge bg-dark ms-1">Manually updated</span>
+                                }
+                                <span class="badge bg-white text-primary ms-1">Max: @maxText pts</span>
+                            </div>
                         </div>
                     </div>
                     <div class="card-body p-4">
-                        <div class="bg-light p-3 rounded mb-4 border-start border-4 border-primary">
-                            @e.Content
+                        <div class="bg-light p-3 rounded mb-3 border-start border-4 border-primary" style="white-space: pre-wrap;">@item.Content</div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Student Answer</label>
+                                <pre class="form-control" style="min-height: 90px; white-space: pre-wrap;">@item.UserAnswerDisplay</pre>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Expected / Correct Answer</label>
+                                <pre class="form-control bg-light" style="min-height: 90px; white-space: pre-wrap;">@item.CorrectAnswerDisplay</pre>
+                            </div>
                         </div>
 
-                        <h6 class="fw-bold mb-2">Student's Response:</h6>
-                        <div class="p-3 border rounded bg-white shadow-none mb-4" style="min-height: 100px; white-space: pre-wrap;">@e.UserAnswer</div>
-
-                        <div class="row g-3">
+                        <div class="row g-3 align-items-end">
                             <div class="col-md-4">
                                 <label class="form-label fw-bold">Assigned Score</label>
                                 <div class="input-group">
-                                    <input type="number" 
-                                           class="form-control" 
-                                           name="scores[@e.QuestionId]" 
-                                           step="0.01" min="0" max="@maxText" 
+                                    <input type="number"
+                                           class="form-control"
+                                           name="scores[@item.QuestionId]"
+                                           step="0.01" min="0" max="@maxText"
                                            value="@valText" required @(isLocked ? "disabled" : "") />
                                     <span class="input-group-text">/ @maxText</span>
                                 </div>
+                                @if (item.AutoSuggestedScore.HasValue)
+                                {
+                                    <div class="form-text">Auto score suggestion: @item.AutoSuggestedScore.Value.ToString("0.##", CultureInfo.InvariantCulture) / @maxText</div>
+                                }
                             </div>
                             <div class="col-md-8">
-                                <label class="form-label fw-bold">Feedback/Comments (Optional)</label>
-                                <input type="text" class="form-control" name="comments[@e.QuestionId]" value="@e.Comment" placeholder="Provide feedback to the student..." @(isLocked ? "disabled" : "") />
+                                <label class="form-label fw-bold">Feedback / Comments (Optional)</label>
+                                <input type="text"
+                                       class="form-control"
+                                       name="comments[@item.QuestionId]"
+                                       value="@item.Comment"
+                                       placeholder="Provide feedback to the student..."
+                                       @(isLocked ? "disabled" : "") />
                             </div>
                         </div>
                     </div>

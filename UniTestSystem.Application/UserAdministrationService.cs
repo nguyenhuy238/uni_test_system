@@ -32,12 +32,14 @@ public sealed class UserAdministrationService : IUserAdministrationService
     {
         var students = await _studentRepo.GetAllAsync();
         var lecturers = await _lecturerRepo.GetAllAsync();
-        var admins = (await _userRepo.GetAllAsync()).Where(u => u.Role == Role.Admin).ToList();
+        var nonAcademicUsers = (await _userRepo.GetAllAsync())
+            .Where(u => u.Role != Role.Student && u.Role != Role.Lecturer)
+            .ToList();
 
         var allUsers = new List<User>();
         allUsers.AddRange(students);
         allUsers.AddRange(lecturers);
-        allUsers.AddRange(admins);
+        allUsers.AddRange(nonAcademicUsers);
 
         var filtered = allUsers.AsEnumerable();
 
@@ -160,6 +162,7 @@ public sealed class UserAdministrationService : IUserAdministrationService
         return new UserLookupData
         {
             Classes = classes,
+            Faculties = faculties,
             FacultyNames = faculties
                 .Select(f => f.Name)
                 .Where(name => !string.IsNullOrWhiteSpace(name))

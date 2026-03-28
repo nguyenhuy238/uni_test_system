@@ -1,8 +1,13 @@
 @using UniTestSystem.Application
 @using UniTestSystem.Domain
+@using Microsoft.AspNetCore.Mvc.Rendering
 @model PagedResult<Question>
 
 @{
+    var subjectFilterOptions = ViewBag.SubjectFilterOptions as IEnumerable<SelectListItem> ?? new List<SelectListItem>();
+    var difficultyLevelFilterOptions = ViewBag.DifficultyLevelFilterOptions as IEnumerable<SelectListItem> ?? new List<SelectListItem>();
+    var subjectNameMap = ViewBag.SubjectNameMap as IDictionary<string, string> ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    var difficultyNameMap = ViewBag.DifficultyLevelNameMap as IDictionary<string, string> ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     var f = new QuestionFilter
     {
         Keyword = Context.Request.Query["Keyword"],
@@ -12,6 +17,8 @@
         Page = int.TryParse(Context.Request.Query["Page"], out var p) ? p : 1,
         PageSize = int.TryParse(Context.Request.Query["PageSize"], out var s) ? s : 20
     };
+    bool canSubmitQuestion = (ViewBag.CanSubmitQuestion as bool?) ?? false;
+    bool canApproveQuestion = (ViewBag.CanApproveQuestion as bool?) ?? false;
 }
 
 <h2>Question Bank</h2>
@@ -23,18 +30,36 @@
             <option value="">--Type--</option>
             @foreach (var t in Enum.GetNames(typeof(QType)))
             {
-                <option value="@t" selected="@(Context.Request.Query["Type"] == t)">@t</option>
+                if (Context.Request.Query["Type"] == t)
+                {
+                    <option value="@t" selected>@t</option>
+                }
+                else
+                {
+                    <option value="@t">@t</option>
+                }
             }
         </select>
     </div>
-    <div class="col"><input name="SubjectId" value="@f.SubjectId" class="form-control" placeholder="Môn học (ID)" /></div>
-    <div class="col"><input name="DifficultyLevelId" value="@f.DifficultyLevelId" class="form-control" placeholder="Độ khó (ID)" /></div>
+    <div class="col">
+        <select name="SubjectId" class="form-select" asp-items="subjectFilterOptions"></select>
+    </div>
+    <div class="col">
+        <select name="DifficultyLevelId" class="form-select" asp-items="difficultyLevelFilterOptions"></select>
+    </div>
     <div class="col">
         <select name="Status" class="form-select">
             <option value="">--Status--</option>
             @foreach (var statusName in Enum.GetNames(typeof(QuestionStatus)))
             {
-                <option value="@statusName" selected="@(Context.Request.Query["Status"] == statusName)">@statusName</option>
+                if (Context.Request.Query["Status"] == statusName)
+                {
+                    <option value="@statusName" selected>@statusName</option>
+                }
+                else
+                {
+                    <option value="@statusName">@statusName</option>
+                }
             }
         </select>
     </div>
@@ -72,11 +97,33 @@
                     }
                     <span class="badge bg-@color">@q.Status</span>
                 </td>
-                <td>@q.SubjectId</td>
-                <td>@q.DifficultyLevelId</td>
+                <td>@(subjectNameMap.TryGetValue(q.SubjectId, out var subjectName) ? subjectName : q.SubjectId)</td>
+                <td>@(difficultyNameMap.TryGetValue(q.DifficultyLevelId, out var difficultyName) ? difficultyName : q.DifficultyLevelId)</td>
                 <td>@string.Join(", ", q.Tags)</td>
                 <td class="text-nowrap">
                     <a class="btn btn-sm btn-outline-primary" href="/Questions/Edit/@q.Id">Edit</a>
+                    @if (canSubmitQuestion && (q.Status == QuestionStatus.Draft || q.Status == QuestionStatus.Rejected))
+                    {
+                        <form asp-action="Submit" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@q.Id" />
+                            <button type="submit" class="btn btn-sm btn-outline-warning" onclick="return confirm('Gửi câu hỏi này để duyệt?')">Submit</button>
+                        </form>
+                    }
+                    @if (canApproveQuestion && q.Status == QuestionStatus.Pending)
+                    {
+                        <form asp-action="Approve" method="post" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@q.Id" />
+                            <button type="submit" class="btn btn-sm btn-outline-success" onclick="return confirm('Phê duyệt câu hỏi này?')">Approve</button>
+                        </form>
+                        <form asp-action="Reject" method="post" class="d-inline reject-form" data-question-id="@q.Id">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@q.Id" />
+                            <input type="hidden" name="reason" value="" />
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+                        </form>
+                    }
                     <form asp-action="Clone" method="post" class="d-inline">
                         <input type="hidden" name="id" value="@q.Id" /><button class="btn btn-sm btn-outline-secondary">Clone</button>
                     </form>
@@ -98,8 +145,22 @@
         {
             var active = i == Model.Page ? "active" : "";
             <li class="page-item @active">
-                <a class="page-link" href="@Context.Request.Path?@($"Page={i}&PageSize={Model.PageSize}&Keyword={f.Keyword}&Type={Context.Request.Query["Type"]}&SubjectId={f.SubjectId}&DifficultyLevelId={f.DifficultyLevelId}&TagsCsv={f.TagsCsv}")">@i</a>
+                <a class="page-link" href="@Context.Request.Path?@($"Page={i}&PageSize={Model.PageSize}&Keyword={f.Keyword}&Type={Context.Request.Query["Type"]}&SubjectId={f.SubjectId}&DifficultyLevelId={f.DifficultyLevelId}&Status={Context.Request.Query["Status"]}&TagsCsv={f.TagsCsv}")">@i</a>
             </li>
         }
     </ul>
 </nav>
+
+<script>
+    document.querySelectorAll('.reject-form').forEach(function(form) {
+        form.addEventListener('submit', function(event) {
+            const reason = prompt('Nhập lý do từ chối câu hỏi:', 'Rejected by reviewer');
+            if (reason === null) {
+                event.preventDefault();
+                return;
+            }
+
+            form.querySelector('input[name="reason"]').value = reason.trim();
+        });
+    });
+</script>

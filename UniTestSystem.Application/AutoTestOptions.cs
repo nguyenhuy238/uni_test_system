@@ -9,12 +9,12 @@ namespace UniTestSystem.Application
     public class AutoTestOptions
     {
         // Target
-        public string Mode { get; set; } = "Faculty"; // "Faculty" | "Class" | "Students"
-        public string? FacultyName { get; set; }
+        public string Mode { get; set; } = "Class"; // "Class" | "Students"
         public string? StudentClassId { get; set; }
         public List<string>? UserIds { get; set; }
 
         // Filters
+        public string? CourseId { get; set; }
         public List<string>? Subjects { get; set; }
         /// <summary>
         /// Chapter / Lesson / Lesson tags filtering.

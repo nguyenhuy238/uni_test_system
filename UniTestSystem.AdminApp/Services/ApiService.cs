@@ -98,11 +98,22 @@ namespace UniTestSystem.AdminApp.Services
         public async Task<List<Test>?> GetTestsAsync() => await GetJsonAsync<List<Test>>($"{_baseUrl}/api/admin/tests");
         public async Task<List<User>?> GetUsersAsync() => await GetJsonAsync<List<User>>($"{_baseUrl}/api/admin/users");
         public async Task<List<Question>?> GetQuestionsAsync() => await GetJsonAsync<List<Question>>($"{_baseUrl}/api/admin/questions");
+        public async Task<List<TestCreationQuestion>?> GetApprovedQuestionsByCourseAsync(string courseId)
+        {
+            if (string.IsNullOrWhiteSpace(courseId))
+            {
+                return new List<TestCreationQuestion>();
+            }
+
+            var response = await GetJsonAsync<TestCreationQuestionPoolResponse>($"{_baseUrl}/api/admin/questions/by-course/{Uri.EscapeDataString(courseId)}");
+            return response?.Items ?? new List<TestCreationQuestion>();
+        }
         public async Task<List<Session>?> GetSessionsAsync() => await GetJsonAsync<List<Session>>($"{_baseUrl}/api/admin/sessions");
         public async Task<DashboardStats?> GetDashboardStatsAsync() => await GetJsonAsync<DashboardStats>($"{_baseUrl}/api/admin/dashboard/summary");
         public async Task<List<Faculty>?> GetFacultiesAsync() => await GetJsonAsync<List<Faculty>>($"{_baseUrl}/api/admin/faculties");
         public async Task<List<StudentClass>?> GetClassesAsync() => await GetJsonAsync<List<StudentClass>>($"{_baseUrl}/api/admin/classes");
         public async Task<List<Course>?> GetCoursesAsync() => await GetJsonAsync<List<Course>>($"{_baseUrl}/api/admin/courses");
+        public async Task<QuestionMetadataResponse?> GetQuestionMetadataAsync() => await GetJsonAsync<QuestionMetadataResponse>($"{_baseUrl}/api/admin/questions/metadata");
         public async Task<List<Enrollment>?> GetEnrollmentsAsync(string courseId) => await GetJsonAsync<List<Enrollment>>($"{_baseUrl}/api/admin/enrollments/{courseId}");
         public async Task<List<AuditLogEntry>?> GetAuditLogsAsync(string? from = null, string? to = null, string? keyword = null, string? actor = null, int take = 300)
             => await GetJsonAsync<List<AuditLogEntry>>($"{_baseUrl}/api/admin/audit?from={Uri.EscapeDataString(from ?? "")}&to={Uri.EscapeDataString(to ?? "")}&keyword={Uri.EscapeDataString(keyword ?? "")}&actor={Uri.EscapeDataString(actor ?? "")}&take={take}");
@@ -117,34 +128,24 @@ namespace UniTestSystem.AdminApp.Services
         public async Task<bool> UpdateTestAsync(string id, Test test) => await SendJsonAsync(HttpMethod.Put, $"{_baseUrl}/api/admin/tests/{id}", test);
         public async Task<bool> DeleteTestAsync(string id) => await SendWithoutBodyAsync(HttpMethod.Delete, $"{_baseUrl}/api/admin/tests/{id}");
 
-        public async Task<bool> CreateUserAsync(User user, string password)
+        public async Task<bool> CreateUserAsync(User user)
         {
             var payload = new
             {
                 user.Name,
                 user.Email,
-                user.Role,
-                user.Department,
-                user.Level,
-                user.Skill,
-                user.TeamId,
-                Password = password
+                user.Role
             };
             return await SendJsonAsync(HttpMethod.Post, $"{_baseUrl}/api/admin/users", payload);
         }
 
-        public async Task<bool> UpdateUserAsync(string id, User user, string? password = null)
+        public async Task<bool> UpdateUserAsync(string id, User user)
         {
             var payload = new
             {
                 user.Name,
                 user.Email,
-                user.Role,
-                user.Department,
-                user.Level,
-                user.Skill,
-                user.TeamId,
-                Password = password
+                user.Role
             };
             return await SendJsonAsync(HttpMethod.Put, $"{_baseUrl}/api/admin/users/{id}", payload);
         }

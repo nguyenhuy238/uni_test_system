@@ -9,6 +9,7 @@ namespace UniTestSystem.Infrastructure.Persistence;
 public class AppDbContext : DbContext
 {
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+    private const string TestDeleteBlockedMessage = "Không được xóa bài test ở bất kỳ trạng thái nào để đảm bảo toàn vẹn dữ liệu. Vui lòng dùng Archive thay vì Delete.";
     private readonly IHttpContextAccessor _httpContextAccessor;
 
     public AppDbContext(DbContextOptions<AppDbContext> options, IHttpContextAccessor httpContextAccessor) : base(options)
@@ -190,12 +191,6 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Test>(entity =>
         {
             entity.ToTable("Test");
-
-            entity.Property(e => e.FrozenRandom)
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, JsonOptions),
-                    v => JsonSerializer.Deserialize<FrozenRandomConfig>(v, JsonOptions))
-                .HasColumnType("nvarchar(max)");
 
             // Test -> Assessment
             entity.HasOne(d => d.Assessment)
@@ -562,6 +557,8 @@ public class AppDbContext : DbContext
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        EnsureTestHardDeleteIsBlocked();
+
         var entries = ChangeTracker.Entries()
             .Where(e => e.Entity is not AuditEntry && (e.State == EntityState.Added || e.State == EntityState.Modified || e.State == EntityState.Deleted))
             .ToList();
@@ -577,7 +574,7 @@ public class AppDbContext : DbContext
                 Actor = actor,
                 Action = entry.State.ToString(),
                 EntityName = entry.Entity.GetType().Name,
-                EntityId = entry.Property("Id").CurrentValue?.ToString() ?? "0",
+                EntityId = GetEntityId(entry),
                 Before = entry.State == EntityState.Modified || entry.State == EntityState.Deleted 
                     ? JsonSerializer.Serialize(entry.OriginalValues.ToObject(), JsonOptions) 
                     : null,
@@ -589,5 +586,44 @@ public class AppDbContext : DbContext
         }
 
         return await base.SaveChangesAsync(cancellationToken);
+    }
+
+    private void EnsureTestHardDeleteIsBlocked()
+    {
+        var deletingTests = ChangeTracker.Entries<Test>()
+            .Where(e => e.State == EntityState.Deleted)
+            .Select(GetEntityId)
+            .ToList();
+
+        if (deletingTests.Count == 0)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(TestDeleteBlockedMessage);
+    }
+
+    private static string GetEntityId(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry)
+    {
+        var primaryKey = entry.Metadata.FindPrimaryKey();
+        if (primaryKey == null || primaryKey.Properties.Count == 0)
+        {
+            return "0";
+        }
+
+        var keyValues = primaryKey.Properties
+            .Select(keyProperty =>
+            {
+                var propertyEntry = entry.Properties.FirstOrDefault(p => p.Metadata.Name == keyProperty.Name);
+                if (propertyEntry == null)
+                {
+                    return $"{keyProperty.Name}=null";
+                }
+
+                var value = entry.State == EntityState.Deleted ? propertyEntry.OriginalValue : propertyEntry.CurrentValue;
+                return $"{keyProperty.Name}={value ?? "null"}";
+            });
+
+        return string.Join("|", keyValues);
     }
 }

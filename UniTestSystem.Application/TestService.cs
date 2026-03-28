@@ -15,10 +15,12 @@ namespace UniTestSystem.Application
         public async Task<Session> StartAsync(string testId, string userId)
         {
             // CHECK: Existing InProgress session
-            var existing = await _sRepo.FirstOrDefaultAsync(x => x.TestId == testId && x.UserId == userId && x.Status == SessionStatus.InProgress && !x.IsDeleted);
+            var existingSpec = new Specification<Session>(x => x.TestId == testId && x.UserId == userId && x.Status == SessionStatus.InProgress && !x.IsDeleted)
+                .Include(s => s.StudentAnswers);
+            var existing = await _sRepo.FirstOrDefaultAsync(existingSpec);
             if (existing != null) return existing;
 
-            var test = await _tRepo.FirstOrDefaultAsync(t => t.Id == testId) ?? throw new Exception("Test not found");
+            var test = await GetTestWithQuestionsAsync(testId) ?? throw new Exception("Test not found");
             var all = await _qRepo.GetAllAsync();
 
             // Pick questions for this session
@@ -56,19 +58,35 @@ namespace UniTestSystem.Application
 
         public async Task<Session> SubmitAsync(string sessionId, Dictionary<string, string?> answers)
         {
-            var s = await _sRepo.FirstOrDefaultAsync(x => x.Id == sessionId) ?? throw new Exception("Session not found");
+            var sessionSpec = new Specification<Session>(x => x.Id == sessionId)
+                .Include(s => s.StudentAnswers);
+            var s = await _sRepo.FirstOrDefaultAsync(sessionSpec) ?? throw new Exception("Session not found");
             if (s.Status == SessionStatus.Submitted) return s;
 
-            var test = await _tRepo.FirstOrDefaultAsync(t => t.Id == s.TestId) ?? throw new Exception("Test not found");
-            var allQuestions = await _qRepo.GetAllAsync();
-            var qMap = allQuestions.ToDictionary(q => q.Id, q => q);
+            var test = await GetTestWithQuestionsAsync(s.TestId) ?? throw new Exception("Test not found");
+            var questionIds = s.StudentAnswers
+                .Select(x => x.QuestionId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var questionSpec = new Specification<Question>(q => questionIds.Contains(q.Id))
+                .Include(q => q.Options);
+            var questions = await _qRepo.ListAsync(questionSpec);
+            var qMap = questions.ToDictionary(q => q.Id, q => q, StringComparer.Ordinal);
 
             decimal autoScore = 0.0m;
             decimal autoMax = 0.0m;
             decimal manualMax = 0.0m;
 
             // Map points
-            var pointsByQ = BuildPointsMap(test, s.StudentAnswers.Select(sa => qMap[sa.QuestionId]).ToList());
+            var pointsByQ = BuildPointsMap(
+                test,
+                s.StudentAnswers
+                    .Select(sa => qMap.TryGetValue(sa.QuestionId, out var question) ? question : null)
+                    .Where(q => q != null)
+                    .Cast<Question>()
+                    .ToList());
 
             foreach (var sa in s.StudentAnswers)
             {
@@ -77,26 +95,29 @@ namespace UniTestSystem.Application
                 answers.TryGetValue(q.Id, out var selRaw);
                 selRaw ??= "";
 
-                decimal grade = 0.0m; // 0..1
+                decimal gradeRatio = 0.0m; // 0..1
                 bool isAuto = true;
+                var qPoints = pointsByQ.TryGetValue(q.Id, out var p) ? p : 1.0m;
+                if (qPoints <= 0m) qPoints = 1m;
 
                 switch (q.Type)
                 {
                     case QType.MCQ:
                     case QType.TrueFalse:
                         {
-                            var correct = q.Options.Where(o => o.IsCorrect).Select(o => o.Content).ToList();
                             var sel = selRaw.Trim();
-                            grade = (!string.IsNullOrEmpty(sel) && correct.Any() && correct.Contains(sel)) ? 1.0m : 0.0m;
-                            sa.SelectedOptionId = sel; // Reuse field for content if ID not available
-                            sa.Score = grade;
+                            gradeRatio = CalculateSingleChoiceGrade(q, sel);
+                            sa.SelectedOptionId = string.IsNullOrWhiteSpace(sel) ? null : sel;
+                            sa.EssayAnswer = null;
                             break;
                         }
                     case QType.Essay:
                         {
                             isAuto = false;
+                            sa.SelectedOptionId = null;
                             sa.EssayAnswer = selRaw;
                             sa.Score = 0;
+                            sa.GradedAt = null;
                             break;
                         }
                     case QType.Matching:
@@ -108,9 +129,9 @@ namespace UniTestSystem.Application
                                 .ToDictionary(g => g.Key, g => NormalizeToken(g.First().R), StringComparer.OrdinalIgnoreCase);
 
                             var actual = ParseKeyValueAnswer(selRaw);
-                            grade = CalculatePartialMatchScore(expected, actual);
+                            gradeRatio = CalculatePartialMatchScore(expected, actual);
+                            sa.SelectedOptionId = null;
                             sa.EssayAnswer = selRaw;
-                            sa.Score = grade;
                             break;
                         }
                     case QType.DragDrop:
@@ -122,9 +143,9 @@ namespace UniTestSystem.Application
                                 .ToDictionary(g => g.Key, g => NormalizeToken(g.First().Answer), StringComparer.OrdinalIgnoreCase);
 
                             var actual = ParseKeyValueAnswer(selRaw);
-                            grade = CalculatePartialMatchScore(expected, actual);
+                            gradeRatio = CalculatePartialMatchScore(expected, actual);
+                            sa.SelectedOptionId = null;
                             sa.EssayAnswer = selRaw;
-                            sa.Score = grade;
                             break;
                         }
                     default:
@@ -132,11 +153,13 @@ namespace UniTestSystem.Application
                         break;
                 }
 
-                var qPoints = pointsByQ.TryGetValue(q.Id, out var p) ? p : 1.0m;
-
                 if (isAuto)
                 {
-                    autoScore += grade * qPoints;
+                    var awardedPoints = Math.Round(gradeRatio * qPoints, 2, MidpointRounding.AwayFromZero);
+                    sa.Score = awardedPoints;
+                    sa.GradedAt = null;
+
+                    autoScore += awardedPoints;
                     autoMax += qPoints;
                 }
                 else
@@ -161,47 +184,107 @@ namespace UniTestSystem.Application
 
         private static Dictionary<string, decimal> BuildPointsMap(Test t, IEnumerable<Question> snapshot)
         {
-            var map = new Dictionary<string, decimal>();
+            var snapshotQuestions = snapshot.ToList();
+            var snapshotQuestionIdSet = snapshotQuestions
+                .Select(q => q.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .ToHashSet(StringComparer.Ordinal);
+
+            var orderedQuestionIds = new List<string>();
             if (t.TestQuestions != null && t.TestQuestions.Count > 0)
             {
-                var testQMap = t.TestQuestions.ToDictionary(i => i.QuestionId, i => i.Points);
-                foreach (var q in snapshot)
-                    map[q.Id] = testQMap.TryGetValue(q.Id, out var p) ? p : 1m;
+                orderedQuestionIds = t.TestQuestions
+                    .OrderBy(i => i.Order)
+                    .ThenBy(i => i.QuestionId, StringComparer.Ordinal)
+                    .Select(i => i.QuestionId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id) && snapshotQuestionIdSet.Contains(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
             }
-            else
+
+            if (orderedQuestionIds.Count == 0 && t.QuestionSnapshots != null && t.QuestionSnapshots.Count > 0)
             {
-                foreach (var q in snapshot) map[q.Id] = 1m;
+                orderedQuestionIds = t.QuestionSnapshots
+                    .OrderBy(i => i.Order)
+                    .ThenBy(i => i.OriginalQuestionId, StringComparer.Ordinal)
+                    .Select(i => i.OriginalQuestionId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id) && snapshotQuestionIdSet.Contains(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
             }
-            return map;
+
+            if (orderedQuestionIds.Count == 0)
+            {
+                orderedQuestionIds = snapshotQuestions
+                    .Select(q => q.Id)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .ToList();
+            }
+
+            var existingPoints = new Dictionary<string, decimal>(StringComparer.Ordinal);
+            if (t.TestQuestions != null && t.TestQuestions.Count > 0)
+            {
+                foreach (var item in t.TestQuestions
+                    .Where(i => !string.IsNullOrWhiteSpace(i.QuestionId))
+                    .GroupBy(i => i.QuestionId, StringComparer.Ordinal))
+                {
+                    existingPoints[item.Key] = item.First().Points;
+                }
+            }
+            else if (t.QuestionSnapshots != null && t.QuestionSnapshots.Count > 0)
+            {
+                foreach (var item in t.QuestionSnapshots
+                    .Where(i => !string.IsNullOrWhiteSpace(i.OriginalQuestionId))
+                    .GroupBy(i => i.OriginalQuestionId, StringComparer.Ordinal))
+                {
+                    existingPoints[item.Key] = item.First().Points;
+                }
+            }
+
+            return TestScoreDistribution.NormalizeOrAllocate(
+                orderedQuestionIds,
+                existingPoints,
+                TestScoreDistribution.FixedTotalScore);
         }
 
-        private async Task<List<Question>> BuildSnapshotAsync(Test t, IEnumerable<Question> all)
+        private Task<List<Question>> BuildSnapshotAsync(Test t, IEnumerable<Question> all)
         {
             if (t.TestQuestions != null && t.TestQuestions.Any())
             {
-                var qIds = t.TestQuestions.Select(i => i.QuestionId).ToHashSet();
-                return all.Where(q => qIds.Contains(q.Id)).ToList();
+                var qMap = all
+                    .Where(q => !string.IsNullOrWhiteSpace(q.Id))
+                    .GroupBy(q => q.Id, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+                var orderedQuestions = t.TestQuestions
+                    .OrderBy(i => i.Order)
+                    .ThenBy(i => i.QuestionId, StringComparer.Ordinal)
+                    .Select(i => qMap.TryGetValue(i.QuestionId, out var question) ? question : null)
+                    .Where(q => q != null)
+                    .Cast<Question>()
+                    .ToList();
+                return Task.FromResult(orderedQuestions);
             }
 
-            var cfg = t.FrozenRandom;
-            if (cfg == null) return new List<Question>();
-
-            var pool = all.Where(q => q.SubjectId == cfg.SubjectIdFilter).ToList();
-            var pick = new List<Question>();
-            var rnd = new Random();
-
-            void Add(QType type, int count)
+            if (t.QuestionSnapshots != null && t.QuestionSnapshots.Any())
             {
-                if (count <= 0) return;
-                var sub = pool.Where(q => q.Type == type).OrderBy(_ => rnd.Next()).Take(count).ToList();
-                pick.AddRange(sub);
+                var qMap = all
+                    .Where(q => !string.IsNullOrWhiteSpace(q.Id))
+                    .GroupBy(q => q.Id, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+                var orderedQuestions = t.QuestionSnapshots
+                    .OrderBy(i => i.Order)
+                    .Select(i => i.OriginalQuestionId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.Ordinal)
+                    .Select(id => qMap.TryGetValue(id, out var question) ? question : null)
+                    .Where(q => q != null)
+                    .Cast<Question>()
+                    .ToList();
+                return Task.FromResult(orderedQuestions);
             }
 
-            Add(QType.MCQ, cfg.RandomMCQ);
-            Add(QType.TrueFalse, cfg.RandomTF);
-            Add(QType.Essay, cfg.RandomEssay);
-
-            return pick;
+            return Task.FromResult(new List<Question>());
         }
 
         private static Dictionary<string, string> ParseKeyValueAnswer(string? raw)
@@ -246,5 +329,87 @@ namespace UniTestSystem.Application
 
         private static string NormalizeToken(string? input)
             => (input ?? string.Empty).Trim().ToLowerInvariant();
+
+        private static decimal CalculateSingleChoiceGrade(Question question, string selectedRaw)
+        {
+            if (string.IsNullOrWhiteSpace(selectedRaw))
+            {
+                return 0m;
+            }
+
+            var selected = selectedRaw.Trim();
+            var options = question.Options
+                .Where(o => !o.IsDeleted)
+                .OrderBy(o => o.Id, StringComparer.Ordinal)
+                .ToList();
+            if (!options.Any())
+            {
+                return 0m;
+            }
+
+            // 1) Client sends option id.
+            var selectedById = options.FirstOrDefault(o =>
+                string.Equals(o.Id, selected, StringComparison.OrdinalIgnoreCase));
+            if (selectedById != null)
+            {
+                return selectedById.IsCorrect ? 1m : 0m;
+            }
+
+            // 2) Web runner sends A/B/C labels (based on option order by id).
+            if (TryParseOptionLabel(selected, out var optionIndex) && optionIndex < options.Count)
+            {
+                return options[optionIndex].IsCorrect ? 1m : 0m;
+            }
+
+            // 3) Legacy clients may send 1-based numeric choice.
+            if (int.TryParse(selected, out var oneBased) &&
+                oneBased >= 1 &&
+                oneBased <= options.Count)
+            {
+                return options[oneBased - 1].IsCorrect ? 1m : 0m;
+            }
+
+            // 4) Legacy clients may send option content directly.
+            var selectedByContent = options.FirstOrDefault(o =>
+                string.Equals(NormalizeToken(o.Content), NormalizeToken(selected), StringComparison.Ordinal));
+            if (selectedByContent != null)
+            {
+                return selectedByContent.IsCorrect ? 1m : 0m;
+            }
+
+            return 0m;
+        }
+
+        private static bool TryParseOptionLabel(string value, out int index)
+        {
+            index = -1;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            var trimmed = value.Trim();
+            if (trimmed.Length != 1)
+            {
+                return false;
+            }
+
+            var upper = char.ToUpperInvariant(trimmed[0]);
+            if (upper < 'A' || upper > 'Z')
+            {
+                return false;
+            }
+
+            index = upper - 'A';
+            return true;
+        }
+
+        private async Task<Test?> GetTestWithQuestionsAsync(string testId)
+        {
+            var spec = new Specification<Test>(t => t.Id == testId)
+                .Include(t => t.TestQuestions)
+                .Include(t => t.QuestionSnapshots);
+            return await _tRepo.FirstOrDefaultAsync(spec);
+        }
     }
 }

@@ -202,5 +202,7 @@ public interface ISessionService
     Task<SessionServiceResult<SessionTouchData>> TouchSessionAsync(SessionTouchCommand command);
     Task<SessionServiceResult<bool>> LogEventAsync(SessionLogEventCommand command);
     Task<List<AdminSessionItem>> GetAdminSessionsAsync();
+    Task<List<Session>> GetActiveSessionsForTimerAsync();
+    Task<SubmitSessionData?> AutoSubmitAsync(string sessionId);
     Task<bool> TerminateSessionAsync(string id);
 }

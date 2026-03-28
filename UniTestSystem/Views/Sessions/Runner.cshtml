@@ -16,6 +16,10 @@
     ViewData["Title"] = testTitle;
 }
 
+@section HeadScripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+}
+
 <style>
     /* Header */
     .runner-header {
@@ -280,6 +284,113 @@
         margin: .4rem 0
     }
 
+    .matching-board, .dragdrop-board {
+        display: grid;
+        gap: .7rem;
+    }
+
+    .match-row {
+        display: grid;
+        grid-template-columns: minmax(160px, 1fr) minmax(220px, 1.2fr);
+        gap: .7rem;
+        align-items: center;
+    }
+
+    .match-left {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: .6rem;
+        padding: .5rem .65rem;
+        font-weight: 600;
+        color: #0f172a;
+    }
+
+    .dd-help {
+        font-size: .85rem;
+        color: #475569;
+    }
+
+    .dd-token-pool {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+    }
+
+    .dd-token {
+        border: 1px solid #93c5fd;
+        background: #eff6ff;
+        color: #1d4ed8;
+        border-radius: 999px;
+        padding: .35rem .75rem;
+        font-weight: 700;
+        cursor: grab;
+    }
+
+    .dd-token.active {
+        border-color: #2563eb;
+        background: #dbeafe;
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, .25);
+    }
+
+    .dd-token.used {
+        opacity: .55;
+    }
+
+    .dd-slot-list {
+        display: grid;
+        gap: .55rem;
+    }
+
+    .dd-slot-row {
+        display: grid;
+        grid-template-columns: minmax(130px, 1fr) minmax(220px, 1.5fr) auto;
+        gap: .6rem;
+        align-items: center;
+    }
+
+    .dd-slot-label {
+        font-weight: 700;
+        color: #334155;
+    }
+
+    .dd-slot {
+        border: 1px dashed #94a3b8;
+        background: #f8fafc;
+        color: #334155;
+        border-radius: .6rem;
+        padding: .5rem .65rem;
+        text-align: left;
+        min-height: 40px;
+    }
+
+    .dd-slot.filled {
+        border-style: solid;
+        border-color: #22c55e;
+        background: #f0fdf4;
+        color: #14532d;
+        font-weight: 700;
+    }
+
+    .dd-slot.drag-over {
+        border-color: #2563eb;
+        background: #dbeafe;
+    }
+
+    .dd-slot-clear {
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #334155;
+        border-radius: .45rem;
+        padding: .35rem .55rem;
+        font-size: .82rem;
+    }
+
+    @@media (max-width: 900px) {
+        .match-row, .dd-slot-row {
+            grid-template-columns: 1fr;
+        }
+    }
+
     .flag-btn {
         background: #f5f3ff;
         color: #6d28d9;
@@ -356,6 +467,60 @@
     .sync-error .sync-dot {
         background: #dc2626;
     }
+
+    .hub-indicator {
+        position: fixed;
+        right: 16px;
+        top: 62px;
+        z-index: 1200;
+        border-radius: 999px;
+        padding: .45rem .8rem;
+        font-size: .85rem;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        border: 1px solid transparent;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, .12);
+    }
+
+    .hub-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        flex: 0 0 8px;
+    }
+
+    .hub-connected {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+        color: #166534;
+    }
+
+    .hub-connected .hub-dot {
+        background: #16a34a;
+    }
+
+    .hub-reconnecting {
+        background: #fffbeb;
+        border-color: #fde68a;
+        color: #92400e;
+    }
+
+    .hub-reconnecting .hub-dot {
+        background: #f59e0b;
+    }
+
+    .hub-disconnected {
+        background: #fef2f2;
+        border-color: #fecaca;
+        color: #991b1b;
+    }
+
+    .hub-disconnected .hub-dot {
+        background: #dc2626;
+    }
 </style>
 
 <div class="runner-header">
@@ -380,6 +545,11 @@
 <div id="syncIndicator" class="sync-indicator sync-ok" role="status" aria-live="polite">
     <span class="sync-dot"></span>
     <span id="syncIndicatorText">Đã lưu</span>
+</div>
+
+<div id="hubIndicator" class="hub-indicator hub-reconnecting" role="status" aria-live="polite">
+    <span class="hub-dot"></span>
+    <span id="hubIndicatorText">Đang kết nối realtime...</span>
 </div>
 
 <div class="layout">
@@ -429,7 +599,7 @@
                     }
 
                     @{
-                        var opts = q.Options.OrderBy(o => o.Id).ToList();
+                        var opts = q.Options.Where(o => !o.IsDeleted).OrderBy(o => o.Id).ToList();
                     }
                     @if (q.Type == QType.MCQ)
                     {
@@ -439,7 +609,7 @@
                                 var label = ((char)('A' + i)).ToString();
                                 var rid = $"r_{q.Id}_{label}";
                                 <div>
-                                    <input id="@rid" type="radio" name="@q.Id" value="@label" />
+                                    <input id="@rid" type="radio" name="@q.Id" value="@opts[i].Id" />
                                     <label for="@rid">@label) @opts[i].Content</label>
                                 </div>
                             }
@@ -447,26 +617,102 @@
                     }
                     else if (q.Type == QType.TrueFalse)
                     {
-                        var r1 = $"r_{q.Id}_True";
-                        var r0 = $"r_{q.Id}_False";
-                        <div class="q-options">
-                            <div><input id="@r1" type="radio" name="@q.Id" value="True" /><label for="@r1">True</label></div>
-                            <div><input id="@r0" type="radio" name="@q.Id" value="False" /><label for="@r0">False</label></div>
-                        </div>
+                        if (opts.Count > 0)
+                        {
+                            <div class="q-options">
+                                @for (int i = 0; i < opts.Count; i++)
+                                {
+                                    var rid = $"r_{q.Id}_{i}";
+                                    <div>
+                                        <input id="@rid" type="radio" name="@q.Id" value="@opts[i].Id" />
+                                        <label for="@rid">@opts[i].Content</label>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="hint text-danger">True/False question is missing options.</div>
+                        }
                     }
                     else if (q.Type == QType.Matching)
                     {
-                        <textarea class="form-control" name="@q.Id" rows="5" placeholder="Matching format: each line Left=Right"></textarea>
-                        <div class="hint mt-1">Example: Capital of France=Paris</div>
+                        var pairs = (q.MatchingPairs ?? new List<MatchPair>())
+                            .Where(p => !string.IsNullOrWhiteSpace(p.L) && !string.IsNullOrWhiteSpace(p.R))
+                            .ToList();
+                        var rightOptions = pairs
+                            .Select(p => p.R.Trim())
+                            .Where(v => !string.IsNullOrWhiteSpace(v))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .OrderBy(v => v, StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+                        <div class="matching-board" data-match-question="@q.Id">
+                            <input type="hidden" class="structured-answer" name="@q.Id" />
+                            @if (pairs.Count == 0)
+                            {
+                                <div class="hint text-danger">Matching question has no configured pairs.</div>
+                            }
+                            else
+                            {
+                                @foreach (var pair in pairs)
+                                {
+                                    <div class="match-row">
+                                        <div class="match-left">@pair.L</div>
+                                        <select class="form-select match-select" data-left="@pair.L">
+                                            <option value="">-- Select match --</option>
+                                            @foreach (var option in rightOptions)
+                                            {
+                                                <option value="@option">@option</option>
+                                            }
+                                        </select>
+                                    </div>
+                                }
+                            }
+                        </div>
                     }
                     else if (q.Type == QType.DragDrop)
                     {
-                        <textarea class="form-control" name="@q.Id" rows="5" placeholder="DragDrop format: each line Slot=Token"></textarea>
-                        <div class="hint mt-1">Example: Blank1=photosynthesis</div>
+                        var tokens = (q.DragDrop?.Tokens ?? new List<string>())
+                            .Select(t => t?.Trim())
+                            .Where(t => !string.IsNullOrWhiteSpace(t))
+                            .Select(t => t!)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+                        var slots = (q.DragDrop?.Slots ?? new List<DragSlot>())
+                            .Where(s => !string.IsNullOrWhiteSpace(s.Name))
+                            .ToList();
+                        <div class="dragdrop-board" data-dd-question="@q.Id">
+                            <input type="hidden" class="structured-answer" name="@q.Id" />
+                            @if (tokens.Count == 0 || slots.Count == 0)
+                            {
+                                <div class="hint text-danger">DragDrop question is missing tokens or slots.</div>
+                            }
+                            else
+                            {
+                                <div class="dd-help">Drag token to slot, or click a token then click slot.</div>
+                                <div class="dd-token-pool">
+                                    @foreach (var token in tokens)
+                                    {
+                                        <button type="button" class="dd-token" draggable="true" data-token="@token">@token</button>
+                                    }
+                                </div>
+                                <div class="dd-slot-list">
+                                    @foreach (var slot in slots)
+                                    {
+                                        <div class="dd-slot-row">
+                                            <div class="dd-slot-label">@slot.Name</div>
+                                            <button type="button" class="dd-slot" data-slot="@slot.Name" data-assigned="">Drop token here</button>
+                                            <button type="button" class="dd-slot-clear">Clear</button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
                     }
                     else
                     {
-                        <textarea class="form-control" name="@q.Id" rows="4" placeholder="Type your answer here..."></textarea>
+                        <textarea class="form-control essay-answer" name="@q.Id" rows="4" placeholder="Type your answer here..."></textarea>
                     }
                     <div class="hint">Question ID: @q.Id • Type: @q.Type</div>
                 </div>
@@ -487,12 +733,34 @@
     let secs = @remainingSeconds;
     let running = true;
     let timer = null;
+    let examHubConnection = null;
+    let timeUpNoticeShown = false;
 
-    const elTimeTop  = document.getElementById('t');
+    const elTimeTop = document.getElementById('t');
     const elTimeSide = document.getElementById('t_side');
     const sid = "@Model.Id";
     const totalQs = @questionCount;
     const DEVICE_FP_KEY = 'unitest_device_fp';
+    const hubIndicatorEl = document.getElementById('hubIndicator');
+    const hubIndicatorTextEl = document.getElementById('hubIndicatorText');
+
+    function setHubStatus(cssClass, message){
+        if(!hubIndicatorEl || !hubIndicatorTextEl) return;
+        hubIndicatorEl.classList.remove('hub-connected', 'hub-reconnecting', 'hub-disconnected');
+        hubIndicatorEl.classList.add(cssClass);
+        hubIndicatorTextEl.textContent = message;
+    }
+
+    function isHubConnected(){
+        return !!(examHubConnection && window.signalR && examHubConnection.state === signalR.HubConnectionState.Connected);
+    }
+
+    function payloadValue(obj, camel, pascal){
+        if(!obj || typeof obj !== 'object') return undefined;
+        if(Object.prototype.hasOwnProperty.call(obj, camel)) return obj[camel];
+        if(Object.prototype.hasOwnProperty.call(obj, pascal)) return obj[pascal];
+        return undefined;
+    }
 
     function getDeviceFingerprint(){
         let fp = localStorage.getItem(DEVICE_FP_KEY);
@@ -514,7 +782,6 @@
 
     function startTimer(){
         if(timer) return;
-        running = true;
         timer = setInterval(()=>{
             if(!running) return;
             secs = Math.max(0, secs - 1);
@@ -522,14 +789,101 @@
             if(secs === 120){ toast("Only 2 minutes left. Please submit soon.", "warn"); }
             if(secs <= 0){
                 stopTimer();
-                toast("Time is up. Auto-submitting...", "warn");
-                submitNow(true);
+                if(!timeUpNoticeShown){
+                    timeUpNoticeShown = true;
+                    toast("Time is up. Waiting for server auto-submit...", "warn");
+                }
             }
         }, 1000);
     }
-    function stopTimer(){ running = false; if(timer){ clearInterval(timer); timer = null; } }
+    function stopTimer(){
+        running = false;
+        if(timer){
+            clearInterval(timer);
+            timer = null;
+        }
+    }
+
+    function applyTimerSync(data){
+        const remainingRaw = payloadValue(data, 'remainingSeconds', 'RemainingSeconds');
+        const runningRaw = payloadValue(data, 'running', 'Running');
+        if(typeof remainingRaw === 'number' && Number.isFinite(remainingRaw)){
+            secs = Math.max(0, Math.floor(remainingRaw));
+            if(secs > 0) timeUpNoticeShown = false;
+        }
+        if(typeof runningRaw === 'boolean'){
+            running = runningRaw;
+        }
+
+        renderTime();
+        if(running){
+            startTimer();
+        }else{
+            stopTimer();
+        }
+    }
+
+    async function connectExamHub(){
+        if(!window.signalR){
+            setHubStatus('hub-disconnected', 'Realtime unavailable - using REST fallback');
+            return;
+        }
+
+        examHubConnection = new signalR.HubConnectionBuilder()
+            .withUrl('/hubs/exam-session')
+            .withAutomaticReconnect()
+            .build();
+
+        examHubConnection.on('TimerSync', (data)=>{
+            applyTimerSync(data);
+        });
+
+        examHubConnection.on('SessionAutoSubmitted', ()=>{
+            toast('Session auto-submitted by server.', 'warn');
+            submitNow(true);
+        });
+
+        examHubConnection.on('SessionTerminated', ()=>{
+            submitted = true;
+            toast('Session was terminated by proctor. Redirecting...', 'warn');
+            window.location = '/mytests';
+        });
+
+        examHubConnection.onreconnecting(()=>{
+            setHubStatus('hub-reconnecting', 'Đang kết nối lại...');
+        });
+
+        examHubConnection.onreconnected(async ()=>{
+            setHubStatus('hub-connected', 'Realtime connected');
+            try{
+                await examHubConnection.invoke('JoinSession', sid);
+            }catch(e){}
+        });
+
+        examHubConnection.onclose(()=>{
+            setHubStatus('hub-disconnected', 'Realtime disconnected - using REST fallback');
+        });
+
+        try{
+            setHubStatus('hub-reconnecting', 'Đang kết nối realtime...');
+            await examHubConnection.start();
+            await examHubConnection.invoke('JoinSession', sid);
+            setHubStatus('hub-connected', 'Realtime connected');
+        }catch(e){
+            setHubStatus('hub-disconnected', 'Realtime disconnected - using REST fallback');
+        }
+    }
 
     async function callResume(){
+        if(isHubConnected()){
+            try{
+                await examHubConnection.invoke('ResumeTimer', sid);
+                running = true;
+                startTimer();
+                return;
+            }catch(e){}
+        }
+
         try{
             const r = await authFetch(`/api/tests/sessions/${sid}/resume`, { method:'POST' });
             if(r.ok){
@@ -537,11 +891,25 @@
                 secs = data.remainingSeconds ?? secs;
                 running = !!data.running;
                 renderTime();
-                startTimer();
+                if(running){
+                    startTimer();
+                }else{
+                    stopTimer();
+                }
             }
         }catch(e){}
     }
+
     async function callPause(){
+        if(isHubConnected()){
+            try{
+                await examHubConnection.invoke('PauseTimer', sid);
+                running = false;
+                stopTimer();
+                return;
+            }catch(e){}
+        }
+
         try{
             const r = await authFetch(`/api/tests/sessions/${sid}/pause`, { method:'POST' });
             if(r.ok){
@@ -549,7 +917,11 @@
                 secs = data.remainingSeconds ?? secs;
                 running = !!data.running;
                 renderTime();
-                stopTimer();
+                if(running){
+                    startTimer();
+                }else{
+                    stopTimer();
+                }
             }
         }catch(e){}
     }
@@ -562,7 +934,11 @@
             }).catch(()=>{});
         }
 
-        renderTime(); startTimer(); callResume();
+        renderTime();
+        startTimer();
+        callResume();
+        connectExamHub();
+
         document.addEventListener('visibilitychange', ()=>{
             if(document.hidden){
                 callPause();
@@ -580,6 +956,9 @@
                 });
                 navigator.sendBeacon?.(`/api/tests/sessions/${sid}/save-answer`, new Blob([payload], { type: 'application/json' }));
             }catch(e){}
+            if(examHubConnection){
+                try{ examHubConnection.invoke('LeaveSession', sid); }catch(e){}
+            }
             navigator.sendBeacon?.(`/api/tests/sessions/${sid}/pause`);
         });
 
@@ -601,17 +980,191 @@
     let syncQueued = false;
     let submittedConflictNotified = false;
 
+    function normalizeToken(value){
+      return String(value ?? '').trim();
+    }
+
+    function parsePairAnswer(raw){
+      const map = {};
+      if(!raw) return map;
+
+      const normalized = String(raw).replaceAll('||', '\n');
+      normalized.split(/\r?\n/).forEach(line => {
+        const idx = line.indexOf('=');
+        if(idx <= 0) return;
+        const key = normalizeToken(line.slice(0, idx));
+        const val = normalizeToken(line.slice(idx + 1));
+        if(!key) return;
+        map[key.toLowerCase()] = val;
+      });
+      return map;
+    }
+
+    function resolveQuestionById(qid){
+      return document.querySelector(`.question[data-qid="${CSS.escape(qid)}"]`);
+    }
+
+    function getQuestionTypeById(qid){
+      const questionEl = resolveQuestionById(qid);
+      return questionEl?.getAttribute('data-qtype') || '';
+    }
+
+    function getStructuredInput(questionEl, qid){
+      return questionEl?.querySelector(`input.structured-answer[name="${CSS.escape(qid)}"]`);
+    }
+
+    function buildMatchingAnswer(questionEl){
+      const parts = [];
+      questionEl.querySelectorAll('.match-select').forEach(selectEl => {
+        const left = normalizeToken(selectEl.getAttribute('data-left'));
+        const right = normalizeToken(selectEl.value);
+        if(left && right){
+          parts.push(`${left}=${right}`);
+        }
+      });
+      return parts.join('\n');
+    }
+
+    function applyMatchingAnswer(questionEl, raw){
+      const answerMap = parsePairAnswer(raw);
+      questionEl.querySelectorAll('.match-select').forEach(selectEl => {
+        const left = normalizeToken(selectEl.getAttribute('data-left')).toLowerCase();
+        const selectedRaw = answerMap[left] || '';
+        if(!selectedRaw){
+          selectEl.value = '';
+          return;
+        }
+
+        const matched = Array.from(selectEl.options).find(opt =>
+          normalizeToken(opt.value).toLowerCase() === selectedRaw.toLowerCase());
+        selectEl.value = matched ? matched.value : '';
+      });
+    }
+
+    function refreshDragDropBoard(boardEl){
+      if(!boardEl) return;
+      const usedTokens = new Set();
+      boardEl.querySelectorAll('.dd-slot').forEach(slotEl => {
+        const assigned = normalizeToken(slotEl.getAttribute('data-assigned'));
+        slotEl.textContent = assigned || 'Drop token here';
+        slotEl.classList.toggle('filled', !!assigned);
+        if(assigned){
+          usedTokens.add(assigned.toLowerCase());
+        }
+      });
+
+      boardEl.querySelectorAll('.dd-token').forEach(tokenEl => {
+        const token = normalizeToken(tokenEl.getAttribute('data-token')).toLowerCase();
+        tokenEl.classList.toggle('used', usedTokens.has(token));
+      });
+    }
+
+    function setActiveDragToken(boardEl, token){
+      const active = normalizeToken(token);
+      boardEl.setAttribute('data-active-token', active);
+      boardEl.querySelectorAll('.dd-token').forEach(tokenEl => {
+        tokenEl.classList.toggle('active', normalizeToken(tokenEl.getAttribute('data-token')) === active);
+      });
+    }
+
+    function assignDragDropToken(boardEl, slotEl, token){
+      if(!boardEl || !slotEl) return;
+      const normalizedToken = normalizeToken(token);
+      if(normalizedToken){
+        boardEl.querySelectorAll('.dd-slot').forEach(otherSlot => {
+          if(otherSlot !== slotEl && normalizeToken(otherSlot.getAttribute('data-assigned')).toLowerCase() === normalizedToken.toLowerCase()){
+            otherSlot.setAttribute('data-assigned', '');
+          }
+        });
+      }
+
+      slotEl.setAttribute('data-assigned', normalizedToken);
+      refreshDragDropBoard(boardEl);
+    }
+
+    function buildDragDropAnswer(questionEl){
+      const parts = [];
+      questionEl.querySelectorAll('.dd-slot').forEach(slotEl => {
+        const slotName = normalizeToken(slotEl.getAttribute('data-slot'));
+        const token = normalizeToken(slotEl.getAttribute('data-assigned'));
+        if(slotName && token){
+          parts.push(`${slotName}=${token}`);
+        }
+      });
+      return parts.join('\n');
+    }
+
+    function applyDragDropAnswer(questionEl, raw){
+      const answerMap = parsePairAnswer(raw);
+      questionEl.querySelectorAll('.dd-slot').forEach(slotEl => {
+        const slotName = normalizeToken(slotEl.getAttribute('data-slot')).toLowerCase();
+        const assigned = answerMap[slotName] || '';
+        slotEl.setAttribute('data-assigned', assigned);
+      });
+
+      const boardEl = questionEl.querySelector('.dragdrop-board');
+      if(boardEl){
+        setActiveDragToken(boardEl, '');
+      }
+      refreshDragDropBoard(boardEl);
+    }
+
+    function syncStructuredAnswerForQuestion(questionEl){
+      if(!questionEl) return;
+      const qid = questionEl.getAttribute('data-qid');
+      const qtype = questionEl.getAttribute('data-qtype');
+      const hidden = getStructuredInput(questionEl, qid);
+      if(!hidden) return;
+
+      if(qtype === 'Matching'){
+        hidden.value = buildMatchingAnswer(questionEl);
+      }else if(qtype === 'DragDrop'){
+        hidden.value = buildDragDropAnswer(questionEl);
+      }
+    }
+
+    function syncAllStructuredAnswers(){
+      document.querySelectorAll('.question[data-qtype="Matching"], .question[data-qtype="DragDrop"]').forEach(syncStructuredAnswerForQuestion);
+    }
+
+    function applyStructuredAnswerToQuestion(questionEl, raw){
+      if(!questionEl) return;
+      const qtype = questionEl.getAttribute('data-qtype');
+      if(qtype === 'Matching'){
+        applyMatchingAnswer(questionEl, raw);
+      }else if(qtype === 'DragDrop'){
+        applyDragDropAnswer(questionEl, raw);
+      }
+      syncStructuredAnswerForQuestion(questionEl);
+    }
+
     function collect(){
+      syncAllStructuredAnswers();
       const data = {};
       formEl.querySelectorAll('[name]').forEach(e=>{
-        if(e.type==='radio'){ if(e.checked) data[e.name] = e.value; }
-        else { data[e.name] = e.value ?? ''; }
+        if(e.type==='radio'){
+          if(e.checked) data[e.name] = e.value;
+        }else{
+          data[e.name] = e.value ?? '';
+        }
       });
       return data;
     }
+
     function applyDraft(draft){
       if(!draft) return;
       Object.entries(draft).forEach(([k,v])=>{
+        const qtype = getQuestionTypeById(k);
+        const questionEl = resolveQuestionById(k);
+        if(qtype === 'Matching' || qtype === 'DragDrop'){
+          const hidden = getStructuredInput(questionEl, k);
+          if(hidden){
+            hidden.value = v ?? '';
+            applyStructuredAnswerToQuestion(questionEl, hidden.value);
+          }
+          return;
+        }
+
         const els = formEl.querySelectorAll(`[name="${CSS.escape(k)}"]`);
         if(!els.length) return;
         const anyRadio = Array.from(els).some(e=>e.type==='radio');
@@ -622,14 +1175,28 @@
           els[0].value = v ?? '';
         }
       });
+      syncAllStructuredAnswers();
     }
+
     function saveDraft(silent=false){
       localStorage.setItem(KEY, JSON.stringify(collect()));
       if(!silent) toast("Draft saved on this device.");
     }
-    function clearDraft(){ localStorage.removeItem(KEY); toast("Local draft cleared."); }
+
+    function clearDraft(){
+      localStorage.removeItem(KEY);
+      toast("Local draft cleared.");
+    }
 
     function getAnswerValueByQuestionId(qid){
+      const qtype = getQuestionTypeById(qid);
+      const questionEl = resolveQuestionById(qid);
+      if(qtype === 'Matching' || qtype === 'DragDrop'){
+        syncStructuredAnswerForQuestion(questionEl);
+        const hidden = getStructuredInput(questionEl, qid);
+        return hidden ? (hidden.value ?? '') : '';
+      }
+
       const radios = formEl.querySelectorAll(`[name="${CSS.escape(qid)}"][type="radio"]`);
       if(radios.length){
         const checked = Array.from(radios).find(r => r.checked);
@@ -638,6 +1205,21 @@
 
       const field = formEl.querySelector(`[name="${CSS.escape(qid)}"]:not([type="radio"])`);
       return field ? (field.value ?? '') : '';
+    }
+
+    function resolveQuestionIdFromTarget(target){
+      if(!target) return '';
+      if(target.name) return target.name;
+      const questionEl = target.closest('.question');
+      return questionEl ? (questionEl.getAttribute('data-qid') || '') : '';
+    }
+
+    function handleQuestionAnswerChanged(qid){
+      if(!qid) return;
+      updateOneQuestion(qid);
+      saveDraft(true);
+      enqueueAnswerForSync(qid, getAnswerValueByQuestionId(qid), new Date().toISOString());
+      scheduleQueueSync();
     }
 
     function loadSyncQueue(){
@@ -881,6 +1463,17 @@
     function saveFlags(flags){ localStorage.setItem(KEY_FLAGS, JSON.stringify(flags||{})); }
 
     function isAnsweredById(qid){
+      const qtype = getQuestionTypeById(qid);
+      const questionEl = resolveQuestionById(qid);
+      if(qtype === 'Matching'){
+        const selects = questionEl?.querySelectorAll('.match-select') || [];
+        return selects.length > 0 && Array.from(selects).every(selectEl => normalizeToken(selectEl.value).length > 0);
+      }
+      if(qtype === 'DragDrop'){
+        const slots = questionEl?.querySelectorAll('.dd-slot') || [];
+        return slots.length > 0 && Array.from(slots).every(slotEl => normalizeToken(slotEl.getAttribute('data-assigned')).length > 0);
+      }
+
       const radios = formEl.querySelectorAll(`[name="${CSS.escape(qid)}"][type="radio"]`);
       if(radios.length){ return Array.from(radios).some(r=>r.checked); }
       const ta = formEl.querySelector(`[name="${CSS.escape(qid)}"]:not([type])`);
@@ -937,24 +1530,89 @@
       pgBar.style.width = pct + '%';
     }
 
+    /* DragDrop interactions */
+    formEl.addEventListener('click', (e)=>{
+      const tokenBtn = e.target.closest('.dd-token');
+      if(tokenBtn){
+        const boardEl = tokenBtn.closest('.dragdrop-board');
+        if(!boardEl) return;
+        const token = normalizeToken(tokenBtn.getAttribute('data-token'));
+        const current = normalizeToken(boardEl.getAttribute('data-active-token'));
+        setActiveDragToken(boardEl, current === token ? '' : token);
+        return;
+      }
+
+      const slotEl = e.target.closest('.dd-slot');
+      if(slotEl){
+        const boardEl = slotEl.closest('.dragdrop-board');
+        const active = normalizeToken(boardEl?.getAttribute('data-active-token'));
+        if(active){
+          assignDragDropToken(boardEl, slotEl, active);
+          setActiveDragToken(boardEl, '');
+          const qid = resolveQuestionIdFromTarget(slotEl);
+          handleQuestionAnswerChanged(qid);
+        }
+        return;
+      }
+
+      const clearBtn = e.target.closest('.dd-slot-clear');
+      if(clearBtn){
+        const slotRow = clearBtn.closest('.dd-slot-row');
+        const slot = slotRow?.querySelector('.dd-slot');
+        const boardEl = clearBtn.closest('.dragdrop-board');
+        if(slot){
+          assignDragDropToken(boardEl, slot, '');
+          const qid = resolveQuestionIdFromTarget(clearBtn);
+          handleQuestionAnswerChanged(qid);
+        }
+      }
+    });
+
+    formEl.addEventListener('dragstart', (e)=>{
+      const tokenBtn = e.target.closest('.dd-token');
+      if(!tokenBtn || !e.dataTransfer) return;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', normalizeToken(tokenBtn.getAttribute('data-token')));
+    });
+
+    formEl.addEventListener('dragover', (e)=>{
+      const slotEl = e.target.closest('.dd-slot');
+      if(!slotEl) return;
+      e.preventDefault();
+      slotEl.classList.add('drag-over');
+    });
+
+    formEl.addEventListener('dragleave', (e)=>{
+      const slotEl = e.target.closest('.dd-slot');
+      if(!slotEl) return;
+      slotEl.classList.remove('drag-over');
+    });
+
+    formEl.addEventListener('drop', (e)=>{
+      const slotEl = e.target.closest('.dd-slot');
+      if(!slotEl) return;
+      e.preventDefault();
+      slotEl.classList.remove('drag-over');
+      const token = normalizeToken(e.dataTransfer?.getData('text/plain'));
+      if(!token) return;
+      const boardEl = slotEl.closest('.dragdrop-board');
+      assignDragDropToken(boardEl, slotEl, token);
+      const qid = resolveQuestionIdFromTarget(slotEl);
+      handleQuestionAnswerChanged(qid);
+    });
+
     /* Sự kiện input/change -> cập nhật tức thì */
-        formEl.addEventListener('change', (e)=>{
-      const t = e.target;
-            if(t && t.name){
-                updateOneQuestion(t.name);
-                saveDraft(true);
-                enqueueAnswerForSync(t.name, getAnswerValueByQuestionId(t.name), new Date().toISOString());
-                scheduleQueueSync();
-            }
+    formEl.addEventListener('change', (e)=>{
+      const qid = resolveQuestionIdFromTarget(e.target);
+      if(qid){
+        handleQuestionAnswerChanged(qid);
+      }
     });
     formEl.addEventListener('input', (e)=>{
-      const t = e.target;
-            if(t && t.name){
-                updateOneQuestion(t.name);
-                saveDraft(true);
-                enqueueAnswerForSync(t.name, getAnswerValueByQuestionId(t.name), new Date().toISOString());
-                scheduleQueueSync();
-            }
+      const qid = resolveQuestionIdFromTarget(e.target);
+      if(qid){
+        handleQuestionAnswerChanged(qid);
+      }
     });
 
     /* Bật filter chỉ flagged */
@@ -1082,6 +1740,20 @@
       submitting = true;
       submitBtn.disabled = true; submitBtn2.disabled = true;
 
+      if(auto){
+        submitted = true;
+        stopTimer();
+        try{
+          localStorage.removeItem(KEY);
+          localStorage.removeItem(KEY_FLAGS);
+          localStorage.removeItem(KEY_SYNC_QUEUE);
+        }catch(e){}
+        setTimeout(()=>{
+          window.location = `/mytests/result/${sid}`;
+        }, 350);
+        return;
+      }
+
       saveDraft(true);
       enqueueAllAnswersForSync();
       const queueSynced = await ensureQueueSyncedBeforeSubmit();
@@ -1130,8 +1802,18 @@
       setTimeout(()=>{ el.remove(); }, 3500);
     }
 
+    function initializeStructuredBoards(){
+      document.querySelectorAll('.question[data-qtype="Matching"], .question[data-qtype="DragDrop"]').forEach(questionEl => {
+        const qid = questionEl.getAttribute('data-qid');
+        const hidden = getStructuredInput(questionEl, qid);
+        applyStructuredAnswerToQuestion(questionEl, hidden?.value || '');
+      });
+    }
+
     /* Initial */
+    initializeStructuredBoards();
     try{ const raw = localStorage.getItem(KEY); if(raw){ applyDraft(JSON.parse(raw)); } }catch(e){}
+    syncAllStructuredAnswers();
     updateSyncIndicator();
     syncOfflineQueue();
     (function syncFlagButtons(){

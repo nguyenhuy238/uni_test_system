@@ -1,11 +1,13 @@
 using UniTestSystem.AdminApp.Models;
 using UniTestSystem.AdminApp.Services;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using System.IO;
 using System.Linq;
+using System.Net.Mail;
 using System.Threading.Tasks;
 
 namespace UniTestSystem.AdminApp.ViewModels
@@ -46,7 +48,30 @@ namespace UniTestSystem.AdminApp.ViewModels
         // UI Helpers for nested collections
         private ObservableCollection<OptionWrapper> _selectedQuestionOptions = new();
         private ObservableCollection<string> _selectedQuestionCorrectKeys = new();
+        private string _selectedQuestionCorrectKeysText = string.Empty;
+        private bool _syncingCorrectKeysText;
         private ObservableCollection<TestItem> _selectedTestItems = new();
+        private ObservableCollection<CreateTestQuestionItem> _createTestQuestionPool = new();
+        private string _createTestTitle = "";
+        private string _createTestCourseId = "";
+        private int _createTestDurationMinutes = 10;
+        private int _createTestPassScore = 3;
+        private string _createTestAssessmentType = "Quiz";
+        private bool _createTestShuffleQuestions = true;
+        private bool _createTestShuffleOptions = true;
+        private bool _createTestIsPublished = true;
+        private string _createQuestionSelectionMode = CreateSelectionManualMode;
+        private int _createMcqCount;
+        private int _createTfCount;
+        private int _createEssayCount;
+        private int _createMatchingCount;
+        private int _createDragDropCount;
+        private string _createQuestionKeyword = "";
+        private bool _isLoadingCreateQuestionPool;
+
+        private const string CreateSelectionManualMode = "Manual";
+        private const string CreateSelectionRandomByTypeMode = "RandomByType";
+        private const string DefaultNewUserPassword = "123456";
         public string CurrentUserName => _apiService.CurrentUser?.Name ?? "Admin";
         public string CurrentUserRole => _apiService.CurrentUser?.Role ?? "Unknown";
         public bool IsAdmin => _apiService.CurrentUser?.Role == "Admin";
@@ -82,20 +107,27 @@ namespace UniTestSystem.AdminApp.ViewModels
             BackupFiles = new ObservableCollection<BackupFileInfo>();
             PeriodOptions = new ObservableCollection<string> { "Weekly", "Monthly", "Quarterly" };
             ExportFormatOptions = new ObservableCollection<string> { "xlsx", "pdf" };
+            QuestionTypeOptions = new ObservableCollection<string> { "MCQ", "TrueFalse", "Essay", "Matching", "DragDrop" };
+            QuestionSkillOptions = new ObservableCollection<QuestionMetadataItem>();
+            QuestionDifficultyOptions = new ObservableCollection<QuestionMetadataItem>();
+            QuestionSubjectOptions = new ObservableCollection<QuestionMetadataItem>();
+            QuestionBankOptions = new ObservableCollection<QuestionMetadataItem>();
+            AssessmentTypeOptions = new ObservableCollection<string> { "Quiz", "Midterm", "Final", "Assignment" };
+            CreateTestQuestions = new ObservableCollection<CreateTestQuestionItem>();
             YearEndStudents = new ObservableCollection<YearEndStudentSummaryModel>();
             YearEndWarningStudents = new ObservableCollection<YearEndStudentSummaryModel>();
 
             LoadDataCommand = new RelayCommand(async () => await LoadDataAsync());
             
-            AddTestCommand = new RelayCommand(() => { SelectedTest = new Test(); StatusMessage = "Adding new test..."; }, () => IsAdmin);
+            AddTestCommand = new RelayCommand(StartNewTest, () => IsAdmin);
             SaveTestCommand = new RelayCommand(async () => await SaveTestAsync(), () => IsAdmin && SelectedTest != null);
             DeleteTestCommand = new RelayCommand(async () => await DeleteTestAsync(), () => IsAdmin && SelectedTest != null && !string.IsNullOrEmpty(SelectedTest.Id));
             
-            AddUserCommand = new RelayCommand(() => { SelectedUser = new User { Role = "Student" }; StatusMessage = "Adding new user..."; }, () => CanManageUsersRoles);
+            AddUserCommand = new RelayCommand(StartNewUser, () => CanManageUsersRoles);
             SaveUserCommand = new RelayCommand(async () => await SaveUserAsync(), () => CanManageUsersRoles && SelectedUser != null);
             DeleteUserCommand = new RelayCommand(async () => await DeleteUserAsync(), () => CanManageUsersRoles && SelectedUser != null && !string.IsNullOrEmpty(SelectedUser.Id));
 
-            AddQuestionCommand = new RelayCommand(() => { SelectedQuestion = new Question(); StatusMessage = "Adding new question..."; }, () => IsAdmin);
+            AddQuestionCommand = new RelayCommand(StartNewQuestion, () => IsAdmin);
             SaveQuestionCommand = new RelayCommand(async () => await SaveQuestionAsync(), () => IsAdmin && SelectedQuestion != null);
             DeleteQuestionCommand = new RelayCommand(async () => await DeleteQuestionAsync(), () => IsAdmin && SelectedQuestion != null && !string.IsNullOrEmpty(SelectedQuestion.Id));
 
@@ -117,6 +149,10 @@ namespace UniTestSystem.AdminApp.ViewModels
             // Test Item Commands
             AddTestItemCommand = new RelayCommand(AddTestItem, () => IsAdmin);
             RemoveTestItemCommand = new RelayCommand(RemoveTestItem, () => IsAdmin && SelectedTestItem != null);
+            ApplyCreateTestFilterCommand = new RelayCommand(ApplyCreateTestQuestionFilter, () => IsAdmin);
+            ClearCreateTestSelectionCommand = new RelayCommand(ClearCreateTestSelection, () => IsAdmin);
+            ResetCreateTestBuilderCommand = new RelayCommand(ResetCreateTestBuilder, () => IsAdmin);
+            CreateTestFromBuilderCommand = new RelayCommand(async () => await CreateTestFromBuilderAsync(), () => IsAdmin);
 
             AddFacultyCommand = new RelayCommand(() => { SelectedFaculty = new Faculty { Name = "New Faculty" }; }, () => CanManageAcademic);
             SaveFacultyCommand = new RelayCommand(async () => await SaveFacultyAsync(), () => CanManageAcademic);
@@ -149,6 +185,8 @@ namespace UniTestSystem.AdminApp.ViewModels
             PreviewYearEndCommand = new RelayCommand(async () => await PreviewYearEndAsync(), () => CanManageAcademic);
             FinalizeYearEndCommand = new RelayCommand(async () => await FinalizeYearEndAsync(), () => CanManageAcademic && YearEndPreview.Prerequisites.IsReady && YearEndStudents.Count > 0);
             ToggleThemeCommand = new RelayCommand(() => { IsDarkTheme = !IsDarkTheme; StatusMessage = IsDarkTheme ? "Dark mode enabled." : "Light mode enabled."; });
+            _createTestQuestionPool.CollectionChanged += CreateTestQuestionPoolOnCollectionChanged;
+            ResetCreateTestBuilder();
 
             // Load data automatically on startup
             _ = LoadDataAsync();
@@ -171,16 +209,233 @@ namespace UniTestSystem.AdminApp.ViewModels
         public ObservableCollection<YearEndStudentSummaryModel> YearEndWarningStudents { get; }
         public ObservableCollection<string> PeriodOptions { get; }
         public ObservableCollection<string> ExportFormatOptions { get; }
+        public ObservableCollection<string> QuestionTypeOptions { get; }
+        public ObservableCollection<string> AssessmentTypeOptions { get; }
+        public ObservableCollection<QuestionMetadataItem> QuestionSkillOptions { get; }
+        public ObservableCollection<QuestionMetadataItem> QuestionDifficultyOptions { get; }
+        public ObservableCollection<QuestionMetadataItem> QuestionSubjectOptions { get; }
+        public ObservableCollection<QuestionMetadataItem> QuestionBankOptions { get; }
+        public ObservableCollection<CreateTestQuestionItem> CreateTestQuestions { get; }
 
         public ObservableCollection<OptionWrapper> SelectedQuestionOptions => _selectedQuestionOptions;
         public ObservableCollection<string> SelectedQuestionCorrectKeys => _selectedQuestionCorrectKeys;
+        public string SelectedQuestionCorrectKeysText
+        {
+            get => _selectedQuestionCorrectKeysText;
+            set
+            {
+                var newValue = value ?? string.Empty;
+                if (string.Equals(_selectedQuestionCorrectKeysText, newValue, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _selectedQuestionCorrectKeysText = newValue;
+                OnPropertyChanged();
+
+                if (_syncingCorrectKeysText)
+                {
+                    return;
+                }
+
+                SyncCorrectKeysCollectionFromText();
+                UpdateQuestionModelFromUI();
+            }
+        }
         public ObservableCollection<TestItem> SelectedTestItems => _selectedTestItems;
+        public int CreateSelectedQuestionCount => _createTestQuestionPool.Count(item => item.IsSelected);
+        public bool IsCreateRandomMode
+        {
+            get => string.Equals(_createQuestionSelectionMode, CreateSelectionRandomByTypeMode, StringComparison.OrdinalIgnoreCase);
+            set
+            {
+                if (value)
+                {
+                    SetCreateQuestionSelectionMode(CreateSelectionRandomByTypeMode);
+                }
+            }
+        }
+
+        public bool IsCreateManualMode
+        {
+            get => !IsCreateRandomMode;
+            set
+            {
+                if (value)
+                {
+                    SetCreateQuestionSelectionMode(CreateSelectionManualMode);
+                }
+            }
+        }
+
+        public bool IsCreateQuestionPoolBusy
+        {
+            get => _isLoadingCreateQuestionPool;
+            private set
+            {
+                _isLoadingCreateQuestionPool = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string CreateTestTitle
+        {
+            get => _createTestTitle;
+            set
+            {
+                _createTestTitle = value ?? string.Empty;
+                OnPropertyChanged();
+            }
+        }
+
+        public string CreateTestCourseId
+        {
+            get => _createTestCourseId;
+            set
+            {
+                var normalized = value?.Trim() ?? string.Empty;
+                if (string.Equals(_createTestCourseId, normalized, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _createTestCourseId = normalized;
+                OnPropertyChanged();
+                _ = LoadCreateQuestionsByCourseAsync();
+            }
+        }
+
+        public int CreateTestDurationMinutes
+        {
+            get => _createTestDurationMinutes;
+            set
+            {
+                _createTestDurationMinutes = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public int CreateTestPassScore
+        {
+            get => _createTestPassScore;
+            set
+            {
+                _createTestPassScore = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string CreateTestAssessmentType
+        {
+            get => _createTestAssessmentType;
+            set
+            {
+                _createTestAssessmentType = string.IsNullOrWhiteSpace(value) ? "Quiz" : value.Trim();
+                OnPropertyChanged();
+            }
+        }
+
+        public bool CreateTestShuffleQuestions
+        {
+            get => _createTestShuffleQuestions;
+            set
+            {
+                _createTestShuffleQuestions = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool CreateTestShuffleOptions
+        {
+            get => _createTestShuffleOptions;
+            set
+            {
+                _createTestShuffleOptions = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool CreateTestIsPublished
+        {
+            get => _createTestIsPublished;
+            set
+            {
+                _createTestIsPublished = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public int CreateMcqCount
+        {
+            get => _createMcqCount;
+            set
+            {
+                _createMcqCount = Math.Max(0, value);
+                OnPropertyChanged();
+            }
+        }
+
+        public int CreateTfCount
+        {
+            get => _createTfCount;
+            set
+            {
+                _createTfCount = Math.Max(0, value);
+                OnPropertyChanged();
+            }
+        }
+
+        public int CreateEssayCount
+        {
+            get => _createEssayCount;
+            set
+            {
+                _createEssayCount = Math.Max(0, value);
+                OnPropertyChanged();
+            }
+        }
+
+        public int CreateMatchingCount
+        {
+            get => _createMatchingCount;
+            set
+            {
+                _createMatchingCount = Math.Max(0, value);
+                OnPropertyChanged();
+            }
+        }
+
+        public int CreateDragDropCount
+        {
+            get => _createDragDropCount;
+            set
+            {
+                _createDragDropCount = Math.Max(0, value);
+                OnPropertyChanged();
+            }
+        }
+
+        public string CreateQuestionKeyword
+        {
+            get => _createQuestionKeyword;
+            set
+            {
+                _createQuestionKeyword = value ?? string.Empty;
+                OnPropertyChanged();
+                ApplyCreateTestQuestionFilter();
+            }
+        }
 
         private OptionWrapper? _selectedOption;
         public OptionWrapper? SelectedOption 
         { 
             get => _selectedOption; 
-            set { _selectedOption = value; OnPropertyChanged(); } 
+            set
+            {
+                _selectedOption = value;
+                OnPropertyChanged();
+                CommandManager.InvalidateRequerySuggested();
+            }
         }
 
         private TestItem? _selectedTestItem;
@@ -198,13 +453,19 @@ namespace UniTestSystem.AdminApp.ViewModels
                 _selectedTest = value; 
                 OnPropertyChanged(); 
                 SyncTestItems();
+                CommandManager.InvalidateRequerySuggested();
             }
         }
 
         public User? SelectedUser
         {
             get => _selectedUser;
-            set { _selectedUser = value; OnPropertyChanged(); }
+            set
+            {
+                _selectedUser = value;
+                OnPropertyChanged();
+                CommandManager.InvalidateRequerySuggested();
+            }
         }
 
         public Question? SelectedQuestion
@@ -214,7 +475,9 @@ namespace UniTestSystem.AdminApp.ViewModels
             { 
                 _selectedQuestion = value; 
                 OnPropertyChanged(); 
+                EnsureQuestionMetadataValues();
                 SyncQuestionDetails();
+                CommandManager.InvalidateRequerySuggested();
             }
         }
 
@@ -425,6 +688,10 @@ namespace UniTestSystem.AdminApp.ViewModels
         public RelayCommand ToggleCorrectKeyCommand { get; }
         public RelayCommand AddTestItemCommand { get; }
         public RelayCommand RemoveTestItemCommand { get; }
+        public RelayCommand ApplyCreateTestFilterCommand { get; }
+        public RelayCommand ClearCreateTestSelectionCommand { get; }
+        public RelayCommand ResetCreateTestBuilderCommand { get; }
+        public RelayCommand CreateTestFromBuilderCommand { get; }
         
         public RelayCommand AddFacultyCommand { get; }
         public RelayCommand SaveFacultyCommand { get; }
@@ -442,27 +709,60 @@ namespace UniTestSystem.AdminApp.ViewModels
                 var testsTask = _apiService.GetTestsAsync();
                 var usersTask = _apiService.GetUsersAsync();
                 var questionsTask = _apiService.GetQuestionsAsync();
+                var questionMetadataTask = _apiService.GetQuestionMetadataAsync();
                 var sessionsTask = _apiService.GetSessionsAsync();
                 var statsTask = _apiService.GetDashboardStatsAsync();
                 var facultiesTask = _apiService.GetFacultiesAsync();
                 var classesTask = _apiService.GetClassesAsync();
                 var coursesTask = _apiService.GetCoursesAsync();
 
-                await Task.WhenAll(testsTask, usersTask, questionsTask, sessionsTask, statsTask, facultiesTask, classesTask, coursesTask);
+                await Task.WhenAll(testsTask, usersTask, questionsTask, questionMetadataTask, sessionsTask, statsTask, facultiesTask, classesTask, coursesTask);
 
                 List<string> failures = new();
                 if (testsTask.Result != null) { Tests.Clear(); foreach (var t in testsTask.Result) Tests.Add(t); } else failures.Add("Tests");
-                if (usersTask.Result != null) { Users.Clear(); foreach (var u in usersTask.Result) Users.Add(u); } else failures.Add("Students");
                 if (questionsTask.Result != null) { Questions.Clear(); foreach (var q in questionsTask.Result) Questions.Add(q); } else failures.Add("Questions");
+                RefreshQuestionMetadataOptions(questionMetadataTask.Result);
                 if (sessionsTask.Result != null) { Sessions.Clear(); foreach (var s in sessionsTask.Result) Sessions.Add(s); } else failures.Add("Sessions");
                 if (facultiesTask.Result != null) { Faculties.Clear(); foreach (var f in facultiesTask.Result) Faculties.Add(f); } else failures.Add("Faculties");
                 if (classesTask.Result != null) { Classes.Clear(); foreach (var c in classesTask.Result) Classes.Add(c); } else failures.Add("Classes");
                 if (coursesTask.Result != null) { Courses.Clear(); foreach (var crs in coursesTask.Result) Courses.Add(crs); } else failures.Add("Courses");
+                if (!string.IsNullOrWhiteSpace(CreateTestCourseId) &&
+                    !Courses.Any(c => string.Equals(c.Id, CreateTestCourseId, StringComparison.Ordinal)))
+                {
+                    _createTestCourseId = string.Empty;
+                    OnPropertyChanged(nameof(CreateTestCourseId));
+                    _createTestQuestionPool.Clear();
+                    CreateTestQuestions.Clear();
+                }
+
+                if (usersTask.Result != null)
+                {
+                    Users.Clear();
+
+                    var facultyById = Faculties
+                        .Where(f => !string.IsNullOrWhiteSpace(f.Id))
+                        .ToDictionary(f => f.Id, f => f.Name ?? string.Empty);
+
+                    foreach (var u in usersTask.Result)
+                    {
+                        if (!string.IsNullOrWhiteSpace(u.FacultyId) && facultyById.TryGetValue(u.FacultyId, out var facultyName))
+                        {
+                            u.Department = facultyName;
+                        }
+
+                        Users.Add(u);
+                    }
+                }
+                else failures.Add("Users");
                 
                 if (Users.Any())
                 {
                     Lecturers.Clear();
                     foreach (var u in Users.Where(u => u.Role == "Lecturer")) Lecturers.Add(u);
+                }
+                else
+                {
+                    Lecturers.Clear();
                 }
                 
                 if (statsTask.Result != null) Stats = statsTask.Result;
@@ -506,6 +806,57 @@ namespace UniTestSystem.AdminApp.ViewModels
         private async Task SaveTestAsync()
         {
             if (SelectedTest == null) return;
+
+            UpdateTestModelFromUI();
+            var normalizedTitle = (SelectedTest.Title ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedTitle))
+            {
+                StatusMessage = "Test title is required.";
+                return;
+            }
+
+            if (SelectedTest.DurationMinutes <= 0)
+            {
+                StatusMessage = "Duration must be greater than 0 minutes.";
+                return;
+            }
+
+            SelectedTest.Title = normalizedTitle;
+            SelectedTest.Type = string.Equals(SelectedTest.Type, "Exam", StringComparison.OrdinalIgnoreCase) ? "Exam" : "Test";
+            SelectedTest.TotalMaxScore = 10m;
+
+            var normalizedItems = (SelectedTest.Items ?? new List<TestItem>())
+                .Where(item => !string.IsNullOrWhiteSpace(item.QuestionId))
+                .Select((item, index) => new TestItem
+                {
+                    TestId = SelectedTest.Id,
+                    QuestionId = item.QuestionId.Trim(),
+                    Points = item.Points <= 0 ? 1m : item.Points,
+                    Order = index
+                })
+                .ToList();
+
+            var validQuestionIds = Questions
+                .Where(q => !string.IsNullOrWhiteSpace(q.Id))
+                .Select(q => q.Id)
+                .ToHashSet(StringComparer.Ordinal);
+
+            var invalidQuestion = normalizedItems
+                .Select(item => item.QuestionId)
+                .FirstOrDefault(id => !validQuestionIds.Contains(id));
+            if (!string.IsNullOrWhiteSpace(invalidQuestion))
+            {
+                StatusMessage = $"Question ID '{invalidQuestion}' does not exist.";
+                return;
+            }
+
+            SelectedTest.Items = normalizedItems;
+            SelectedTest.QuestionIds = normalizedItems.Select(x => x.QuestionId).ToList();
+            if (string.IsNullOrWhiteSpace(SelectedTest.CreatedBy))
+            {
+                SelectedTest.CreatedBy = CurrentUserName;
+            }
+
             try
             {
                 StatusMessage = "Saving test...";
@@ -519,19 +870,10 @@ namespace UniTestSystem.AdminApp.ViewModels
             catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
         }
 
-        private async Task DeleteTestAsync()
+        private Task DeleteTestAsync()
         {
-            if (SelectedTest == null || string.IsNullOrEmpty(SelectedTest.Id)) return;
-            var result = System.Windows.MessageBox.Show($"Are you sure you want to delete test '{SelectedTest.Title}'?", "Confirm Delete", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning);
-            if (result != System.Windows.MessageBoxResult.Yes) return;
-
-            try
-            {
-                StatusMessage = "Deleting test...";
-                if (await _apiService.DeleteTestAsync(SelectedTest.Id)) { StatusMessage = "Test deleted"; await LoadDataAsync(); }
-                else StatusMessage = "Failed to delete test";
-            }
-            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
+            StatusMessage = "Deleting tests is disabled to preserve data integrity. Use archive/unarchive in web management.";
+            return Task.CompletedTask;
         }
 
         private async Task SaveUserAsync()
@@ -549,14 +891,35 @@ namespace UniTestSystem.AdminApp.ViewModels
                 SelectedUser.Role = "Student";
             }
 
+            SelectedUser.Name = (SelectedUser.Name ?? string.Empty).Trim();
+            SelectedUser.Email = (SelectedUser.Email ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(SelectedUser.Name))
+            {
+                StatusMessage = "User name is required.";
+                return;
+            }
+
+            if (!IsValidEmail(SelectedUser.Email))
+            {
+                StatusMessage = "A valid email address is required.";
+                return;
+            }
+
             try
             {
                 StatusMessage = "Saving user...";
-                bool success = string.IsNullOrEmpty(SelectedUser.Id)
-                    ? await _apiService.CreateUserAsync(SelectedUser, "Password123!")
+                var isCreate = string.IsNullOrEmpty(SelectedUser.Id);
+                bool success = isCreate
+                    ? await _apiService.CreateUserAsync(SelectedUser)
                     : await _apiService.UpdateUserAsync(SelectedUser.Id, SelectedUser);
                 
-                if (success) { StatusMessage = "User saved successfully"; await LoadDataAsync(); }
+                if (success)
+                {
+                    StatusMessage = isCreate
+                        ? $"User created successfully. Default password: {DefaultNewUserPassword}"
+                        : "User saved successfully";
+                    await LoadDataAsync();
+                }
                 else StatusMessage = "Failed to save user";
             }
             catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
@@ -582,6 +945,19 @@ namespace UniTestSystem.AdminApp.ViewModels
             if (SelectedQuestion == null) return;
             try
             {
+                UpdateQuestionModelFromUI();
+                var questionValidation = ValidateQuestionForSave(SelectedQuestion);
+                if (!string.IsNullOrWhiteSpace(questionValidation))
+                {
+                    StatusMessage = questionValidation;
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(SelectedQuestion.Id) && string.IsNullOrWhiteSpace(SelectedQuestion.Status))
+                {
+                    SelectedQuestion.Status = "Draft";
+                }
+
                 StatusMessage = "Saving question...";
                 bool success = string.IsNullOrEmpty(SelectedQuestion.Id)
                     ? await _apiService.CreateQuestionAsync(SelectedQuestion)
@@ -661,57 +1037,177 @@ namespace UniTestSystem.AdminApp.ViewModels
 
         private void SyncQuestionDetails()
         {
+            UnsubscribeOptionHandlers();
             _selectedQuestionOptions.Clear();
             _selectedQuestionCorrectKeys.Clear();
-            if (SelectedQuestion != null)
+            if (SelectedQuestion == null)
             {
-                if (SelectedQuestion.Options != null)
+                UpdateCorrectKeysTextFromCollection();
+                return;
+            }
+
+            var questionType = NormalizeQuestionType(SelectedQuestion.Type);
+
+            if (string.Equals(questionType, "Matching", StringComparison.OrdinalIgnoreCase))
+            {
+                if (SelectedQuestion.MatchingPairs != null)
                 {
-                    foreach (var opt in SelectedQuestion.Options)
+                    foreach (var pair in SelectedQuestion.MatchingPairs)
                     {
-                        if (string.IsNullOrWhiteSpace(opt.Content))
+                        if (string.IsNullOrWhiteSpace(pair.Left) && string.IsNullOrWhiteSpace(pair.Right))
                         {
                             continue;
                         }
 
-                        _selectedQuestionOptions.Add(new OptionWrapper { Text = opt.Content });
+                        AddQuestionOptionFromText($"{pair.Left}|{pair.Right}");
+                        if (!string.IsNullOrWhiteSpace(pair.Right) && !_selectedQuestionCorrectKeys.Contains(pair.Right))
+                        {
+                            _selectedQuestionCorrectKeys.Add(pair.Right);
+                        }
+                    }
+                }
+
+                if (_selectedQuestionOptions.Count == 0 && SelectedQuestion.Options != null)
+                {
+                    foreach (var opt in SelectedQuestion.Options.Where(opt => !string.IsNullOrWhiteSpace(opt.Content)))
+                    {
+                        AddQuestionOptionFromText(opt.Content);
                         if (opt.IsCorrect)
                         {
                             _selectedQuestionCorrectKeys.Add(opt.Content);
                         }
                     }
                 }
-
-                if (SelectedQuestion.CorrectKeys != null)
+            }
+            else if (string.Equals(questionType, "DragDrop", StringComparison.OrdinalIgnoreCase))
+            {
+                if (SelectedQuestion.DragDrop?.Tokens != null)
                 {
-                    foreach (var key in SelectedQuestion.CorrectKeys.Where(key => !_selectedQuestionCorrectKeys.Contains(key)))
+                    foreach (var token in SelectedQuestion.DragDrop.Tokens.Where(token => !string.IsNullOrWhiteSpace(token)))
                     {
-                        _selectedQuestionCorrectKeys.Add(key);
+                        AddQuestionOptionFromText(token);
+                    }
+                }
+
+                if (SelectedQuestion.DragDrop?.Slots != null)
+                {
+                    foreach (var answer in SelectedQuestion.DragDrop.Slots
+                        .Select(slot => slot.Answer)
+                        .Where(answer => !string.IsNullOrWhiteSpace(answer)))
+                    {
+                        if (!_selectedQuestionCorrectKeys.Contains(answer))
+                        {
+                            _selectedQuestionCorrectKeys.Add(answer);
+                        }
+                    }
+                }
+
+                if (_selectedQuestionOptions.Count == 0 && SelectedQuestion.Options != null)
+                {
+                    foreach (var opt in SelectedQuestion.Options.Where(opt => !string.IsNullOrWhiteSpace(opt.Content)))
+                    {
+                        AddQuestionOptionFromText(opt.Content);
+                        if (opt.IsCorrect && !_selectedQuestionCorrectKeys.Contains(opt.Content))
+                        {
+                            _selectedQuestionCorrectKeys.Add(opt.Content);
+                        }
                     }
                 }
             }
+            else if (SelectedQuestion.Options != null)
+            {
+                foreach (var opt in SelectedQuestion.Options)
+                {
+                    if (string.IsNullOrWhiteSpace(opt.Content))
+                    {
+                        continue;
+                    }
+
+                    AddQuestionOptionFromText(opt.Content);
+                    if (opt.IsCorrect)
+                    {
+                        _selectedQuestionCorrectKeys.Add(opt.Content);
+                    }
+                }
+            }
+
+            if (SelectedQuestion.CorrectKeys != null)
+            {
+                foreach (var key in SelectedQuestion.CorrectKeys.Where(key => !_selectedQuestionCorrectKeys.Contains(key)))
+                {
+                    _selectedQuestionCorrectKeys.Add(key);
+                }
+            }
+
+            UpdateCorrectKeysTextFromCollection();
         }
 
         private void AddOption()
         {
             if (SelectedQuestion == null) return;
-            _selectedQuestionOptions.Add(new OptionWrapper { Text = "New Option" });
+
+            var questionType = NormalizeQuestionType(SelectedQuestion.Type);
+            var defaultOptionText = string.Equals(questionType, "Matching", StringComparison.OrdinalIgnoreCase)
+                ? "Left|Right"
+                : "New Option";
+            if (string.Equals(questionType, "TrueFalse", StringComparison.OrdinalIgnoreCase))
+            {
+                if (_selectedQuestionOptions.Any(option => string.Equals(option.Text, "True", StringComparison.OrdinalIgnoreCase))
+                    && _selectedQuestionOptions.Any(option => string.Equals(option.Text, "False", StringComparison.OrdinalIgnoreCase)))
+                {
+                    StatusMessage = "True/False only supports two options: True and False.";
+                    return;
+                }
+
+                defaultOptionText = _selectedQuestionOptions.Any(option => string.Equals(option.Text, "True", StringComparison.OrdinalIgnoreCase))
+                    ? "False"
+                    : "True";
+            }
+
+            var option = new OptionWrapper { Text = defaultOptionText };
+            SubscribeOptionHandler(option);
+            _selectedQuestionOptions.Add(option);
+            SelectedOption = option;
             UpdateQuestionModelFromUI();
         }
 
         private void RemoveOption()
         {
             if (SelectedQuestion == null || SelectedOption == null) return;
+
+            var key = ResolveCorrectKeyFromOptionText(SelectedQuestion.Type, SelectedOption.Text);
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                _selectedQuestionCorrectKeys.Remove(key);
+            }
+
+            UnsubscribeOptionHandler(SelectedOption);
             _selectedQuestionOptions.Remove(SelectedOption);
-            _selectedQuestionCorrectKeys.Remove(SelectedOption.Text);
+            SelectedOption = null;
+            UpdateCorrectKeysTextFromCollection();
             UpdateQuestionModelFromUI();
         }
 
         private void ToggleCorrectKey()
         {
             if (SelectedQuestion == null || SelectedOption == null) return;
-            if (_selectedQuestionCorrectKeys.Contains(SelectedOption.Text)) _selectedQuestionCorrectKeys.Remove(SelectedOption.Text);
-            else _selectedQuestionCorrectKeys.Add(SelectedOption.Text);
+
+            var key = ResolveCorrectKeyFromOptionText(SelectedQuestion.Type, SelectedOption.Text);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return;
+            }
+
+            if (_selectedQuestionCorrectKeys.Contains(key))
+            {
+                _selectedQuestionCorrectKeys.Remove(key);
+            }
+            else
+            {
+                _selectedQuestionCorrectKeys.Add(key);
+            }
+
+            UpdateCorrectKeysTextFromCollection();
             UpdateQuestionModelFromUI();
         }
 
@@ -719,10 +1215,103 @@ namespace UniTestSystem.AdminApp.ViewModels
         {
             if (SelectedQuestion == null) return;
 
-            var correctSet = _selectedQuestionCorrectKeys
+            var questionType = NormalizeQuestionType(SelectedQuestion.Type);
+
+            var normalizedCorrectKeys = _selectedQuestionCorrectKeys
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .Select(x => x.Trim())
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var correctSet = normalizedCorrectKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            if (string.Equals(questionType, "Matching", StringComparison.OrdinalIgnoreCase))
+            {
+                var pairs = new List<MatchPair>();
+                foreach (var raw in _selectedQuestionOptions
+                    .Select(x => x.Text?.Trim())
+                    .Where(x => !string.IsNullOrWhiteSpace(x)))
+                {
+                    if (!TryParseMatchingPair(raw!, out var left, out var right))
+                    {
+                        continue;
+                    }
+
+                    pairs.Add(new MatchPair { Left = left, Right = right });
+                }
+
+                SelectedQuestion.MatchingPairs = pairs;
+                SelectedQuestion.DragDrop = null;
+                SelectedQuestion.Options = pairs
+                    .Select(pair => new Option
+                    {
+                        Content = $"{pair.Left}|{pair.Right}",
+                        IsCorrect = correctSet.Contains(pair.Right)
+                    })
+                    .ToList();
+                SelectedQuestion.CorrectKeys = normalizedCorrectKeys;
+                return;
+            }
+
+            if (string.Equals(questionType, "DragDrop", StringComparison.OrdinalIgnoreCase))
+            {
+                var tokens = _selectedQuestionOptions
+                    .Select(x => x.Text?.Trim())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                var existingSlotNames = SelectedQuestion.DragDrop?.Slots?
+                    .Select(slot => slot.Name?.Trim())
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Select(name => name!)
+                    .ToList() ?? new List<string>();
+
+                var slots = new List<DragSlot>();
+                for (int i = 0; i < normalizedCorrectKeys.Count; i++)
+                {
+                    var slotName = i < existingSlotNames.Count
+                        ? existingSlotNames[i]
+                        : (i + 1).ToString();
+                    slots.Add(new DragSlot
+                    {
+                        Name = slotName,
+                        Answer = normalizedCorrectKeys[i]
+                    });
+                }
+
+                SelectedQuestion.DragDrop = new DragDropConfig
+                {
+                    Tokens = tokens,
+                    Slots = slots
+                };
+                SelectedQuestion.MatchingPairs = new List<MatchPair>();
+                SelectedQuestion.Options = tokens
+                    .Select(token => new Option
+                    {
+                        Content = token,
+                        IsCorrect = correctSet.Contains(token)
+                    })
+                    .ToList();
+                SelectedQuestion.CorrectKeys = normalizedCorrectKeys;
+                return;
+            }
+
+            if (string.Equals(questionType, "TrueFalse", StringComparison.OrdinalIgnoreCase))
+            {
+                var trueFalseOptions = new[] { "True", "False" };
+                SelectedQuestion.Options = trueFalseOptions
+                    .Select(value => new Option
+                    {
+                        Content = value,
+                        IsCorrect = correctSet.Contains(value)
+                    })
+                    .ToList();
+                SelectedQuestion.CorrectKeys = normalizedCorrectKeys;
+                SelectedQuestion.MatchingPairs = new List<MatchPair>();
+                SelectedQuestion.DragDrop = null;
+                return;
+            }
 
             SelectedQuestion.Options = _selectedQuestionOptions
                 .Where(x => !string.IsNullOrWhiteSpace(x.Text))
@@ -732,7 +1321,852 @@ namespace UniTestSystem.AdminApp.ViewModels
                     IsCorrect = correctSet.Contains(x.Text.Trim())
                 })
                 .ToList();
-            SelectedQuestion.CorrectKeys = correctSet.ToList();
+            SelectedQuestion.CorrectKeys = normalizedCorrectKeys;
+            SelectedQuestion.MatchingPairs = new List<MatchPair>();
+            SelectedQuestion.DragDrop = null;
+        }
+
+        private void SubscribeOptionHandler(OptionWrapper option)
+        {
+            option.TextChanged += OnQuestionOptionTextChanged;
+        }
+
+        private void UnsubscribeOptionHandler(OptionWrapper option)
+        {
+            option.TextChanged -= OnQuestionOptionTextChanged;
+        }
+
+        private void UnsubscribeOptionHandlers()
+        {
+            foreach (var option in _selectedQuestionOptions)
+            {
+                UnsubscribeOptionHandler(option);
+            }
+        }
+
+        private void StartNewTest()
+        {
+            SelectedTest = new Test
+            {
+                Type = "Test",
+                DurationMinutes = 30,
+                TotalMaxScore = 10m,
+                IsPublished = false,
+                CreatedBy = CurrentUserName
+            };
+
+            StatusMessage = "Creating new test...";
+        }
+
+        private void ResetCreateTestBuilder()
+        {
+            _createTestCourseId = string.Empty;
+            OnPropertyChanged(nameof(CreateTestCourseId));
+            ResetCreateTestBuilderCore(clearQuestionPool: true);
+            StatusMessage = "Create Test form reset.";
+        }
+
+        private void ResetCreateTestBuilderAfterCreate()
+        {
+            ResetCreateTestBuilderCore(clearQuestionPool: false);
+        }
+
+        private void ResetCreateTestBuilderCore(bool clearQuestionPool)
+        {
+            CreateTestTitle = string.Empty;
+            CreateTestDurationMinutes = 10;
+            CreateTestPassScore = 3;
+            CreateTestAssessmentType = "Quiz";
+            CreateTestShuffleQuestions = true;
+            CreateTestShuffleOptions = true;
+            CreateTestIsPublished = true;
+            CreateMcqCount = 0;
+            CreateTfCount = 0;
+            CreateEssayCount = 0;
+            CreateMatchingCount = 0;
+            CreateDragDropCount = 0;
+            CreateQuestionKeyword = string.Empty;
+            SetCreateQuestionSelectionMode(CreateSelectionManualMode);
+            ClearCreateTestSelection();
+
+            if (clearQuestionPool)
+            {
+                _createTestQuestionPool.Clear();
+                CreateTestQuestions.Clear();
+            }
+            else
+            {
+                ApplyCreateTestQuestionFilter();
+            }
+        }
+
+        private void SetCreateQuestionSelectionMode(string mode)
+        {
+            var normalizedMode = string.Equals(mode, CreateSelectionRandomByTypeMode, StringComparison.OrdinalIgnoreCase)
+                ? CreateSelectionRandomByTypeMode
+                : CreateSelectionManualMode;
+
+            if (string.Equals(_createQuestionSelectionMode, normalizedMode, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _createQuestionSelectionMode = normalizedMode;
+            if (IsCreateRandomMode)
+            {
+                ClearCreateTestSelection();
+            }
+
+            OnPropertyChanged(nameof(IsCreateRandomMode));
+            OnPropertyChanged(nameof(IsCreateManualMode));
+        }
+
+        private async Task LoadCreateQuestionsByCourseAsync()
+        {
+            var courseId = (CreateTestCourseId ?? string.Empty).Trim();
+            try
+            {
+                IsCreateQuestionPoolBusy = true;
+                _createTestQuestionPool.Clear();
+                CreateTestQuestions.Clear();
+                ClearCreateTestSelection();
+
+                if (string.IsNullOrWhiteSpace(courseId))
+                {
+                    return;
+                }
+
+                StatusMessage = "Loading approved questions for selected course...";
+                var questions = await _apiService.GetApprovedQuestionsByCourseAsync(courseId) ?? new List<TestCreationQuestion>();
+                foreach (var question in questions
+                             .Where(question => !string.IsNullOrWhiteSpace(question.Id))
+                             .OrderBy(question => NormalizeQuestionTypeKey(question.Type), StringComparer.OrdinalIgnoreCase)
+                             .ThenBy(question => question.Id, StringComparer.OrdinalIgnoreCase))
+                {
+                    _createTestQuestionPool.Add(new CreateTestQuestionItem
+                    {
+                        Id = question.Id.Trim(),
+                        Type = NormalizeQuestionTypeKey(question.Type),
+                        Difficulty = string.IsNullOrWhiteSpace(question.DifficultyLevelId) ? "-" : question.DifficultyLevelId.Trim(),
+                        Content = (question.Content ?? string.Empty).Trim()
+                    });
+                }
+
+                ApplyCreateTestQuestionFilter();
+                StatusMessage = $"Loaded {_createTestQuestionPool.Count} approved questions for selected course.";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Failed to load questions by course: {ex.Message}";
+            }
+            finally
+            {
+                IsCreateQuestionPoolBusy = false;
+                OnPropertyChanged(nameof(CreateSelectedQuestionCount));
+            }
+        }
+
+        private void ApplyCreateTestQuestionFilter()
+        {
+            var keyword = (CreateQuestionKeyword ?? string.Empty).Trim();
+            var filtered = _createTestQuestionPool
+                .Where(item =>
+                    string.IsNullOrWhiteSpace(keyword) ||
+                    item.Id.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                    item.Content.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                    item.Type.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                    item.Difficulty.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(item => item.Type, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            CreateTestQuestions.Clear();
+            foreach (var item in filtered)
+            {
+                CreateTestQuestions.Add(item);
+            }
+        }
+
+        private void ClearCreateTestSelection()
+        {
+            foreach (var item in _createTestQuestionPool)
+            {
+                item.IsSelected = false;
+            }
+
+            OnPropertyChanged(nameof(CreateSelectedQuestionCount));
+        }
+
+        private List<CreateTestQuestionItem> PickRandomQuestionsByType(List<string> warnings)
+        {
+            var picks = new List<CreateTestQuestionItem>();
+            var requests = new[]
+            {
+                (Type: "MCQ", Count: CreateMcqCount),
+                (Type: "TrueFalse", Count: CreateTfCount),
+                (Type: "Essay", Count: CreateEssayCount),
+                (Type: "Matching", Count: CreateMatchingCount),
+                (Type: "DragDrop", Count: CreateDragDropCount)
+            };
+
+            foreach (var request in requests.Where(request => request.Count > 0))
+            {
+                var pool = _createTestQuestionPool
+                    .Where(item => string.Equals(item.Type, request.Type, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(_ => Random.Shared.Next())
+                    .Take(request.Count)
+                    .ToList();
+
+                if (pool.Count < request.Count)
+                {
+                    warnings.Add($"{request.Type}: requested {request.Count}, available {pool.Count}.");
+                }
+
+                picks.AddRange(pool);
+            }
+
+            return picks
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .DistinctBy(item => item.Id)
+                .ToList();
+        }
+
+        private async Task CreateTestFromBuilderAsync()
+        {
+            var title = (CreateTestTitle ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                StatusMessage = "Title is required.";
+                return;
+            }
+
+            var courseId = (CreateTestCourseId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(courseId))
+            {
+                StatusMessage = "Please select a course before creating test.";
+                return;
+            }
+
+            if (CreateTestDurationMinutes <= 0)
+            {
+                StatusMessage = "DurationMinutes must be greater than 0.";
+                return;
+            }
+
+            if (CreateTestPassScore < 0 || CreateTestPassScore > 10)
+            {
+                StatusMessage = "PassScore must be in range 0..10.";
+                return;
+            }
+
+            var warnings = new List<string>();
+            List<CreateTestQuestionItem> selectedQuestions;
+            if (IsCreateRandomMode)
+            {
+                var requestedTotal = CreateMcqCount + CreateTfCount + CreateEssayCount + CreateMatchingCount + CreateDragDropCount;
+                if (requestedTotal <= 0)
+                {
+                    StatusMessage = "Random mode requires at least 1 question in random configuration.";
+                    return;
+                }
+
+                selectedQuestions = PickRandomQuestionsByType(warnings);
+                if (selectedQuestions.Count == 0)
+                {
+                    StatusMessage = "No suitable questions found for the current random configuration.";
+                    return;
+                }
+            }
+            else
+            {
+                selectedQuestions = _createTestQuestionPool
+                    .Where(item => item.IsSelected && !string.IsNullOrWhiteSpace(item.Id))
+                    .ToList();
+            }
+
+            if (selectedQuestions.Count == 0)
+            {
+                StatusMessage = "Please select at least 1 question.";
+                return;
+            }
+
+            var selectedIds = selectedQuestions
+                .Select(item => item.Id.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var test = new Test
+            {
+                Title = title,
+                CourseId = courseId,
+                DurationMinutes = CreateTestDurationMinutes,
+                PassScore = CreateTestPassScore,
+                AssessmentType = NormalizeAssessmentType(CreateTestAssessmentType),
+                Type = IsExamAssessmentType(CreateTestAssessmentType) ? "Exam" : "Test",
+                ShuffleQuestions = CreateTestShuffleQuestions,
+                ShuffleOptions = CreateTestShuffleOptions,
+                IsPublished = CreateTestIsPublished,
+                TotalMaxScore = 10m,
+                CreatedBy = CurrentUserName,
+                Items = selectedIds
+                    .Select((id, index) => new TestItem
+                    {
+                        QuestionId = id,
+                        Points = 1m,
+                        Order = index
+                    })
+                    .ToList(),
+                QuestionIds = selectedIds
+            };
+
+            if (IsCreateRandomMode)
+            {
+                var selectedSet = selectedIds.ToHashSet(StringComparer.Ordinal);
+                foreach (var item in _createTestQuestionPool)
+                {
+                    item.IsSelected = selectedSet.Contains(item.Id);
+                }
+            }
+
+            try
+            {
+                StatusMessage = "Creating test...";
+                var success = await _apiService.CreateTestAsync(test);
+                if (!success)
+                {
+                    StatusMessage = "Failed to create test.";
+                    return;
+                }
+
+                await LoadDataAsync();
+                ResetCreateTestBuilderAfterCreate();
+
+                if (warnings.Count > 0)
+                {
+                    StatusMessage = $"Test created with warnings: {string.Join(" ", warnings)}";
+                }
+                else
+                {
+                    StatusMessage = $"Test created successfully with {selectedIds.Count} question(s).";
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error when creating test: {ex.Message}";
+            }
+        }
+
+        private static bool IsExamAssessmentType(string? value)
+        {
+            return string.Equals(value, "Midterm", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(value, "Final", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeAssessmentType(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "Quiz";
+            }
+
+            return value.Trim().ToLowerInvariant() switch
+            {
+                "quiz" => "Quiz",
+                "midterm" => "Midterm",
+                "final" => "Final",
+                "assignment" => "Assignment",
+                _ => "Quiz"
+            };
+        }
+
+        private static string NormalizeQuestionTypeKey(string? type)
+        {
+            var normalized = NormalizeQuestionType(type).Replace(" ", "", StringComparison.Ordinal).Trim();
+            return normalized.ToLowerInvariant() switch
+            {
+                "mcq" => "MCQ",
+                "truefalse" => "TrueFalse",
+                "essay" => "Essay",
+                "matching" => "Matching",
+                "dragdrop" => "DragDrop",
+                "draganddrop" => "DragDrop",
+                _ => normalized
+            };
+        }
+
+        private void CreateTestQuestionPoolOnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (e.OldItems != null)
+            {
+                foreach (CreateTestQuestionItem item in e.OldItems)
+                {
+                    item.PropertyChanged -= OnCreateTestQuestionItemPropertyChanged;
+                }
+            }
+
+            if (e.NewItems != null)
+            {
+                foreach (CreateTestQuestionItem item in e.NewItems)
+                {
+                    item.PropertyChanged += OnCreateTestQuestionItemPropertyChanged;
+                }
+            }
+
+            OnPropertyChanged(nameof(CreateSelectedQuestionCount));
+        }
+
+        private void OnCreateTestQuestionItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (string.Equals(e.PropertyName, nameof(CreateTestQuestionItem.IsSelected), StringComparison.Ordinal))
+            {
+                OnPropertyChanged(nameof(CreateSelectedQuestionCount));
+            }
+        }
+
+        public async Task CreateUserFromDialogAsync(User draftUser)
+        {
+            if (draftUser == null)
+            {
+                return;
+            }
+
+            draftUser.Id = string.Empty;
+            SelectedUser = draftUser;
+            await SaveUserAsync();
+        }
+
+        public async Task CreateQuestionFromDialogAsync(Question draftQuestion)
+        {
+            if (draftQuestion == null)
+            {
+                return;
+            }
+
+            draftQuestion.Id = string.Empty;
+            draftQuestion.Status = string.IsNullOrWhiteSpace(draftQuestion.Status) ? "Draft" : draftQuestion.Status.Trim();
+            SelectedQuestion = draftQuestion;
+            await SaveQuestionAsync();
+        }
+
+        private void StartNewUser()
+        {
+            SelectedUser = new User
+            {
+                Role = "Student",
+                Level = "Junior"
+            };
+
+            StatusMessage = "Creating new user...";
+        }
+
+        private void StartNewQuestion()
+        {
+            SelectedQuestion = new Question
+            {
+                Type = "MCQ",
+                Status = "Draft",
+                DifficultyLevelId = GetDefaultMetadataId(QuestionDifficultyOptions, "Easy"),
+                SkillId = GetDefaultMetadataId(QuestionSkillOptions),
+                SubjectId = GetDefaultMetadataId(QuestionSubjectOptions),
+                QuestionBankId = GetDefaultMetadataId(QuestionBankOptions),
+                Options = new List<Option>
+                {
+                    new Option { Content = "Option A", IsCorrect = true },
+                    new Option { Content = "Option B", IsCorrect = false }
+                },
+                CorrectKeys = new List<string> { "Option A" }
+            };
+
+            StatusMessage = string.IsNullOrWhiteSpace(SelectedQuestion.SubjectId) || string.IsNullOrWhiteSpace(SelectedQuestion.QuestionBankId)
+                ? "Creating new question... Please select Subject and Question Bank."
+                : "Creating new question...";
+        }
+
+        private void AddQuestionOptionFromText(string text)
+        {
+            var option = new OptionWrapper { Text = text };
+            SubscribeOptionHandler(option);
+            _selectedQuestionOptions.Add(option);
+        }
+
+        private void OnQuestionOptionTextChanged(object? sender, OptionTextChangedEventArgs e)
+        {
+            if (SelectedQuestion == null)
+            {
+                return;
+            }
+
+            var oldKey = ResolveCorrectKeyFromOptionText(SelectedQuestion.Type, e.OldText);
+            var newKey = ResolveCorrectKeyFromOptionText(SelectedQuestion.Type, e.NewText);
+            var index = IndexOfCorrectKey(oldKey);
+
+            if (index >= 0)
+            {
+                if (string.IsNullOrWhiteSpace(newKey))
+                {
+                    _selectedQuestionCorrectKeys.RemoveAt(index);
+                }
+                else
+                {
+                    _selectedQuestionCorrectKeys[index] = newKey;
+                }
+            }
+
+            UpdateCorrectKeysTextFromCollection();
+            UpdateQuestionModelFromUI();
+        }
+
+        private int IndexOfCorrectKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return -1;
+            }
+
+            for (int i = 0; i < _selectedQuestionCorrectKeys.Count; i++)
+            {
+                if (string.Equals(_selectedQuestionCorrectKeys[i], key, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private void SyncCorrectKeysCollectionFromText()
+        {
+            var parsed = _selectedQuestionCorrectKeysText
+                .Split(new[] { '|', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            _selectedQuestionCorrectKeys.Clear();
+            foreach (var key in parsed)
+            {
+                _selectedQuestionCorrectKeys.Add(key);
+            }
+        }
+
+        private void UpdateCorrectKeysTextFromCollection()
+        {
+            _syncingCorrectKeysText = true;
+            try
+            {
+                var joined = string.Join(" | ", _selectedQuestionCorrectKeys.Where(x => !string.IsNullOrWhiteSpace(x)));
+                if (!string.Equals(_selectedQuestionCorrectKeysText, joined, StringComparison.Ordinal))
+                {
+                    _selectedQuestionCorrectKeysText = joined;
+                    OnPropertyChanged(nameof(SelectedQuestionCorrectKeysText));
+                }
+            }
+            finally
+            {
+                _syncingCorrectKeysText = false;
+            }
+        }
+
+        private static string ResolveCorrectKeyFromOptionText(string? questionType, string? optionText)
+        {
+            if (string.IsNullOrWhiteSpace(optionText))
+            {
+                return string.Empty;
+            }
+
+            var normalizedType = NormalizeQuestionType(questionType);
+            var trimmed = optionText.Trim();
+            if (string.Equals(normalizedType, "Matching", StringComparison.OrdinalIgnoreCase)
+                && TryParseMatchingPair(trimmed, out _, out var right))
+            {
+                return right;
+            }
+
+            return trimmed;
+        }
+
+        private static bool TryParseMatchingPair(string raw, out string left, out string right)
+        {
+            left = string.Empty;
+            right = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return false;
+            }
+
+            var parts = raw.Split('|', 2, StringSplitOptions.TrimEntries);
+            if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
+            {
+                return false;
+            }
+
+            left = parts[0];
+            right = parts[1];
+            return true;
+        }
+
+        private static string NormalizeQuestionType(string? type)
+            => string.IsNullOrWhiteSpace(type) ? "MCQ" : type.Trim();
+
+        private static bool IsValidEmail(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            try
+            {
+                _ = new MailAddress(value);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private string? ValidateQuestionForSave(Question question)
+        {
+            question.Content = (question.Content ?? string.Empty).Trim();
+            question.Type = NormalizeQuestionType(question.Type);
+            question.SubjectId = (question.SubjectId ?? string.Empty).Trim();
+            question.QuestionBankId = (question.QuestionBankId ?? string.Empty).Trim();
+            question.SkillId = (question.SkillId ?? string.Empty).Trim();
+            question.DifficultyLevelId = (question.DifficultyLevelId ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(question.DifficultyLevelId))
+            {
+                question.DifficultyLevelId = GetDefaultMetadataId(QuestionDifficultyOptions, "Easy");
+            }
+
+            if (string.IsNullOrWhiteSpace(question.Content))
+            {
+                return "Question content is required.";
+            }
+
+            if (string.IsNullOrWhiteSpace(question.SubjectId))
+            {
+                return "Subject is required.";
+            }
+
+            if (string.IsNullOrWhiteSpace(question.QuestionBankId))
+            {
+                return "Question Bank is required.";
+            }
+
+            var questionType = NormalizeQuestionType(question.Type);
+            var options = question.Options ?? new List<Option>();
+            if (string.Equals(questionType, "MCQ", StringComparison.OrdinalIgnoreCase))
+            {
+                if (options.Count(o => !string.IsNullOrWhiteSpace(o.Content)) < 2)
+                {
+                    return "MCQ requires at least 2 options.";
+                }
+
+                if (!options.Any(o => o.IsCorrect))
+                {
+                    return "MCQ requires at least 1 correct option.";
+                }
+            }
+            else if (string.Equals(questionType, "TrueFalse", StringComparison.OrdinalIgnoreCase))
+            {
+                if (options.Count(o => o.IsCorrect) != 1)
+                {
+                    return "True/False requires exactly 1 correct option.";
+                }
+            }
+            else if (string.Equals(questionType, "Matching", StringComparison.OrdinalIgnoreCase))
+            {
+                if (question.MatchingPairs == null || question.MatchingPairs.Count == 0)
+                {
+                    return "Matching question requires at least 1 pair.";
+                }
+            }
+            else if (string.Equals(questionType, "DragDrop", StringComparison.OrdinalIgnoreCase))
+            {
+                var hasTokens = question.DragDrop?.Tokens?.Any(token => !string.IsNullOrWhiteSpace(token)) == true;
+                var hasSlots = question.DragDrop?.Slots?.Any(slot => !string.IsNullOrWhiteSpace(slot.Answer)) == true;
+                if (!hasTokens || !hasSlots)
+                {
+                    return "DragDrop requires tokens and slots.";
+                }
+            }
+
+            return null;
+        }
+
+        private static string GetDefaultMetadataId(IEnumerable<QuestionMetadataItem> items, string? preferredContains = null)
+        {
+            if (!string.IsNullOrWhiteSpace(preferredContains))
+            {
+                var match = items.FirstOrDefault(item =>
+                    !string.IsNullOrWhiteSpace(item.Id) &&
+                    ((!string.IsNullOrWhiteSpace(item.Name) && item.Name.Contains(preferredContains, StringComparison.OrdinalIgnoreCase))
+                     || item.Id.Contains(preferredContains, StringComparison.OrdinalIgnoreCase)));
+                if (match != null)
+                {
+                    return match.Id;
+                }
+            }
+
+            return items.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.Id))?.Id ?? string.Empty;
+        }
+
+        private void RefreshQuestionMetadataOptions(QuestionMetadataResponse? metadata = null)
+        {
+            var skillValues = metadata?.Skills?
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .Select(item => new QuestionMetadataItem
+                {
+                    Id = item.Id.Trim(),
+                    Name = string.IsNullOrWhiteSpace(item.Name) ? item.Id.Trim() : item.Name.Trim()
+                })
+                .ToList();
+            if (skillValues == null || skillValues.Count == 0)
+            {
+                skillValues = Questions
+                    .Where(q => !string.IsNullOrWhiteSpace(q.SkillId))
+                    .Select(q => new QuestionMetadataItem
+                    {
+                        Id = q.SkillId.Trim(),
+                        Name = string.IsNullOrWhiteSpace(q.Skill) ? q.SkillId.Trim() : q.Skill.Trim()
+                    })
+                    .ToList();
+            }
+
+            var difficultyValues = metadata?.Difficulties?
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .Select(item => new QuestionMetadataItem
+                {
+                    Id = item.Id.Trim(),
+                    Name = string.IsNullOrWhiteSpace(item.Name) ? item.Id.Trim() : item.Name.Trim()
+                })
+                .ToList();
+            if (difficultyValues == null || difficultyValues.Count == 0)
+            {
+                difficultyValues = Questions
+                    .Where(q => !string.IsNullOrWhiteSpace(q.DifficultyLevelId))
+                    .Select(q => new QuestionMetadataItem
+                    {
+                        Id = q.DifficultyLevelId.Trim(),
+                        Name = string.IsNullOrWhiteSpace(q.Difficulty) ? q.DifficultyLevelId.Trim() : q.Difficulty.Trim()
+                    })
+                    .ToList();
+            }
+
+            var subjectValues = metadata?.Subjects?
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .Select(item => new QuestionMetadataItem
+                {
+                    Id = item.Id.Trim(),
+                    Name = string.IsNullOrWhiteSpace(item.Name) ? item.Id.Trim() : item.Name.Trim()
+                })
+                .ToList();
+            if (subjectValues == null || subjectValues.Count == 0)
+            {
+                subjectValues = Questions
+                    .Where(q => !string.IsNullOrWhiteSpace(q.SubjectId))
+                    .Select(q => new QuestionMetadataItem
+                    {
+                        Id = q.SubjectId.Trim(),
+                        Name = string.IsNullOrWhiteSpace(q.Subject) ? q.SubjectId.Trim() : q.Subject.Trim()
+                    })
+                    .ToList();
+            }
+
+            var questionBankValues = metadata?.QuestionBanks?
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .Select(item => new QuestionMetadataItem
+                {
+                    Id = item.Id.Trim(),
+                    Name = string.IsNullOrWhiteSpace(item.Name) ? item.Id.Trim() : item.Name.Trim()
+                })
+                .ToList();
+            if (questionBankValues == null || questionBankValues.Count == 0)
+            {
+                questionBankValues = Questions
+                    .Where(q => !string.IsNullOrWhiteSpace(q.QuestionBankId))
+                    .Select(q => new QuestionMetadataItem
+                    {
+                        Id = q.QuestionBankId.Trim(),
+                        Name = q.QuestionBankId.Trim()
+                    })
+                    .ToList();
+            }
+
+            RefillMetadataCollection(QuestionSkillOptions, skillValues);
+            RefillMetadataCollection(QuestionDifficultyOptions, difficultyValues);
+            RefillMetadataCollection(QuestionSubjectOptions, subjectValues);
+            RefillMetadataCollection(QuestionBankOptions, questionBankValues);
+
+            EnsureQuestionMetadataValues();
+        }
+
+        private void EnsureQuestionMetadataValues()
+        {
+            if (SelectedQuestion == null)
+            {
+                return;
+            }
+
+            EnsureOptionExists(QuestionSkillOptions, SelectedQuestion.SkillId, SelectedQuestion.Skill);
+            EnsureOptionExists(QuestionDifficultyOptions, SelectedQuestion.DifficultyLevelId, SelectedQuestion.Difficulty);
+            EnsureOptionExists(QuestionSubjectOptions, SelectedQuestion.SubjectId, SelectedQuestion.Subject);
+            EnsureOptionExists(QuestionBankOptions, SelectedQuestion.QuestionBankId);
+        }
+
+        private static void EnsureOptionExists(ObservableCollection<QuestionMetadataItem> items, string? id, string? name = null)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return;
+            }
+
+            var normalizedId = id.Trim();
+            var existing = items.FirstOrDefault(item => string.Equals(item.Id, normalizedId, StringComparison.OrdinalIgnoreCase));
+            if (existing == null)
+            {
+                items.Add(new QuestionMetadataItem
+                {
+                    Id = normalizedId,
+                    Name = string.IsNullOrWhiteSpace(name) ? normalizedId : name.Trim()
+                });
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(existing.Name) && !string.IsNullOrWhiteSpace(name))
+            {
+                existing.Name = name.Trim();
+            }
+        }
+
+        private static void RefillMetadataCollection(ObservableCollection<QuestionMetadataItem> target, IEnumerable<QuestionMetadataItem> values)
+        {
+            var list = values
+                .Where(v => !string.IsNullOrWhiteSpace(v.Id))
+                .GroupBy(v => v.Id.Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(group =>
+                {
+                    var preferred = group.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.Name))
+                        ?? group.First();
+                    var normalizedId = group.Key.Trim();
+                    var normalizedName = string.IsNullOrWhiteSpace(preferred.Name)
+                        ? normalizedId
+                        : preferred.Name.Trim();
+                    return new QuestionMetadataItem
+                    {
+                        Id = normalizedId,
+                        Name = normalizedName
+                    };
+                })
+                .OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            target.Clear();
+            foreach (var item in list)
+            {
+                target.Add(item);
+            }
         }
 
         private void SyncTestItems()
@@ -740,15 +2174,50 @@ namespace UniTestSystem.AdminApp.ViewModels
             _selectedTestItems.Clear();
             if (SelectedTest != null && SelectedTest.Items != null)
             {
-                foreach (var item in SelectedTest.Items) _selectedTestItems.Add(item);
+                foreach (var item in SelectedTest.Items.OrderBy(item => item.Order))
+                {
+                    _selectedTestItems.Add(new TestItem
+                    {
+                        TestId = item.TestId,
+                        QuestionId = item.QuestionId,
+                        Points = item.Points,
+                        Order = item.Order
+                    });
+                }
             }
         }
 
         private void AddTestItem()
         {
             if (SelectedTest == null) return;
-            // For simplicity, add the first available question not already in test, or just a placeholder
-            var itm = new TestItem { QuestionId = "Select Question", Points = 1 };
+
+            var usedQuestionIds = _selectedTestItems
+                .Where(item => !string.IsNullOrWhiteSpace(item.QuestionId))
+                .Select(item => item.QuestionId.Trim())
+                .ToHashSet(StringComparer.Ordinal);
+
+            var nextQuestion = Questions
+                .FirstOrDefault(question =>
+                    !string.IsNullOrWhiteSpace(question.Id) &&
+                    string.Equals(question.Status, "Approved", StringComparison.OrdinalIgnoreCase) &&
+                    !usedQuestionIds.Contains(question.Id));
+            nextQuestion ??= Questions.FirstOrDefault(question =>
+                !string.IsNullOrWhiteSpace(question.Id) &&
+                !usedQuestionIds.Contains(question.Id));
+
+            if (nextQuestion == null)
+            {
+                StatusMessage = "No more questions available to add.";
+                return;
+            }
+
+            var itm = new TestItem
+            {
+                TestId = SelectedTest.Id,
+                QuestionId = nextQuestion.Id,
+                Points = 1m,
+                Order = _selectedTestItems.Count
+            };
             _selectedTestItems.Add(itm);
             UpdateTestModelFromUI();
         }
@@ -763,8 +2232,20 @@ namespace UniTestSystem.AdminApp.ViewModels
         private void UpdateTestModelFromUI()
         {
             if (SelectedTest == null) return;
-            SelectedTest.Items = _selectedTestItems.ToList();
-            SelectedTest.QuestionIds = _selectedTestItems.Select(x => x.QuestionId).ToList();
+
+            var normalizedItems = _selectedTestItems
+                .Where(item => !string.IsNullOrWhiteSpace(item.QuestionId))
+                .Select((item, index) => new TestItem
+                {
+                    TestId = SelectedTest.Id,
+                    QuestionId = item.QuestionId.Trim(),
+                    Points = item.Points <= 0 ? 1m : item.Points,
+                    Order = index
+                })
+                .ToList();
+
+            SelectedTest.Items = normalizedItems;
+            SelectedTest.QuestionIds = normalizedItems.Select(x => x.QuestionId).ToList();
         }
 
         private async Task ExportAsync(string type)
@@ -1314,10 +2795,66 @@ namespace UniTestSystem.AdminApp.ViewModels
         public string Text
         {
             get => _text;
-            set { _text = value; OnPropertyChanged(); }
+            set
+            {
+                if (string.Equals(_text, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                var oldText = _text;
+                _text = value;
+                TextChanged?.Invoke(this, new OptionTextChangedEventArgs(oldText, value ?? string.Empty));
+                OnPropertyChanged();
+            }
+        }
+
+        public event EventHandler<OptionTextChangedEventArgs>? TextChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
+    public sealed class OptionTextChangedEventArgs : EventArgs
+    {
+        public OptionTextChangedEventArgs(string oldText, string newText)
+        {
+            OldText = oldText;
+            NewText = newText;
+        }
+
+        public string OldText { get; }
+        public string NewText { get; }
+    }
+
+    public sealed class CreateTestQuestionItem : INotifyPropertyChanged
+    {
+        private bool _isSelected;
+
+        public string Id { get; set; } = "";
+        public string Type { get; set; } = "";
+        public string Difficulty { get; set; } = "";
+        public string Content { get; set; } = "";
+
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                if (_isSelected == value)
+                {
+                    return;
+                }
+
+                _isSelected = value;
+                OnPropertyChanged();
+            }
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
-        protected void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 }

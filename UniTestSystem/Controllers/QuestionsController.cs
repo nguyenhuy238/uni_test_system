@@ -3,6 +3,7 @@ using UniTestSystem.Domain;
 using UniTestSystem.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace UniTestSystem.Controllers;
 
@@ -11,17 +12,35 @@ public class QuestionsController : Controller
 {
     private readonly IQuestionService _svc;
     private readonly IQuestionExcelService _xlsx;
+    private readonly IRepository<Subject> _subjectRepo;
+    private readonly IRepository<DifficultyLevel> _difficultyLevelRepo;
+    private readonly IRepository<Skill> _skillRepo;
+    private readonly IRepository<QuestionBank> _questionBankRepo;
+    private readonly IRepository<Course> _courseRepo;
+    private readonly IPermissionService _permissionService;
     private readonly IWebHostEnvironment _env;
     private readonly IConfiguration _cfg;
 
     public QuestionsController(
         IQuestionService svc,
         IQuestionExcelService xlsx,
+        IRepository<Subject> subjectRepo,
+        IRepository<DifficultyLevel> difficultyLevelRepo,
+        IRepository<Skill> skillRepo,
+        IRepository<QuestionBank> questionBankRepo,
+        IRepository<Course> courseRepo,
+        IPermissionService permissionService,
         IWebHostEnvironment env,
         IConfiguration cfg)
     {
         _svc = svc;
         _xlsx = xlsx;
+        _subjectRepo = subjectRepo;
+        _difficultyLevelRepo = difficultyLevelRepo;
+        _skillRepo = skillRepo;
+        _questionBankRepo = questionBankRepo;
+        _courseRepo = courseRepo;
+        _permissionService = permissionService;
         _env = env;
         _cfg = cfg;
     }
@@ -30,14 +49,30 @@ public class QuestionsController : Controller
     public async Task<IActionResult> Index([FromQuery] QuestionFilter f)
     {
         var result = await _svc.SearchAsync(f);
+        var subjects = await _subjectRepo.GetAllAsync(x => !x.IsDeleted);
+        var difficultyLevels = await _difficultyLevelRepo.GetAllAsync(x => !x.IsDeleted);
+
+        ViewBag.SubjectNameMap = subjects
+            .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase);
+
+        ViewBag.DifficultyLevelNameMap = difficultyLevels
+            .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase);
+
+        await PopulateLookupOptionsAsync(
+            selectedSubjectId: f.SubjectId,
+            selectedDifficultyLevelId: f.DifficultyLevelId);
+        await PopulateQuestionActionPermissionFlagsAsync();
         return View(result);
     }
 
     // CREATE
     [HttpGet]
     [Authorize(Policy = PermissionCodes.Question_Create)]
-    public IActionResult Create()
-        => View(new Question
+    public async Task<IActionResult> Create()
+    {
+        var model = new Question
         {
             Type = QType.MCQ,
             Options = new List<Option>
@@ -47,7 +82,15 @@ public class QuestionsController : Controller
                 new Option { Content = "C", IsCorrect = false },
                 new Option { Content = "D", IsCorrect = false }
             }
-        });
+        };
+        await PopulateLookupOptionsAsync(
+            selectedSubjectId: model.SubjectId,
+            selectedDifficultyLevelId: model.DifficultyLevelId,
+            selectedSkillId: model.SkillId,
+            selectedQuestionBankId: model.QuestionBankId);
+        await PopulateQuestionActionPermissionFlagsAsync();
+        return View(model);
+    }
 
     [HttpPost]
     [Authorize(Policy = PermissionCodes.Question_Create)]
@@ -81,6 +124,12 @@ public class QuestionsController : Controller
         catch (Exception ex)
         {
             ModelState.AddModelError("", ex.Message);
+            await PopulateLookupOptionsAsync(
+                selectedSubjectId: q.SubjectId,
+                selectedDifficultyLevelId: q.DifficultyLevelId,
+                selectedSkillId: q.SkillId,
+                selectedQuestionBankId: q.QuestionBankId);
+            await PopulateQuestionActionPermissionFlagsAsync();
             return View(q);
         }
     }
@@ -94,6 +143,12 @@ public class QuestionsController : Controller
         if (editData == null) return NotFound();
 
         ViewBag.QuestionVersions = editData.Versions;
+        await PopulateLookupOptionsAsync(
+            selectedSubjectId: editData.Question.SubjectId,
+            selectedDifficultyLevelId: editData.Question.DifficultyLevelId,
+            selectedSkillId: editData.Question.SkillId,
+            selectedQuestionBankId: editData.Question.QuestionBankId);
+        await PopulateQuestionActionPermissionFlagsAsync();
         return View(editData.Question);
     }
 
@@ -113,7 +168,15 @@ public class QuestionsController : Controller
         string? TagsCsv)
     {
         if (!ModelState.IsValid)
+        {
+            await PopulateLookupOptionsAsync(
+                selectedSubjectId: q.SubjectId,
+                selectedDifficultyLevelId: q.DifficultyLevelId,
+                selectedSkillId: q.SkillId,
+                selectedQuestionBankId: q.QuestionBankId);
+            await PopulateQuestionActionPermissionFlagsAsync();
             return View(q);
+        }
 
         try
         {
@@ -134,6 +197,12 @@ public class QuestionsController : Controller
             if (!success)
             {
                 ModelState.AddModelError("", reason ?? "Update failed");
+                await PopulateLookupOptionsAsync(
+                    selectedSubjectId: q.SubjectId,
+                    selectedDifficultyLevelId: q.DifficultyLevelId,
+                    selectedSkillId: q.SkillId,
+                    selectedQuestionBankId: q.QuestionBankId);
+                await PopulateQuestionActionPermissionFlagsAsync();
                 return View(q);
             }
             TempData["Msg"] = "Cập nhật thành công";
@@ -142,6 +211,12 @@ public class QuestionsController : Controller
         catch (Exception ex)
         {
             ModelState.AddModelError("", ex.Message);
+            await PopulateLookupOptionsAsync(
+                selectedSubjectId: q.SubjectId,
+                selectedDifficultyLevelId: q.DifficultyLevelId,
+                selectedSkillId: q.SkillId,
+                selectedQuestionBankId: q.QuestionBankId);
+            await PopulateQuestionActionPermissionFlagsAsync();
             return View(q);
         }
     }
@@ -208,6 +283,7 @@ public class QuestionsController : Controller
     // WORKFLOW ACTIONS
     [HttpPost]
     [Authorize(Policy = PermissionCodes.Question_Edit)]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Submit(string id)
     {
         var (success, reason) = await _svc.SubmitAsync(id, User.Identity?.Name ?? "hr");
@@ -218,6 +294,7 @@ public class QuestionsController : Controller
 
     [HttpPost]
     [Authorize(Policy = PermissionCodes.Question_Approve)]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Approve(string id)
     {
         var (success, reason) = await _svc.ApproveAsync(id, User.Identity?.Name ?? "hr");
@@ -228,6 +305,7 @@ public class QuestionsController : Controller
 
     [HttpPost]
     [Authorize(Policy = PermissionCodes.Question_Approve)]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Reject(string id, string? reason)
     {
         var (success, r) = await _svc.RejectAsync(id, User.Identity?.Name ?? "hr", reason);
@@ -270,6 +348,109 @@ public class QuestionsController : Controller
         }
 
         return RedirectToAction(nameof(Edit), new { id = questionId });
+    }
+
+    private async Task PopulateLookupOptionsAsync(
+        string? selectedSubjectId = null,
+        string? selectedDifficultyLevelId = null,
+        string? selectedSkillId = null,
+        string? selectedQuestionBankId = null)
+    {
+        var subjects = (await _subjectRepo.GetAllAsync(x => !x.IsDeleted))
+            .OrderBy(x => x.Name)
+            .Select(x => (x.Id, x.Name))
+            .ToList();
+
+        var difficultyLevels = (await _difficultyLevelRepo.GetAllAsync(x => !x.IsDeleted))
+            .OrderBy(x => x.Weight)
+            .ThenBy(x => x.Name)
+            .Select(x => (x.Id, x.Name))
+            .ToList();
+
+        var skills = (await _skillRepo.GetAllAsync(x => !x.IsDeleted))
+            .OrderBy(x => x.Name)
+            .Select(x => (x.Id, x.Name))
+            .ToList();
+
+        var courses = (await _courseRepo.GetAllAsync(x => !x.IsDeleted))
+            .ToDictionary(x => x.Id, x => x.Name, StringComparer.OrdinalIgnoreCase);
+
+        var questionBanks = (await _questionBankRepo.GetAllAsync(x => !x.IsDeleted))
+            .OrderBy(x =>
+            {
+                var courseId = x.CourseId ?? string.Empty;
+                return courses.TryGetValue(courseId, out var courseName) ? courseName : courseId;
+            })
+            .ThenBy(x => x.Name)
+            .Select(x =>
+            {
+                var courseId = x.CourseId ?? string.Empty;
+                var courseName = courses.TryGetValue(courseId, out var course) ? course : courseId;
+                var label = string.IsNullOrWhiteSpace(courseName)
+                    ? x.Name
+                    : $"{courseName} - {x.Name}";
+                return (x.Id, label);
+            })
+            .ToList();
+
+        ViewBag.SubjectOptions = BuildSelectList(subjects, selectedSubjectId);
+        ViewBag.DifficultyLevelOptions = BuildSelectList(difficultyLevels, selectedDifficultyLevelId);
+        ViewBag.SkillOptions = BuildSelectList(skills, selectedSkillId);
+        ViewBag.QuestionBankOptions = BuildSelectList(questionBanks, selectedQuestionBankId);
+
+        ViewBag.SubjectFilterOptions = BuildSelectList(
+            subjects,
+            selectedSubjectId,
+            includeEmpty: true,
+            emptyText: "-- All subjects --");
+
+        ViewBag.DifficultyLevelFilterOptions = BuildSelectList(
+            difficultyLevels,
+            selectedDifficultyLevelId,
+            includeEmpty: true,
+            emptyText: "-- All difficulty levels --");
+    }
+
+    private async Task PopulateQuestionActionPermissionFlagsAsync()
+    {
+        ViewBag.CanSubmitQuestion = await HasPermissionAsync(PermissionCodes.Question_Edit);
+        ViewBag.CanApproveQuestion = await HasPermissionAsync(PermissionCodes.Question_Approve);
+    }
+
+    private async Task<bool> HasPermissionAsync(string permissionCode)
+    {
+        if (User.IsInRole(Role.Admin.ToString()))
+        {
+            return true;
+        }
+
+        return await _permissionService.HasAsync(User, permissionCode);
+    }
+
+    private static List<SelectListItem> BuildSelectList(
+        IEnumerable<(string Id, string Name)> source,
+        string? selectedValue,
+        bool includeEmpty = false,
+        string emptyText = "-- Select --")
+    {
+        var list = source.Select(x => new SelectListItem
+        {
+            Value = x.Id,
+            Text = x.Name,
+            Selected = string.Equals(x.Id, selectedValue, StringComparison.OrdinalIgnoreCase)
+        }).ToList();
+
+        if (includeEmpty)
+        {
+            list.Insert(0, new SelectListItem
+            {
+                Value = string.Empty,
+                Text = emptyText,
+                Selected = string.IsNullOrWhiteSpace(selectedValue)
+            });
+        }
+
+        return list;
     }
 
     private async Task<List<MediaFile>> SaveMediaAsync(List<IFormFile> files)

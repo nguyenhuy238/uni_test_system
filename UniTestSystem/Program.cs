@@ -19,7 +19,9 @@ using UniTestSystem.Application.Interfaces;
 using UniTestSystem.Application.Models;
 using UniTestSystem.Configuration;
 using UniTestSystem.Domain;
+using UniTestSystem.Hubs;
 using UniTestSystem.Middleware;
+using UniTestSystem.Services;
 using UniTestSystem.Infrastructure.Persistence;
 using UniTestSystem.Infrastructure;
 
@@ -31,10 +33,13 @@ builder.Services.AddControllersWithViews()
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
+builder.Services.AddSignalR();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
+builder.Services.AddScoped<IExamHubNotifier, ExamHubNotifier>();
+builder.Services.AddHostedService<SessionTimerBackgroundService>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -177,11 +182,19 @@ builder.Services.AddAuthentication(options =>
         {
             OnMessageReceived = context =>
             {
-                var token = context.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
-                if (token != null)
+                var token = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token) && context.Request.Path.StartsWithSegments("/hubs"))
                 {
                     context.Token = token;
+                    return Task.CompletedTask;
                 }
+
+                var bearerToken = context.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
+                if (bearerToken != null)
+                {
+                    context.Token = bearerToken;
+                }
+
                 return Task.CompletedTask;
             },
             OnTokenValidated = async context =>
@@ -354,6 +367,8 @@ app.MapGet("/", ctx =>
 // Routes
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.MapControllers();
+app.MapHub<ExamSessionHub>("/hubs/exam-session");
+app.MapHub<ProctorHub>("/hubs/proctor");
 
 // Folders & Seed
 Directory.CreateDirectory(Path.Combine(app.Environment.WebRootPath ?? "wwwroot", "uploads", "logo"));

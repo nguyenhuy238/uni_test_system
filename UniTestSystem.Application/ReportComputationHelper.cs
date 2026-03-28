@@ -50,8 +50,6 @@ internal static class ReportComputationHelper
     {
         if (!string.IsNullOrWhiteSpace(session.Test?.Course?.Name))
             return session.Test.Course.Name.Trim();
-        if (!string.IsNullOrWhiteSpace(session.Test?.SubjectIdFilter))
-            return session.Test.SubjectIdFilter.Trim();
         if (!string.IsNullOrWhiteSpace(session.Test?.Title))
             return session.Test.Title.Trim();
         return "(Unknown Subject)";

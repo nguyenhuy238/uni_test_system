@@ -24,6 +24,7 @@ namespace UniTestSystem.Controllers
             var lookups = await _userAdministrationService.GetLookupDataAsync();
 
             ViewBag.Classes = lookups.Classes;
+            ViewBag.Faculties = lookups.Faculties;
             ViewBag.Query = q;
             ViewBag.ClassId = classId;
             ViewBag.Role = role;

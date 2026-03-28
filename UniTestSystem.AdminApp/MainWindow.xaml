@@ -152,79 +152,200 @@
 
             <!-- Tests Tab -->
             <TabItem Header="Tests">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
+                <TabControl Margin="8">
+                    <TabItem Header="Manage Tests">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
 
-                    <DataGrid Grid.Column="0" ItemsSource="{Binding Tests}" SelectedItem="{Binding SelectedTest}" AutoGenerateColumns="False" IsReadOnly="True">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="*"/>
-                            <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="100"/>
-                            <DataGridTextColumn Header="Duration" Binding="{Binding DurationMinutes}" Width="80"/>
-                            <DataGridTextColumn Header="Max Score" Binding="{Binding TotalMaxScore}" Width="80"/>
-                            <DataGridCheckBoxColumn Header="Pub" Binding="{Binding IsPublished}" Width="40"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
+                            <DataGrid Grid.Column="0" ItemsSource="{Binding Tests}" SelectedItem="{Binding SelectedTest}" AutoGenerateColumns="False" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Title" Binding="{Binding Title}" Width="*"/>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="100"/>
+                                    <DataGridTextColumn Header="Duration" Binding="{Binding DurationMinutes}" Width="80"/>
+                                    <DataGridTextColumn Header="Max Score" Binding="{Binding TotalMaxScore}" Width="80"/>
+                                    <DataGridCheckBoxColumn Header="Pub" Binding="{Binding IsPublished}" Width="40"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
 
-                    <GroupBox Grid.Column="1" Header="Test Details" Margin="10">
-                        <ScrollViewer>
-                            <Grid Margin="10">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
+                            <GroupBox Grid.Column="1" Header="Test Details" Margin="10">
+                                <ScrollViewer>
+                                    <Grid Margin="10">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Row="0" Text="Title:"/>
-                                <TextBox Grid.Row="1" Text="{Binding SelectedTest.Title}" Margin="0,0,0,10"/>
+                                        <TextBlock Grid.Row="0" Text="Title:"/>
+                                        <TextBox Grid.Row="1" Text="{Binding SelectedTest.Title}" Margin="0,0,0,10"/>
 
-                                <TextBlock Grid.Row="2" Text="Type:"/>
-                                <ComboBox Grid.Row="3" Text="{Binding SelectedTest.Type}" Margin="0,0,0,10">
-                                    <ComboBoxItem Content="Test"/>
-                                    <ComboBoxItem Content="Exam"/>
-                                </ComboBox>
+                                        <TextBlock Grid.Row="2" Text="Type:"/>
+                                        <ComboBox Grid.Row="3" Text="{Binding SelectedTest.Type}" Margin="0,0,0,10">
+                                            <ComboBoxItem Content="Test"/>
+                                            <ComboBoxItem Content="Exam"/>
+                                        </ComboBox>
 
-                                <TextBlock Grid.Row="4" Text="Duration (min):"/>
-                                <TextBox Grid.Row="5" Text="{Binding SelectedTest.DurationMinutes}" Margin="0,0,0,10"/>
+                                        <TextBlock Grid.Row="4" Text="Duration (min):"/>
+                                        <TextBox Grid.Row="5" Text="{Binding SelectedTest.DurationMinutes}" Margin="0,0,0,10"/>
 
-                                <TextBlock Grid.Row="6" Text="Max Score:"/>
-                                <TextBox Grid.Row="7" Text="{Binding SelectedTest.TotalMaxScore}" Margin="0,0,0,10"/>
+                                        <TextBlock Grid.Row="6" Text="Max Score:"/>
+                                        <TextBox Grid.Row="7" Text="{Binding SelectedTest.TotalMaxScore}" Margin="0,0,0,10"/>
 
-                                <CheckBox Grid.Row="8" Content="Is Published" IsChecked="{Binding SelectedTest.IsPublished}" Margin="0,0,0,10"/>
+                                        <CheckBox Grid.Row="8" Content="Is Published" IsChecked="{Binding SelectedTest.IsPublished}" Margin="0,0,0,10"/>
 
-                                <TextBlock Grid.Row="9" Text="Test Questions:" FontWeight="Bold" Margin="0,10,0,5"/>
-                                <DataGrid Grid.Row="10" ItemsSource="{Binding SelectedTestItems}" SelectedItem="{Binding SelectedTestItem}" AutoGenerateColumns="False" Height="150" Margin="0,0,0,10">
-                                    <DataGrid.Columns>
-                                        <DataGridTextColumn Header="Question ID" Binding="{Binding QuestionId}" Width="*"/>
-                                        <DataGridTextColumn Header="Points" Binding="{Binding Points}" Width="60"/>
-                                    </DataGrid.Columns>
-                                </DataGrid>
-                                
-                                <StackPanel Grid.Row="11" Orientation="Horizontal" Margin="0,0,0,10">
-                                    <Button Content="Add Question" Command="{Binding AddTestItemCommand}" Width="100" Margin="0,0,5,0"/>
-                                    <Button Content="Remove" Command="{Binding RemoveTestItemCommand}" Width="70"/>
-                                </StackPanel>
+                                        <TextBlock Grid.Row="9" Text="Test Questions:" FontWeight="Bold" Margin="0,10,0,5"/>
+                                        <DataGrid Grid.Row="10" ItemsSource="{Binding SelectedTestItems}" SelectedItem="{Binding SelectedTestItem}" AutoGenerateColumns="False" Height="150" Margin="0,0,0,10">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Question ID" Binding="{Binding QuestionId}" Width="*"/>
+                                                <DataGridTextColumn Header="Points" Binding="{Binding Points}" Width="60"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
 
-                                <StackPanel Grid.Row="12" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}">
-                                    <Button Content="Save" Command="{Binding SaveTestCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
-                                    <Button Content="Delete" Command="{Binding DeleteTestCommand}" Width="70"/>
-                                </StackPanel>
-                            </Grid>
-                        </ScrollViewer>
-                    </GroupBox>
-                </Grid>
+                                        <StackPanel Grid.Row="11" Orientation="Horizontal" Margin="0,0,0,10">
+                                            <Button Content="Add Question" Command="{Binding AddTestItemCommand}" Width="100" Margin="0,0,5,0"/>
+                                            <Button Content="Remove" Command="{Binding RemoveTestItemCommand}" Width="70"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Row="12" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}">
+                                            <Button Content="Create" Command="{Binding AddTestCommand}" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
+                                            <Button Content="Save" Command="{Binding SaveTestCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </ScrollViewer>
+                            </GroupBox>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem Header="Create Test">
+                        <Grid Margin="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="360"/>
+                                <ColumnDefinition Width="12"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" BorderBrush="#D5DCE8" BorderThickness="1" CornerRadius="6" Padding="12">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <StackPanel>
+                                        <TextBlock Text="Create Test" FontSize="20" FontWeight="Bold" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Chọn course trước, sau đó chọn câu hỏi thủ công hoặc random theo loại như web app." TextWrapping="Wrap" Foreground="#4B5563" Margin="0,0,0,12"/>
+
+                                        <TextBlock Text="Title"/>
+                                        <TextBox Text="{Binding CreateTestTitle, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,10"/>
+
+                                        <TextBlock Text="Course"/>
+                                        <ComboBox ItemsSource="{Binding Courses}"
+                                                  DisplayMemberPath="Name"
+                                                  SelectedValuePath="Id"
+                                                  SelectedValue="{Binding CreateTestCourseId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  Margin="0,4,0,10"/>
+
+                                        <TextBlock Text="DurationMinutes"/>
+                                        <TextBox Text="{Binding CreateTestDurationMinutes, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,10"/>
+
+                                        <TextBlock Text="PassScore"/>
+                                        <TextBox Text="{Binding CreateTestPassScore, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,10"/>
+
+                                        <TextBlock Text="Assessment Type"/>
+                                        <ComboBox ItemsSource="{Binding AssessmentTypeOptions}"
+                                                  SelectedItem="{Binding CreateTestAssessmentType, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  Margin="0,4,0,10"/>
+
+                                        <CheckBox Content="Shuffle Questions" IsChecked="{Binding CreateTestShuffleQuestions}" Margin="0,0,0,6"/>
+                                        <CheckBox Content="Shuffle Options" IsChecked="{Binding CreateTestShuffleOptions}" Margin="0,0,0,6"/>
+                                        <CheckBox Content="Publish ngay sau khi tạo" IsChecked="{Binding CreateTestIsPublished}" Margin="0,0,0,12"/>
+
+                                        <TextBlock Text="Chế độ chọn câu hỏi" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                            <RadioButton Content="Chọn thủ công" GroupName="CreateTestMode" IsChecked="{Binding IsCreateManualMode, Mode=TwoWay}" Margin="0,0,12,0"/>
+                                            <RadioButton Content="Random theo loại" GroupName="CreateTestMode" IsChecked="{Binding IsCreateRandomMode, Mode=TwoWay}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Visibility="{Binding IsCreateRandomMode, Converter={StaticResource BoolToVis}}" Margin="0,0,0,10">
+                                            <TextBlock Text="Cấu hình random" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                            <TextBlock Text="MCQ"/>
+                                            <TextBox Text="{Binding CreateMcqCount, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,8"/>
+                                            <TextBlock Text="TrueFalse"/>
+                                            <TextBox Text="{Binding CreateTfCount, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,8"/>
+                                            <TextBlock Text="Essay"/>
+                                            <TextBox Text="{Binding CreateEssayCount, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,8"/>
+                                            <TextBlock Text="Matching"/>
+                                            <TextBox Text="{Binding CreateMatchingCount, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,8"/>
+                                            <TextBlock Text="DragDrop"/>
+                                            <TextBox Text="{Binding CreateDragDropCount, UpdateSourceTrigger=PropertyChanged}" Margin="0,4,0,0"/>
+                                        </StackPanel>
+
+                                        <TextBlock Text="{Binding CreateSelectedQuestionCount, StringFormat=Đã chọn: {0} câu hỏi}" Foreground="#1E3A8A" Margin="0,0,0,10"/>
+
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                            <Button Content="Clear Selection" Command="{Binding ClearCreateTestSelectionCommand}" Margin="0,0,8,0"/>
+                                            <Button Content="Reset Form" Command="{Binding ResetCreateTestBuilderCommand}"/>
+                                        </StackPanel>
+
+                                        <Button Content="Save"
+                                                Command="{Binding CreateTestFromBuilderCommand}"
+                                                Height="34"
+                                                Background="#2563EB"
+                                                Foreground="White"
+                                                FontWeight="SemiBold"/>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+
+                            <Border Grid.Column="2" BorderBrush="#D5DCE8" BorderThickness="1" CornerRadius="6" Padding="10">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                                        <TextBox Width="280"
+                                                 Text="{Binding CreateQuestionKeyword, UpdateSourceTrigger=PropertyChanged}"
+                                                 VerticalContentAlignment="Center"
+                                                 Margin="0,0,8,0"/>
+                                        <Button Content="Apply" Command="{Binding ApplyCreateTestFilterCommand}" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding IsCreateQuestionPoolBusy, StringFormat=Loading: {0}}" VerticalAlignment="Center" Foreground="#6B7280"/>
+                                    </StackPanel>
+
+                                    <DataGrid Grid.Row="1"
+                                              ItemsSource="{Binding CreateTestQuestions}"
+                                              AutoGenerateColumns="False"
+                                              CanUserAddRows="False"
+                                              IsReadOnly="False"
+                                              SelectionMode="Extended">
+                                        <DataGrid.Columns>
+                                            <DataGridCheckBoxColumn Header="Pick" Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
+                                            <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="220"/>
+                                            <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="100"/>
+                                            <DataGridTextColumn Header="Difficulty" Binding="{Binding Difficulty}" Width="100"/>
+                                            <DataGridTextColumn Header="Content" Binding="{Binding Content}" Width="*"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+
+                                    <TextBlock Grid.Row="2"
+                                               Margin="0,10,0,0"
+                                               Text="Danh sách này lấy từ API Approved Questions theo Course."
+                                               Foreground="#6B7280"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
             </TabItem>
 
             <!-- Questions Tab -->
@@ -240,8 +361,8 @@
                             <DataGridTextColumn Header="Content" Binding="{Binding Content}" Width="*"/>
                             <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="80"/>
                             <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="80"/>
-                            <DataGridTextColumn Header="Skill" Binding="{Binding Skill}" Width="100"/>
-                            <DataGridTextColumn Header="Difficulty" Binding="{Binding Difficulty}" Width="80"/>
+                            <DataGridTextColumn Header="Skill" Binding="{Binding DisplaySkill}" Width="100"/>
+                            <DataGridTextColumn Header="Difficulty" Binding="{Binding DisplayDifficulty}" Width="80"/>
                         </DataGrid.Columns>
                     </DataGrid>
 
@@ -259,11 +380,14 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
@@ -271,22 +395,63 @@
                                 <TextBox Grid.Row="1" Text="{Binding SelectedQuestion.Content}" AcceptsReturn="True" Height="60" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
                                 <TextBlock Grid.Row="2" Text="Type:"/>
-                                <ComboBox Grid.Row="3" Text="{Binding SelectedQuestion.Type}" Margin="0,0,0,10">
-                                    <ComboBoxItem Content="MCQ"/>
-                                    <ComboBoxItem Content="TrueFalse"/>
-                                    <ComboBoxItem Content="Essay"/>
-                                    <ComboBoxItem Content="Matching"/>
-                                    <ComboBoxItem Content="DragDrop"/>
-                                </ComboBox>
+                                <ComboBox Grid.Row="3"
+                                          ItemsSource="{Binding QuestionTypeOptions}"
+                                          SelectedItem="{Binding SelectedQuestion.Type, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Margin="0,0,0,10"/>
 
                                 <TextBlock Grid.Row="4" Text="Skill:"/>
-                                <TextBox Grid.Row="5" Text="{Binding SelectedQuestion.Skill}" Margin="0,0,0,10"/>
+                                <ComboBox Grid.Row="5"
+                                          ItemsSource="{Binding QuestionSkillOptions}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding SelectedQuestion.SkillId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False"
+                                          IsTextSearchEnabled="True"
+                                          Margin="0,0,0,10"/>
 
                                 <TextBlock Grid.Row="6" Text="Difficulty:"/>
-                                <TextBox Grid.Row="7" Text="{Binding SelectedQuestion.Difficulty}" Margin="0,0,0,10"/>
+                                <ComboBox Grid.Row="7"
+                                          ItemsSource="{Binding QuestionDifficultyOptions}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding SelectedQuestion.DifficultyLevelId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False"
+                                          IsTextSearchEnabled="True"
+                                          Margin="0,0,0,10"/>
 
-                                <TextBlock Grid.Row="8" Text="Options &amp; Correct Keys:" FontWeight="Bold" Margin="0,10,0,5"/>
-                                <ListBox Grid.Row="9" ItemsSource="{Binding SelectedQuestionOptions}" SelectedItem="{Binding SelectedOption}" Height="100" Margin="0,0,0,5">
+                                <TextBlock Grid.Row="8" Text="Subject:"/>
+                                <ComboBox Grid.Row="9"
+                                          ItemsSource="{Binding QuestionSubjectOptions}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding SelectedQuestion.SubjectId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False"
+                                          IsTextSearchEnabled="True"
+                                          Margin="0,0,0,10"/>
+
+                                <TextBlock Grid.Row="10" Text="Question Bank:"/>
+                                <ComboBox Grid.Row="11"
+                                          ItemsSource="{Binding QuestionBankOptions}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding SelectedQuestion.QuestionBankId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False"
+                                          IsTextSearchEnabled="True"
+                                          Margin="0,0,0,10"/>
+
+                                <TextBlock Grid.Row="12" Text="Options &amp; Correct Keys:" FontWeight="Bold" Margin="0,10,0,5"/>
+                                <ListBox Grid.Row="13" ItemsSource="{Binding SelectedQuestionOptions}" SelectedItem="{Binding SelectedOption}" Height="100" Margin="0,0,0,5">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                    <Setter Property="IsSelected" Value="True"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBox Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="200" BorderThickness="0"/>
@@ -294,22 +459,23 @@
                                     </ListBox.ItemTemplate>
                                 </ListBox>
                                 
-                                <StackPanel Grid.Row="10" Orientation="Horizontal" Margin="0,0,0,10">
+                                <StackPanel Grid.Row="14" Orientation="Horizontal" Margin="0,0,0,10">
                                     <Button Content="Add Option" Command="{Binding AddOptionCommand}" Width="80" Margin="0,0,5,0"/>
                                     <Button Content="Remove" Command="{Binding RemoveOptionCommand}" Width="60" Margin="0,0,5,0"/>
                                     <Button Content="Set Correct" Command="{Binding ToggleCorrectKeyCommand}" Width="80" Background="#FFF9C4"/>
                                 </StackPanel>
 
-                                <TextBlock Grid.Row="11" Text="Correct Keys:" FontSize="11" Foreground="Gray"/>
-                                <ItemsControl Grid.Row="12" ItemsSource="{Binding SelectedQuestionCorrectKeys}" Margin="0,0,0,10">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding}" FontStyle="Italic" Margin="0,2,0,2"/>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <TextBlock Grid.Row="15" Text="Correct Keys:" FontSize="11" Foreground="Gray"/>
+                                <TextBox Grid.Row="16"
+                                         Text="{Binding SelectedQuestionCorrectKeysText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         AcceptsReturn="True"
+                                         TextWrapping="Wrap"
+                                         Height="60"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Margin="0,0,0,10"/>
 
-                                <StackPanel Grid.Row="13" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}">
+                                <StackPanel Grid.Row="18" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0" Visibility="{Binding CanManageSystem, Converter={StaticResource BoolToVis}}">
+                                    <Button Content="Create" Click="CreateQuestion_Click" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
                                     <Button Content="Save" Command="{Binding SaveQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
                                     <Button Content="Submit" Command="{Binding SubmitQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
                                     <Button Content="Approve" Command="{Binding ApproveQuestionCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
@@ -353,10 +519,6 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
@@ -370,22 +532,27 @@
                                 <ComboBox Grid.Row="5" SelectedItem="{Binding SelectedUser.Role}" ItemsSource="{Binding EditableRoles}" Margin="0,0,0,10"/>
 
                                 <TextBlock Grid.Row="6" Text="Faculty:"/>
-                                <TextBox Grid.Row="7" Text="{Binding SelectedUser.Department}" Margin="0,0,0,10"/>
-                                
-                                <TextBlock Grid.Row="8" Text="Skill:"/>
-                                <TextBox Grid.Row="9" Text="{Binding SelectedUser.Skill}" Margin="0,0,0,10"/>
+                                <ComboBox Grid.Row="7"
+                                          ItemsSource="{Binding Faculties}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Name"
+                                          SelectedValue="{Binding SelectedUser.Department, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False"
+                                          IsTextSearchEnabled="True"
+                                          Margin="0,0,0,10"/>
 
-                                <TextBlock Grid.Row="10" Text="Level:"/>
-                                <ComboBox Grid.Row="11" Text="{Binding SelectedUser.Level}" Margin="0,0,0,10">
-                                    <ComboBoxItem Content="Junior"/>
-                                    <ComboBoxItem Content="Mid"/>
-                                    <ComboBoxItem Content="Senior"/>
-                                </ComboBox>
+                                <TextBlock Grid.Row="8" Text="Class ID:"/>
+                                <ComboBox Grid.Row="9"
+                                          ItemsSource="{Binding Classes}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding SelectedUser.TeamId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          IsEditable="False"
+                                          IsTextSearchEnabled="True"
+                                          Margin="0,0,0,10"/>
 
-                                <TextBlock Grid.Row="12" Text="Class ID:"/>
-                                <TextBox Grid.Row="13" Text="{Binding SelectedUser.TeamId}" Margin="0,0,0,10"/>
-
-                                <StackPanel Grid.Row="14" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                                <StackPanel Grid.Row="10" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                                    <Button Content="Create" Click="CreateUser_Click" Width="70" Margin="0,0,5,0" Background="#2196F3" Foreground="White"/>
                                     <Button Content="Save" Command="{Binding SaveUserCommand}" Width="70" Margin="0,0,5,0" Background="#4CAF50" Foreground="White"/>
                                     <Button Content="Delete" Command="{Binding DeleteUserCommand}" Width="70"/>
                                 </StackPanel>

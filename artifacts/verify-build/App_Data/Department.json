@@ -1,0 +1,16 @@
+[
+  {
+    "Id": "d-eng",
+    "Name": "Engineering",
+    "Description": "K\u1EF9 thu\u1EADt",
+    "CreatedAt": "2025-08-29T04:03:43.6318864Z",
+    "UpdatedAt": null
+  },
+  {
+    "Id": "d-hr",
+    "Name": "Human Resources",
+    "Description": "Nh\u00E2n s\u1EF1",
+    "CreatedAt": "2025-08-29T04:03:43.6386986Z",
+    "UpdatedAt": null
+  }
+]

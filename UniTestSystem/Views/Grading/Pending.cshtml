@@ -1,12 +1,12 @@
 @model IEnumerable<UniTestSystem.Domain.Session>
 @{
-    ViewData["Title"] = "Essay Grading Queue";
+    ViewData["Title"] = "Grading Queue";
     var lockMap = ViewBag.LockMap as Dictionary<string, bool> ?? new Dictionary<string, bool>();
     var regradeMap = ViewBag.RegradeMap as Dictionary<string, bool> ?? new Dictionary<string, bool>();
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="bi bi-pen me-2"></i>Essay Grading Queue</h2>
+    <h2><i class="bi bi-pen me-2"></i>Grading Queue</h2>
     <a href="/grading/regrade/requests" class="btn btn-outline-warning">
         <i class="bi bi-flag me-1"></i> Regrade Requests
     </a>

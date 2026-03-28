@@ -9,22 +9,34 @@ namespace UniTestSystem.Application;
 public class QuestionService : IQuestionService
 {
     private readonly IRepository<Question> _qRepo;
+    private readonly IRepository<QuestionBank> _questionBankRepo;
     private readonly IRepository<Option> _optionRepo;
     private readonly IRepository<Test> _tRepo;
     private readonly IRepository<AuditEntry> _auditRepo;
+    private readonly IRepository<Subject> _subjectRepo;
+    private readonly IRepository<DifficultyLevel> _difficultyLevelRepo;
+    private readonly IRepository<Skill> _skillRepo;
     private readonly IAuditService _audit;
 
     public QuestionService(
         IRepository<Question> qRepo,
+        IRepository<QuestionBank> questionBankRepo,
         IRepository<Option> optionRepo,
         IRepository<Test> tRepo,
         IRepository<AuditEntry> auditRepo,
+        IRepository<Subject> subjectRepo,
+        IRepository<DifficultyLevel> difficultyLevelRepo,
+        IRepository<Skill> skillRepo,
         IAuditService audit)
     {
         _qRepo = qRepo;
+        _questionBankRepo = questionBankRepo;
         _optionRepo = optionRepo;
         _tRepo = tRepo;
         _auditRepo = auditRepo;
+        _subjectRepo = subjectRepo;
+        _difficultyLevelRepo = difficultyLevelRepo;
+        _skillRepo = skillRepo;
         _audit = audit;
     }
 
@@ -35,7 +47,15 @@ public class QuestionService : IQuestionService
         if (!string.IsNullOrWhiteSpace(f.Keyword))
             data = data.Where(x => x.Content.Contains(f.Keyword, StringComparison.OrdinalIgnoreCase)).ToList();
         if (f.Type.HasValue) data = data.Where(x => x.Type == f.Type.Value).ToList();
+        if (f.Status.HasValue) data = data.Where(x => x.Status == f.Status.Value).ToList();
         if (!string.IsNullOrWhiteSpace(f.SubjectId)) data = data.Where(x => x.SubjectId == f.SubjectId).ToList();
+        if (!string.IsNullOrWhiteSpace(f.CourseId))
+        {
+            var bankIds = (await _questionBankRepo.GetAllAsync(x => x.CourseId == f.CourseId && !x.IsDeleted))
+                .Select(x => x.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            data = data.Where(x => !string.IsNullOrWhiteSpace(x.QuestionBankId) && bankIds.Contains(x.QuestionBankId)).ToList();
+        }
         if (!string.IsNullOrWhiteSpace(f.DifficultyLevelId)) data = data.Where(x => x.DifficultyLevelId == f.DifficultyLevelId).ToList();
         if (!string.IsNullOrWhiteSpace(f.TagsCsv))
         {
@@ -96,6 +116,7 @@ public class QuestionService : IQuestionService
     public async Task<string> CreateFromFormAsync(QuestionFormCommand command, string actor)
     {
         var question = command.Question;
+        question.QuestionBankId = NormalizeId(question.QuestionBankId);
         NormalizeQuestionFieldsFromForm(
             question,
             command.Options,
@@ -116,6 +137,7 @@ public class QuestionService : IQuestionService
         var question = command.Question;
         if (string.IsNullOrWhiteSpace(question.Id))
             question.Id = command.Id ?? string.Empty;
+        question.QuestionBankId = NormalizeId(question.QuestionBankId);
 
         if (string.IsNullOrWhiteSpace(question.Id))
             return (false, "Not found");
@@ -153,11 +175,12 @@ public class QuestionService : IQuestionService
 
     public async Task<string> CreateAsync(Question q, string actor)
     {
+        q.QuestionBankId = NormalizeId(q.QuestionBankId);
         var duplicate = await DetectAdvancedDuplicateAsync(q, null);
         if (duplicate.IsDuplicate)
             throw new ValidationException($"Possible duplicate question detected (ID: {duplicate.MatchedQuestionId}, similarity: {duplicate.Similarity:P0}).");
 
-        ValidateQuestion(q, isNew: true);
+        await ValidateQuestionAsync(q, isNew: true);
         AssignOptionQuestionIds(q);
         q.CreatedBy = actor; q.CreatedAt = DateTime.UtcNow;
         await _qRepo.InsertAsync(q);
@@ -167,6 +190,7 @@ public class QuestionService : IQuestionService
 
     public async Task<(bool Success, string? Reason)> UpdateAsync(Question q, string actor)
     {
+        q.QuestionBankId = NormalizeId(q.QuestionBankId);
         var tests = await _tRepo.GetAllAsync();
         var usedByPublished = tests.Any(t => t.IsPublished && t.TestQuestions.Any(tq => tq.QuestionId == q.Id));
         if (usedByPublished)
@@ -184,13 +208,17 @@ public class QuestionService : IQuestionService
         if (duplicate.IsDuplicate)
             return (false, $"Possible duplicate with Question {duplicate.MatchedQuestionId} (similarity: {duplicate.Similarity:P0}).");
 
-        ValidateQuestion(q, isNew: false);
+        try
+        {
+            await ValidateQuestionAsync(q, isNew: false);
+        }
+        catch (ValidationException ex)
+        {
+            return (false, ex.Message);
+        }
+
         AssignOptionQuestionIds(q);
         q.UpdatedBy = actor; q.UpdatedAt = DateTime.UtcNow;
-        
-        // Reset status to Draft if it was Rejected or Approved (needs re-approval after major edit)
-        if (q.Status == QuestionStatus.Approved || q.Status == QuestionStatus.Rejected)
-            q.Status = QuestionStatus.Draft;
 
         await _qRepo.UpsertAsync(x => x.Id == q.Id, q);
         await _optionRepo.DeleteAsync(o => o.QuestionId == q.Id);
@@ -290,6 +318,7 @@ public class QuestionService : IQuestionService
             Id = Guid.NewGuid().ToString("N"),
             Content = "[CLONE] " + q.Content,
             Type = q.Type,
+            QuestionBankId = q.QuestionBankId,
             SubjectId = q.SubjectId,
             DifficultyLevelId = q.DifficultyLevelId,
             SkillId = q.SkillId,
@@ -312,6 +341,10 @@ public class QuestionService : IQuestionService
             CreatedAt = DateTime.UtcNow,
             CreatedBy = actor
         };
+
+        copy.QuestionBankId = NormalizeId(copy.QuestionBankId);
+        if (string.IsNullOrWhiteSpace(copy.QuestionBankId))
+            throw new ValidationException("Question chưa có Question Bank. Vui lòng backfill dữ liệu cũ trước khi clone.");
 
         AssignOptionQuestionIds(copy);
         await _qRepo.InsertAsync(copy);
@@ -451,14 +484,50 @@ public class QuestionService : IQuestionService
         }
     }
 
-    private static void ValidateQuestion(Question q, bool isNew)
+    private async Task ValidateQuestionAsync(Question q, bool isNew)
     {
-        if (string.IsNullOrWhiteSpace(q.Content)) throw new ValidationException("Content required");
+        if (string.IsNullOrWhiteSpace(q.Content)) 
+            throw new ValidationException("Content required");
+
+        if (string.IsNullOrWhiteSpace(q.QuestionBankId))
+            throw new ValidationException("Question Bank is required");
+
+        var questionBank = await _questionBankRepo.FirstOrDefaultAsync(x => x.Id == q.QuestionBankId && !x.IsDeleted);
+        if (questionBank == null)
+            throw new ValidationException($"Question Bank with ID '{q.QuestionBankId}' does not exist or has been deleted");
+        
+        // Validate SubjectId
+        if (string.IsNullOrWhiteSpace(q.SubjectId))
+            throw new ValidationException("Subject is required");
+        
+        var subject = await _subjectRepo.FirstOrDefaultAsync(x => x.Id == q.SubjectId && !x.IsDeleted);
+        if (subject == null)
+            throw new ValidationException($"Subject with ID '{q.SubjectId}' does not exist or has been deleted");
+        
+        // Validate DifficultyLevelId
+        if (!string.IsNullOrWhiteSpace(q.DifficultyLevelId))
+        {
+            var difficultyLevel = await _difficultyLevelRepo.FirstOrDefaultAsync(x => x.Id == q.DifficultyLevelId && !x.IsDeleted);
+            if (difficultyLevel == null)
+                throw new ValidationException($"Difficulty Level with ID '{q.DifficultyLevelId}' does not exist or has been deleted");
+        }
+
+        // Validate SkillId (optional)
+        if (!string.IsNullOrWhiteSpace(q.SkillId))
+        {
+            var skill = await _skillRepo.FirstOrDefaultAsync(x => x.Id == q.SkillId && !x.IsDeleted);
+            if (skill == null)
+                throw new ValidationException($"Skill with ID '{q.SkillId}' does not exist or has been deleted");
+        }
+
+        // Validate question type specific rules
         switch (q.Type)
         {
             case QType.MCQ:
-                if (q.Options == null || q.Options.Count < 2) throw new ValidationException("MCQ requires >= 2 options");
-                if (!q.Options.Any(o => o.IsCorrect)) throw new ValidationException("MCQ requires at least 1 correct option");
+                if (q.Options == null || q.Options.Count < 2) 
+                    throw new ValidationException("MCQ requires >= 2 options");
+                if (!q.Options.Any(o => o.IsCorrect)) 
+                    throw new ValidationException("MCQ requires at least 1 correct option");
                 break;
             case QType.TrueFalse:
                 if (q.Options == null || q.Options.Count != 2)
@@ -556,5 +625,10 @@ public class QuestionService : IQuestionService
         {
             return null;
         }
+    }
+
+    private static string? NormalizeId(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }

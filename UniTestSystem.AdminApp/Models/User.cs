@@ -27,5 +27,8 @@ namespace UniTestSystem.AdminApp.Models
 
         [JsonPropertyName("teamId")]
         public string TeamId { get; set; } = "";
+
+        [JsonPropertyName("facultyId")]
+        public string? FacultyId { get; set; }
     }
 }

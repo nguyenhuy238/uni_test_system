@@ -7,6 +7,7 @@ public interface IGradingService
 {
     Task<List<Session>> GetPendingGradingSessionsAsync(string lecturerId);
     Task<Session> GetSessionForGradingAsync(string sessionId);
+    Task GradeAnswerAsync(string sessionId, string questionId, decimal score, string? comment);
     Task GradeEssayAsync(string sessionId, string questionId, decimal score, string? comment);
     Task FinalizeGradingAsync(string sessionId);
 

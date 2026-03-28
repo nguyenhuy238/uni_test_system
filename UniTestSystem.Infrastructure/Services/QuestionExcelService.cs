@@ -12,17 +12,23 @@ namespace UniTestSystem.Infrastructure.Services
         private readonly IRepository<Question> _qRepo;
         private readonly IRepository<Subject> _subjectRepo;
         private readonly IRepository<DifficultyLevel> _difficultyRepo;
+        private readonly IRepository<QuestionBank> _questionBankRepo;
+        private readonly IRepository<Course> _courseRepo;
 
         public QuestionExcelService(
             IQuestionService svc,
             IRepository<Question> qRepo,
             IRepository<Subject> subjectRepo,
-            IRepository<DifficultyLevel> difficultyRepo)
+            IRepository<DifficultyLevel> difficultyRepo,
+            IRepository<QuestionBank> questionBankRepo,
+            IRepository<Course> courseRepo)
         {
             _svc = svc;
             _qRepo = qRepo;
             _subjectRepo = subjectRepo;
             _difficultyRepo = difficultyRepo;
+            _questionBankRepo = questionBankRepo;
+            _courseRepo = courseRepo;
         }
 
         public Task<byte[]> ExportAsync(IEnumerable<Question> data)
@@ -32,7 +38,7 @@ namespace UniTestSystem.Infrastructure.Services
 
             var headers = new[]
             {
-                "Content", "Type", "Status", "Subject", "DifficultyLevel", "Tags (comma)", "Options (|)", 
+                "Content", "Type", "Status", "QuestionBank", "Subject", "DifficultyLevel", "Tags (comma)", "Options (|)", 
                 "CorrectKeys (|)", "EssayMinWords", "MatchingPairs (L=R || L=R)", "DragTokens (|)", 
                 "DragSlots (Name=Answer || Name=Answer)", "Media (FileName#Url#Caption || ...)"
             };
@@ -45,27 +51,28 @@ namespace UniTestSystem.Infrastructure.Services
                 ws.Cell(r, 1).Value = q.Content;
                 ws.Cell(r, 2).Value = q.Type.ToString();
                 ws.Cell(r, 3).Value = q.Status.ToString();
-                ws.Cell(r, 4).Value = q.SubjectId;
-                ws.Cell(r, 5).Value = q.DifficultyLevelId;
-                ws.Cell(r, 6).Value = string.Join(',', q.Tags ?? new());
-                ws.Cell(r, 7).Value = string.Join('|', q.Options.Select(o => o.Content));
-                ws.Cell(r, 8).Value = string.Join('|', q.Options.Where(o => o.IsCorrect).Select(o => o.Content));
-                ws.Cell(r, 9).SetValue(q.EssayMinWords ?? 0);
+                ws.Cell(r, 4).Value = q.QuestionBankId;
+                ws.Cell(r, 5).Value = q.SubjectId;
+                ws.Cell(r, 6).Value = q.DifficultyLevelId;
+                ws.Cell(r, 7).Value = string.Join(',', q.Tags ?? new());
+                ws.Cell(r, 8).Value = string.Join('|', q.Options.Select(o => o.Content));
+                ws.Cell(r, 9).Value = string.Join('|', q.Options.Where(o => o.IsCorrect).Select(o => o.Content));
+                ws.Cell(r, 10).SetValue(q.EssayMinWords ?? 0);
 
                 var matching = q.MatchingPairs is { Count: > 0 }
                     ? string.Join(" || ", q.MatchingPairs!.Select(p => $"{p.L}={p.R}"))
                     : "";
-                ws.Cell(r, 10).Value = matching;
+                ws.Cell(r, 11).Value = matching;
 
                 var tokens = q.DragDrop?.Tokens ?? new List<string>();
                 var slots = q.DragDrop?.Slots ?? new List<DragSlot>();
-                ws.Cell(r, 11).Value = string.Join('|', tokens);
-                ws.Cell(r, 12).Value = slots.Count > 0 ? string.Join(" || ", slots.Select(s => $"{s.Name}={s.Answer}")) : "";
+                ws.Cell(r, 12).Value = string.Join('|', tokens);
+                ws.Cell(r, 13).Value = slots.Count > 0 ? string.Join(" || ", slots.Select(s => $"{s.Name}={s.Answer}")) : "";
 
                 var media = q.Media is { Count: > 0 }
                     ? string.Join(" || ", q.Media.Select(m => $"{m.FileName}#{m.Url}#{m.Caption ?? ""}"))
                     : "";
-                ws.Cell(r, 13).Value = media;
+                ws.Cell(r, 14).Value = media;
 
                 r++;
             }
@@ -94,8 +101,16 @@ namespace UniTestSystem.Infrastructure.Services
             var seenInThisFile = new HashSet<string>(StringComparer.Ordinal);
             var subjects = await _subjectRepo.GetAllAsync();
             var difficulties = await _difficultyRepo.GetAllAsync();
+            var courses = await _courseRepo.GetAllAsync(x => !x.IsDeleted);
+            var questionBanks = await _questionBankRepo.GetAllAsync(x => !x.IsDeleted);
             var subjectLookup = BuildLookup(subjects.Select(x => (x.Id, x.Name)));
             var difficultyLookup = BuildLookup(difficulties.Select(x => (x.Id, x.Name)));
+            var questionBankLookup = BuildLookup(questionBanks.Select(x => (x.Id, x.Name)));
+            var subjectById = subjects.ToDictionary(x => x.Id, x => x, StringComparer.OrdinalIgnoreCase);
+            var questionBanksByCourse = questionBanks
+                .Where(x => !string.IsNullOrWhiteSpace(x.CourseId))
+                .GroupBy(x => x.CourseId, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
             var defaultDifficultyId = ResolveReferenceId("Easy", difficultyLookup)
                 ?? difficulties.FirstOrDefault()?.Id;
 
@@ -114,7 +129,7 @@ namespace UniTestSystem.Infrastructure.Services
                 return -1;
             }
 
-            int cContent = GetCol("Content", true), cType = GetCol("Type", true), cStatus = GetCol("Status"), cSubject = GetCol("Subject", true);
+            int cContent = GetCol("Content", true), cType = GetCol("Type", true), cStatus = GetCol("Status"), cQuestionBank = GetCol("QuestionBank"), cSubject = GetCol("Subject", true);
             int cDifficultyLevel = GetCol("DifficultyLevel"), cTags = GetCol("Tags (comma)"), cOptions = GetCol("Options (|)"), cCorrect = GetCol("CorrectKeys (|)"), cEssayMin = GetCol("EssayMinWords"), cPairs = GetCol("MatchingPairs (L=R || L=R)"), cDragTokens = GetCol("DragTokens (|)"), cDragSlots = GetCol("DragSlots (Name=Answer || Name=Answer)"), cMedia = GetCol("Media (FileName#Url#Caption || ...)");
 
             foreach (var row in range.RowsUsed().Skip(1))
@@ -125,6 +140,7 @@ namespace UniTestSystem.Infrastructure.Services
                     var content = GetCell(row, cContent);
                     var typeRaw = GetCell(row, cType);
                     var rawSubject = GetCell(row, cSubject);
+                    var rawQuestionBank = GetCell(row, cQuestionBank);
 
                     if (!Enum.TryParse<QType>(typeRaw, true, out var type)) throw new Exception($"Invalid Type: {typeRaw}");
 
@@ -148,6 +164,14 @@ namespace UniTestSystem.Infrastructure.Services
 
                     var subjectId = await EnsureSubjectIdAsync(rawSubject, subjectLookup);
                     var difficultyId = await EnsureDifficultyIdAsync(rawDifficulty, difficultyLookup, defaultDifficultyId, isLegacyShifted);
+                    var questionBankId = await ResolveQuestionBankIdForImportAsync(
+                        rawQuestionBank,
+                        subjectId,
+                        actor,
+                        subjectById,
+                        courses,
+                        questionBankLookup,
+                        questionBanksByCourse);
 
                     var key = MakeKey(content, type, subjectId);
 
@@ -163,6 +187,7 @@ namespace UniTestSystem.Infrastructure.Services
                         Content = content,
                         Type = type,
                         Status = ParseStatus(GetCell(row, cStatus)),
+                        QuestionBankId = questionBankId,
                         SubjectId = subjectId,
                         DifficultyLevelId = difficultyId,
                         Tags = SplitCsv(rawTags, ','),
@@ -286,6 +311,98 @@ namespace UniTestSystem.Infrastructure.Services
             await _difficultyRepo.InsertAsync(difficulty);
             AddLookup(difficultyLookup, difficulty.Id, difficulty.Name);
             return difficulty.Id;
+        }
+
+        private async Task<string> ResolveQuestionBankIdForImportAsync(
+            string rawQuestionBank,
+            string subjectId,
+            string actor,
+            IReadOnlyDictionary<string, Subject> subjectById,
+            IReadOnlyCollection<Course> courses,
+            Dictionary<string, string> questionBankLookup,
+            Dictionary<string, List<QuestionBank>> questionBanksByCourse)
+        {
+            if (!string.IsNullOrWhiteSpace(rawQuestionBank))
+            {
+                var resolved = ResolveReferenceId(rawQuestionBank, questionBankLookup);
+                if (!string.IsNullOrWhiteSpace(resolved))
+                    return resolved;
+
+                throw new Exception($"QuestionBank '{rawQuestionBank}' không tồn tại. Hãy nhập đúng ID hoặc Name của QuestionBank.");
+            }
+
+            var subjectName = subjectById.TryGetValue(subjectId, out var subject) ? subject.Name : subjectId;
+            var matchedCourses = courses
+                .Where(course => MatchesSubjectArea(course, subjectId, subjectName))
+                .ToList();
+
+            if (matchedCourses.Count == 0 && courses.Count == 1)
+            {
+                matchedCourses = courses.ToList();
+            }
+
+            if (matchedCourses.Count == 1)
+            {
+                return await EnsureQuestionBankForCourseAsync(
+                    matchedCourses[0],
+                    actor,
+                    questionBankLookup,
+                    questionBanksByCourse);
+            }
+
+            if (matchedCourses.Count == 0)
+                throw new Exception($"Không suy ra được Course cho Subject '{subjectId}'. Hãy bổ sung cột 'QuestionBank' trong file import.");
+
+            throw new Exception($"Subject '{subjectId}' khớp nhiều Course ({matchedCourses.Count}). Hãy bổ sung cột 'QuestionBank' để chỉ định chính xác.");
+        }
+
+        private async Task<string> EnsureQuestionBankForCourseAsync(
+            Course course,
+            string actor,
+            Dictionary<string, string> questionBankLookup,
+            Dictionary<string, List<QuestionBank>> questionBanksByCourse)
+        {
+            if (questionBanksByCourse.TryGetValue(course.Id, out var existingBanks) &&
+                existingBanks.Count > 0)
+            {
+                return existingBanks[0].Id;
+            }
+
+            var created = new QuestionBank
+            {
+                CourseId = course.Id,
+                Name = $"AutoBank - {course.Name}",
+                CreatedBy = actor,
+                CreatedAt = DateTime.UtcNow,
+                IsDeleted = false
+            };
+
+            await _questionBankRepo.InsertAsync(created);
+
+            AddLookup(questionBankLookup, created.Id, created.Name);
+            questionBanksByCourse[course.Id] = new List<QuestionBank> { created };
+            return created.Id;
+        }
+
+        private static bool MatchesSubjectArea(Course course, string subjectId, string? subjectName)
+        {
+            var area = (course.SubjectArea ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(area))
+                return false;
+
+            if (string.Equals(area, subjectId, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (!string.IsNullOrWhiteSpace(subjectName) &&
+                (string.Equals(area, subjectName, StringComparison.OrdinalIgnoreCase) ||
+                 area.Contains(subjectName, StringComparison.OrdinalIgnoreCase) ||
+                 course.Name.Contains(subjectName, StringComparison.OrdinalIgnoreCase) ||
+                 course.Code.Contains(subjectName, StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         private static QuestionStatus ParseStatus(string rawStatus)

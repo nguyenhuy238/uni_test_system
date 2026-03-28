@@ -1,0 +1,799 @@
+@{
+    ViewData["Title"] = "Giám sát phòng thi";
+    var selectedTestId = (string?)ViewBag.ProctorTestId ?? string.Empty;
+    var selectedTestTitle = (string?)ViewBag.ProctorTestTitle ?? "Giám sát phòng thi";
+}
+
+@section HeadScripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+}
+
+<style>
+    .proctor-shell {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 1rem 0 2rem;
+    }
+
+    .proctor-hero {
+        border-radius: 18px;
+        padding: 1.2rem 1.3rem;
+        color: #06203d;
+        border: 1px solid #c7ddf8;
+        background: linear-gradient(135deg, #e8f2ff 0%, #f4f9ff 60%, #ffffff 100%);
+        margin-bottom: 1rem;
+    }
+
+    .hero-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .hero-title {
+        font-size: 1.35rem;
+        font-weight: 800;
+        margin: 0;
+    }
+
+    .hero-subtitle {
+        margin: .25rem 0 0;
+        color: #3b5f85;
+        font-size: .95rem;
+    }
+
+    .conn-badge {
+        border-radius: 999px;
+        padding: .4rem .8rem;
+        font-weight: 700;
+        font-size: .88rem;
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        border: 1px solid transparent;
+    }
+
+    .conn-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    .conn-ok {
+        background: #f0fdf4;
+        color: #166534;
+        border-color: #bbf7d0;
+    }
+
+    .conn-ok .conn-dot {
+        background: #16a34a;
+    }
+
+    .conn-bad {
+        background: #fef2f2;
+        color: #991b1b;
+        border-color: #fecaca;
+    }
+
+    .conn-bad .conn-dot {
+        background: #dc2626;
+    }
+
+    .hero-counters {
+        display: flex;
+        gap: .55rem;
+        flex-wrap: wrap;
+        margin-top: .75rem;
+    }
+
+    .counter-pill {
+        border-radius: 999px;
+        padding: .35rem .7rem;
+        font-weight: 700;
+        font-size: .83rem;
+        border: 1px solid #bfdbfe;
+        background: #eff6ff;
+        color: #1e40af;
+    }
+
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: .75rem;
+        margin-bottom: 1rem;
+    }
+
+    .stat-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: .9rem .95rem;
+    }
+
+    .stat-label {
+        margin: 0;
+        color: #64748b;
+        font-size: .84rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+    }
+
+    .stat-value {
+        margin: .2rem 0 0;
+        font-size: 1.55rem;
+        font-weight: 800;
+        color: #0f172a;
+        line-height: 1.15;
+    }
+
+    .content-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+        gap: .95rem;
+    }
+
+    .panel {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: .85rem;
+    }
+
+    .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: .7rem;
+        margin-bottom: .7rem;
+    }
+
+    .panel-title {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 800;
+        color: #0f172a;
+    }
+
+    .panel-sub {
+        margin: .15rem 0 0;
+        font-size: .82rem;
+        color: #64748b;
+    }
+
+    .btn-refresh {
+        border: 1px solid #d1d5db;
+        background: #fff;
+        border-radius: 10px;
+        padding: .35rem .7rem;
+        font-size: .84rem;
+        font-weight: 700;
+    }
+
+    .session-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: .9rem;
+    }
+
+    .session-table th,
+    .session-table td {
+        padding: .62rem .55rem;
+        border-bottom: 1px solid #eef2f7;
+        vertical-align: middle;
+    }
+
+    .session-table th {
+        background: #f8fafc;
+        color: #334155;
+        font-weight: 700;
+        position: sticky;
+        top: 0;
+    }
+
+    .status-chip {
+        border-radius: 999px;
+        padding: .2rem .6rem;
+        font-size: .78rem;
+        font-weight: 700;
+        display: inline-block;
+    }
+
+    .status-inprogress {
+        background: #ecfeff;
+        color: #155e75;
+        border: 1px solid #a5f3fc;
+    }
+
+    .status-submitted {
+        background: #f0fdf4;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+    }
+
+    .status-other {
+        background: #f8fafc;
+        color: #334155;
+        border: 1px solid #e2e8f0;
+    }
+
+    .table-wrap {
+        max-height: 64vh;
+        overflow: auto;
+        border: 1px solid #eef2f7;
+        border-radius: 10px;
+    }
+
+    .btn-terminate {
+        border: 1px solid #fecaca;
+        background: #fef2f2;
+        color: #991b1b;
+        border-radius: 8px;
+        padding: .25rem .55rem;
+        font-size: .78rem;
+        font-weight: 700;
+    }
+
+    .alert-list {
+        max-height: 64vh;
+        overflow: auto;
+        display: grid;
+        gap: .55rem;
+    }
+
+    .alert-item {
+        border: 1px solid #fecaca;
+        background: #fef2f2;
+        border-radius: 10px;
+        padding: .6rem .7rem;
+    }
+
+    .alert-item h6 {
+        margin: 0;
+        font-size: .85rem;
+        font-weight: 800;
+        color: #991b1b;
+    }
+
+    .alert-meta {
+        margin-top: .22rem;
+        font-size: .78rem;
+        color: #7f1d1d;
+    }
+
+    .empty-row,
+    .empty-alert {
+        text-align: center;
+        color: #64748b;
+        padding: 1rem;
+        font-size: .88rem;
+    }
+
+    @@media (max-width: 1100px) {
+        .stats-row {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .content-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="proctor-shell">
+    <section class="proctor-hero">
+        <div class="hero-top">
+            <div>
+                <h1 class="hero-title">Giám sát phòng thi</h1>
+                <p class="hero-subtitle" id="heroSubtitle">@selectedTestTitle</p>
+            </div>
+            <div id="connectionBadge" class="conn-badge conn-bad">
+                <span class="conn-dot"></span>
+                <span id="connectionText">Đang kết nối...</span>
+            </div>
+        </div>
+        <div class="hero-counters">
+            <span class="counter-pill">Đang thi: <span id="heroActiveCount">0</span></span>
+            <span class="counter-pill">Cảnh báo Critical: <span id="heroAlertCount">0</span></span>
+        </div>
+    </section>
+
+    <section class="stats-row">
+        <article class="stat-card">
+            <p class="stat-label">Đang thi</p>
+            <p class="stat-value" id="statActive">0</p>
+        </article>
+        <article class="stat-card">
+            <p class="stat-label">Đã nộp</p>
+            <p class="stat-value" id="statSubmitted">0</p>
+        </article>
+        <article class="stat-card">
+            <p class="stat-label">Vi phạm</p>
+            <p class="stat-value" id="statViolations">0</p>
+        </article>
+        <article class="stat-card">
+            <p class="stat-label">Tổng đăng ký</p>
+            <p class="stat-value" id="statRegistered">0</p>
+        </article>
+    </section>
+
+    <section class="content-grid">
+        <article class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2 class="panel-title">Danh sách phiên thi</h2>
+                    <p class="panel-sub">Dữ liệu ban đầu lấy từ REST, sau đó cập nhật realtime qua SignalR.</p>
+                </div>
+                <button type="button" class="btn-refresh" id="refreshSessionsBtn">Làm mới</button>
+            </div>
+            <div class="table-wrap">
+                <table class="session-table">
+                    <thead>
+                        <tr>
+                            <th>Sinh viên</th>
+                            <th>Trạng thái</th>
+                            <th>Thời gian còn lại</th>
+                            <th>Hoạt động cuối</th>
+                            <th>Vi phạm</th>
+                            <th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sessionTableBody">
+                        <tr><td colspan="6" class="empty-row">Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+        <aside class="panel">
+            <div class="panel-head">
+                <div>
+                    <h2 class="panel-title">Cảnh báo realtime</h2>
+                    <p class="panel-sub">Cảnh báo Critical mới nhất được ưu tiên hiển thị trước.</p>
+                </div>
+            </div>
+            <div id="alertList" class="alert-list">
+                <div class="empty-alert">Chưa có cảnh báo critical.</div>
+            </div>
+        </aside>
+    </section>
+</div>
+
+<script>
+    const selectedTestId = "@selectedTestId";
+    const selectedTestTitle = "@selectedTestTitle";
+    const isGlobalRoom = !selectedTestId;
+    const sessionsById = new Map();
+    const violationCountBySession = new Map();
+    const criticalAlerts = [];
+    let proctorConnection = null;
+    let serverActiveCount = null;
+
+    const statActiveEl = document.getElementById('statActive');
+    const statSubmittedEl = document.getElementById('statSubmitted');
+    const statViolationsEl = document.getElementById('statViolations');
+    const statRegisteredEl = document.getElementById('statRegistered');
+    const heroActiveCountEl = document.getElementById('heroActiveCount');
+    const heroAlertCountEl = document.getElementById('heroAlertCount');
+    const sessionTableBodyEl = document.getElementById('sessionTableBody');
+    const alertListEl = document.getElementById('alertList');
+    const connectionBadgeEl = document.getElementById('connectionBadge');
+    const connectionTextEl = document.getElementById('connectionText');
+    const heroSubtitleEl = document.getElementById('heroSubtitle');
+    const refreshSessionsBtn = document.getElementById('refreshSessionsBtn');
+
+    function field(data, camel, pascal){
+        if(!data || typeof data !== 'object') return undefined;
+        if(Object.prototype.hasOwnProperty.call(data, camel)) return data[camel];
+        if(Object.prototype.hasOwnProperty.call(data, pascal)) return data[pascal];
+        return undefined;
+    }
+
+    function setConnectionState(isConnected, message){
+        connectionBadgeEl.classList.remove('conn-ok', 'conn-bad');
+        connectionBadgeEl.classList.add(isConnected ? 'conn-ok' : 'conn-bad');
+        connectionTextEl.textContent = message;
+    }
+
+    function statusText(status){
+        const value = normalizeStatus(status);
+        if(value.includes('inprogress')) return 'Đang thi';
+        if(value.includes('autosubmitted')) return 'Tự nộp';
+        if(value.includes('submitted')) return 'Đã nộp';
+        if(value.includes('graded')) return 'Đã chấm';
+        if(value.includes('violated')) return 'Vi phạm';
+        if(value.includes('cancelled')) return 'Đã hủy';
+        return status ?? 'Unknown';
+    }
+
+    function statusClass(status){
+        const value = normalizeStatus(status);
+        if(value.includes('inprogress')) return 'status-inprogress';
+        if(value.includes('submitted') || value.includes('autosubmitted') || value.includes('graded')) return 'status-submitted';
+        return 'status-other';
+    }
+
+    function normalizeStatus(status){
+        if(typeof status === 'number'){
+            switch(status){
+                case 1: return 'inprogress';
+                case 2: return 'submitted';
+                case 3: return 'autosubmitted';
+                case 6: return 'graded';
+                case 5: return 'violated';
+                case 4: return 'cancelled';
+                default: return String(status);
+            }
+        }
+
+        return (status ?? '').toString().toLowerCase();
+    }
+
+    function shouldShowSession(testId){
+        if(!selectedTestId) return true;
+        return testId === selectedTestId;
+    }
+
+    function formatDateTime(value){
+        if(!value) return '--';
+        const dt = new Date(value);
+        if(Number.isNaN(dt.getTime())) return '--';
+        return dt.toLocaleString();
+    }
+
+    function formatRemainingSeconds(seconds){
+        if(typeof seconds !== 'number' || !Number.isFinite(seconds)) return '--';
+        const value = Math.max(0, Math.floor(seconds));
+        const mm = Math.floor(value / 60).toString().padStart(2, '0');
+        const ss = (value % 60).toString().padStart(2, '0');
+        return `${mm}:${ss}`;
+    }
+
+    function normalizeSession(item){
+        const id = field(item, 'id', 'Id');
+        const testId = field(item, 'testId', 'TestId');
+        return {
+            id,
+            userName: field(item, 'userName', 'UserName') ?? 'Unknown',
+            userId: field(item, 'userId', 'UserId') ?? '',
+            testId: testId ?? '',
+            testTitle: field(item, 'testTitle', 'TestTitle') ?? '',
+            status: field(item, 'status', 'Status') ?? 'Unknown',
+            lastActivityAt: field(item, 'lastActivityAt', 'LastActivityAt'),
+            remainingSeconds: field(item, 'remainingSeconds', 'RemainingSeconds'),
+            totalScore: field(item, 'totalScore', 'TotalScore') ?? 0,
+            maxScore: field(item, 'maxScore', 'MaxScore') ?? 0,
+            percent: field(item, 'percent', 'Percent') ?? 0,
+            endAt: field(item, 'endAt', 'EndAt')
+        };
+    }
+
+    function upsertSession(session){
+        if(!session || !session.id || !shouldShowSession(session.testId)) return;
+        const existing = sessionsById.get(session.id);
+        sessionsById.set(session.id, { ...(existing || {}), ...session });
+    }
+
+    function removeSession(sessionId){
+        sessionsById.delete(sessionId);
+        violationCountBySession.delete(sessionId);
+    }
+
+    function computeStats(){
+        const sessions = Array.from(sessionsById.values());
+        const activeLocal = sessions.filter(x => normalizeStatus(x.status).includes('inprogress')).length;
+        const submittedCount = sessions.filter(x => {
+            const s = normalizeStatus(x.status);
+            return s.includes('submitted') || s.includes('graded');
+        }).length;
+        const totalRegistered = sessions.length;
+        const totalViolations = Array.from(violationCountBySession.values()).reduce((sum, v) => sum + (Number(v) || 0), 0);
+        const activeCount = serverActiveCount ?? activeLocal;
+
+        statActiveEl.textContent = String(activeCount);
+        statSubmittedEl.textContent = String(submittedCount);
+        statViolationsEl.textContent = String(totalViolations);
+        statRegisteredEl.textContent = String(totalRegistered);
+        heroActiveCountEl.textContent = String(activeCount);
+        heroAlertCountEl.textContent = String(criticalAlerts.length);
+    }
+
+    function renderSessions(){
+        const sessions = Array.from(sessionsById.values())
+            .sort((a, b) => new Date(b.lastActivityAt ?? 0) - new Date(a.lastActivityAt ?? 0));
+
+        if(sessions.length === 0){
+            sessionTableBodyEl.innerHTML = '<tr><td colspan="6" class="empty-row">Chưa có phiên thi phù hợp.</td></tr>';
+            computeStats();
+            return;
+        }
+
+        sessionTableBodyEl.innerHTML = sessions.map(session => {
+            const violations = violationCountBySession.get(session.id) ?? 0;
+            const scoreText = Number(session.maxScore) > 0
+                ? `${Number(session.totalScore).toFixed(2)}/${Number(session.maxScore).toFixed(2)} (${Number(session.percent).toFixed(1)}%)`
+                : '--';
+
+            return `
+                <tr data-session-id="${session.id}">
+                    <td>
+                        <div><strong>${escapeHtml(session.userName)}</strong></div>
+                        <div class="text-muted small">${escapeHtml(session.testTitle || session.testId || '')}</div>
+                    </td>
+                    <td>
+                        <span class="status-chip ${statusClass(session.status)}">${statusText(session.status)}</span>
+                        <div class="text-muted small mt-1">${escapeHtml(scoreText)}</div>
+                    </td>
+                    <td>${escapeHtml(formatRemainingSeconds(session.remainingSeconds))}</td>
+                    <td>${escapeHtml(formatDateTime(session.lastActivityAt))}</td>
+                    <td><strong>${violations}</strong></td>
+                    <td><button class="btn-terminate" data-terminate-session="${session.id}">Kết thúc</button></td>
+                </tr>
+            `;
+        }).join('');
+
+        computeStats();
+    }
+
+    function renderAlerts(){
+        if(criticalAlerts.length === 0){
+            alertListEl.innerHTML = '<div class="empty-alert">Chưa có cảnh báo critical.</div>';
+            computeStats();
+            return;
+        }
+
+        alertListEl.innerHTML = criticalAlerts.slice(0, 50).map(alert => `
+            <article class="alert-item">
+                <h6>${escapeHtml(alert.userName || 'Unknown')} - ${escapeHtml(alert.actionType || 'Critical')}</h6>
+                <div class="alert-meta">${escapeHtml(alert.testTitle || alert.testId || '')}</div>
+                <div class="alert-meta">${escapeHtml(alert.detail || 'No detail')}</div>
+                <div class="alert-meta">Số vi phạm critical: ${escapeHtml(String(alert.violationCount ?? 0))} • ${escapeHtml(formatDateTime(alert.timestamp))}</div>
+            </article>
+        `).join('');
+
+        computeStats();
+    }
+
+    function addCriticalAlert(payload){
+        const alert = {
+            sessionId: field(payload, 'sessionId', 'SessionId'),
+            userName: field(payload, 'userName', 'UserName'),
+            testId: field(payload, 'testId', 'TestId'),
+            testTitle: field(payload, 'testTitle', 'TestTitle'),
+            actionType: field(payload, 'actionType', 'ActionType'),
+            detail: field(payload, 'detail', 'Detail'),
+            timestamp: field(payload, 'timestamp', 'Timestamp') ?? new Date().toISOString(),
+            violationCount: field(payload, 'violationCount', 'ViolationCount') ?? 0
+        };
+
+        criticalAlerts.unshift(alert);
+        if(alert.sessionId){
+            const previous = violationCountBySession.get(alert.sessionId) ?? 0;
+            violationCountBySession.set(alert.sessionId, Math.max(previous + 1, Number(alert.violationCount) || 0));
+        }
+        renderAlerts();
+        renderSessions();
+        toastCritical(`${alert.userName || 'Student'}: ${alert.actionType || 'Critical violation'}`);
+    }
+
+    function applyActiveSessionCount(payload){
+        const roomCount = field(payload, 'count', 'Count');
+        const totalCount = field(payload, 'totalCount', 'TotalCount');
+        if(typeof roomCount === 'number' && Number.isFinite(roomCount)){
+            serverActiveCount = roomCount;
+        }else if(typeof totalCount === 'number' && Number.isFinite(totalCount)){
+            serverActiveCount = totalCount;
+        }else{
+            serverActiveCount = null;
+        }
+
+        computeStats();
+    }
+
+    async function loadInitialSessions(){
+        sessionTableBodyEl.innerHTML = '<tr><td colspan="6" class="empty-row">Đang tải dữ liệu...</td></tr>';
+        try{
+            const response = await fetch('/api/admin/sessions', { credentials: 'same-origin' });
+            if(!response.ok){
+                sessionTableBodyEl.innerHTML = '<tr><td colspan="6" class="empty-row">Không tải được dữ liệu phiên thi.</td></tr>';
+                return;
+            }
+
+            const payload = await response.json();
+            const sessions = Array.isArray(payload) ? payload : [];
+            sessionsById.clear();
+            violationCountBySession.clear();
+            serverActiveCount = null;
+
+            sessions.forEach(item => {
+                const session = normalizeSession(item);
+                if(!shouldShowSession(session.testId)) return;
+                upsertSession(session);
+            });
+
+            renderSessions();
+        }catch(e){
+            sessionTableBodyEl.innerHTML = '<tr><td colspan="6" class="empty-row">Lỗi kết nối khi tải danh sách phiên.</td></tr>';
+        }
+    }
+
+    async function joinHubRoom(){
+        if(!proctorConnection) return;
+        if(isGlobalRoom){
+            await proctorConnection.invoke('JoinGlobalProctor');
+            heroSubtitleEl.textContent = selectedTestTitle || 'Giám sát toàn bộ phòng thi';
+            return;
+        }
+
+        await proctorConnection.invoke('JoinProctorRoom', selectedTestId);
+        heroSubtitleEl.textContent = selectedTestTitle;
+    }
+
+    async function startHub(){
+        if(!window.signalR){
+            setConnectionState(false, 'SignalR không khả dụng');
+            return;
+        }
+
+        proctorConnection = new signalR.HubConnectionBuilder()
+            .withUrl('/hubs/proctor')
+            .withAutomaticReconnect()
+            .build();
+
+        proctorConnection.on('SessionStarted', payload => {
+            const session = normalizeSession(payload);
+            if(!shouldShowSession(session.testId)) return;
+            serverActiveCount = null;
+            upsertSession(session);
+            renderSessions();
+        });
+
+        proctorConnection.on('SessionSubmitted', payload => {
+            const testId = field(payload, 'testId', 'TestId') ?? '';
+            if(!shouldShowSession(testId)) return;
+
+            const userName = field(payload, 'userName', 'UserName') ?? 'Unknown';
+            const data = field(payload, 'data', 'Data') ?? {};
+            const sessionId = field(data, 'id', 'Id');
+            if(!sessionId) return;
+
+            const existing = sessionsById.get(sessionId) ?? {
+                id: sessionId,
+                userName,
+                testId,
+                testTitle: selectedTestTitle,
+                lastActivityAt: new Date().toISOString()
+            };
+
+            upsertSession({
+                ...existing,
+                userName,
+                status: field(data, 'status', 'Status') ?? 'Submitted',
+                totalScore: field(data, 'totalScore', 'TotalScore') ?? existing.totalScore ?? 0,
+                maxScore: field(data, 'maxScore', 'MaxScore') ?? existing.maxScore ?? 0,
+                percent: field(data, 'percent', 'Percent') ?? existing.percent ?? 0,
+                lastActivityAt: new Date().toISOString(),
+                endAt: new Date().toISOString()
+            });
+
+            serverActiveCount = null;
+            renderSessions();
+        });
+
+        proctorConnection.on('AntiCheatAlert', payload => {
+            const testId = field(payload, 'testId', 'TestId') ?? '';
+            if(!shouldShowSession(testId)) return;
+            addCriticalAlert(payload);
+        });
+
+        proctorConnection.on('ActiveSessionCount', payload => {
+            applyActiveSessionCount(payload);
+        });
+
+        proctorConnection.onreconnecting(() => {
+            setConnectionState(false, 'Đang kết nối lại...');
+        });
+
+        proctorConnection.onreconnected(async () => {
+            setConnectionState(true, 'Đã kết nối realtime');
+            try{
+                await joinHubRoom();
+            }catch(e){}
+        });
+
+        proctorConnection.onclose(() => {
+            setConnectionState(false, 'Mất kết nối realtime');
+        });
+
+        try{
+            setConnectionState(false, 'Đang kết nối...');
+            await proctorConnection.start();
+            await joinHubRoom();
+            setConnectionState(true, 'Đã kết nối realtime');
+        }catch(e){
+            setConnectionState(false, 'Kết nối realtime thất bại');
+        }
+    }
+
+    async function terminateSession(sessionId){
+        if(!sessionId) return;
+        if(!confirm('Kết thúc phiên thi này?')) return;
+        try{
+            const response = await fetch(`/api/admin/sessions/${sessionId}`, {
+                method: 'DELETE',
+                credentials: 'same-origin'
+            });
+            if(!response.ok){
+                toastInfo('Không thể kết thúc phiên thi.');
+                return;
+            }
+
+            removeSession(sessionId);
+            renderSessions();
+            toastInfo('Đã kết thúc phiên thi.');
+        }catch(e){
+            toastInfo('Lỗi mạng khi kết thúc phiên thi.');
+        }
+    }
+
+    function toastInfo(message){
+        createToast(message, '#e0f2fe', '#93c5fd');
+    }
+
+    function toastCritical(message){
+        createToast(message, '#fee2e2', '#f87171');
+    }
+
+    function createToast(message, bg, border){
+        const el = document.createElement('div');
+        el.textContent = message;
+        el.style.position = 'fixed';
+        el.style.right = '16px';
+        el.style.bottom = '16px';
+        el.style.zIndex = '9999';
+        el.style.background = bg;
+        el.style.border = `1px solid ${border}`;
+        el.style.borderRadius = '10px';
+        el.style.padding = '10px 14px';
+        el.style.fontWeight = '700';
+        el.style.boxShadow = '0 8px 20px rgba(0,0,0,.14)';
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3500);
+    }
+
+    function escapeHtml(value){
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    sessionTableBodyEl.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-terminate-session]');
+        if(!button) return;
+        terminateSession(button.getAttribute('data-terminate-session'));
+    });
+
+    refreshSessionsBtn.addEventListener('click', () => {
+        loadInitialSessions();
+    });
+
+    window.addEventListener('beforeunload', () => {
+        if(!proctorConnection) return;
+        try{
+            if(isGlobalRoom){
+                proctorConnection.invoke('LeaveGlobalProctor');
+            }else{
+                proctorConnection.invoke('LeaveProctorRoom', selectedTestId);
+            }
+        }catch(e){}
+    });
+
+    loadInitialSessions();
+    startHub();
+</script>

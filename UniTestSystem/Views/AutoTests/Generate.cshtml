@@ -1,7 +1,7 @@
 @model UniTestSystem.Application.AutoTestOptions
 @{
     ViewData["Title"] = "Auto Generate Test";
-    var faculties = (IEnumerable<string>)(ViewBag.Faculties ?? new List<string>());
+    var classes = (IEnumerable<string>)(ViewBag.Classes ?? new List<string>());
 }
 <partial name="~/Views/Shared/_Flash.cshtml" />
 
@@ -23,21 +23,29 @@
     <div class="col-md-3">
         <label class="form-label">Chế độ (Mode)</label>
         <select class="form-select" asp-for="Mode" id="modeSelect">
-            <option value="Faculty">Faculty (Khoa)</option>
-            <option value="Users">Users (ids)</option>
+            <option value="Class">Class (Lớp)</option>
+            <option value="Students">Users (ids)</option>
         </select>
     </div>
 
-    <div class="col-md-3" id="deptBlock">
-        <label class="form-label">Khoa (Faculty)</label>
-        <select class="form-select" asp-for="FacultyName">
-            <option value="">-- chọn Khoa --</option>
-            @foreach (var d in faculties)
+    <div class="col-md-3" id="classBlock">
+        <label class="form-label">Class (Lớp)</label>
+        <select class="form-select" asp-for="StudentClassId">
+            <option value="">-- chọn Lớp --</option>
+            @foreach (var studentClass in classes)
             {
-                <option value="@d">@d</option>
+                <option value="@studentClass">@studentClass</option>
             }
         </select>
-        <div class="form-text">Dùng khi Mode = Faculty</div>
+        <div class="form-text">Dùng khi Mode = Class</div>
+    </div>
+
+    <div class="col-md-6">
+        <label class="form-label">Course</label>
+        <select class="form-select" asp-for="CourseId" asp-items="ViewBag.Courses">
+            <option value="">-- tất cả Course --</option>
+        </select>
+        <div class="form-text">AutoTest sẽ lọc câu hỏi theo Course khi bạn chọn.</div>
     </div>
 
     <div class="col-md-6" id="usersBlock" style="display:none;">
@@ -140,19 +148,19 @@
 
 @section Scripts {
     <script>
-        // Toggle Department / Users theo Mode
+        // Toggle Class / Users theo Mode
         const modeSel = document.getElementById('modeSelect');
-        const deptBlock = document.getElementById('deptBlock');
+        const classBlock = document.getElementById('classBlock');
         const usersBlock = document.getElementById('usersBlock');
 
         function toggleBlocks(){
-          const mode = modeSel ? modeSel.value : 'Department';
-          if(mode === 'Users'){
+          const mode = modeSel ? modeSel.value : 'Class';
+          if(mode === 'Students'){
             usersBlock.style.display = '';
-            deptBlock.style.display = 'none';
+            classBlock.style.display = 'none';
           } else {
             usersBlock.style.display = 'none';
-            deptBlock.style.display = '';
+            classBlock.style.display = '';
           }
         }
         if(modeSel){ modeSel.addEventListener('change', toggleBlocks); toggleBlocks(); }
